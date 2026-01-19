@@ -14,15 +14,13 @@ Reimplementation of https://github.com/FreemapSlovakia/freemap-mapnik into Rust,
 - uses Cairo for rendering
 - uses GDAL to read from GeoTIFFs
 
-Uses refubrished [freemap-mapserver](https://github.com/FreemapSlovakia/freemap-mapserver) with N-API bindings just because the rendering orchestration logic is fine and rewriting it to Rust can be done later.
-
 ## Running
 
-You must install Rust and if using [mapserver](./mapserver) then also Node.js. Mapserver us used for caching rendered tiles on the drive, pre-rendering, re-rendering in case of OSM data modification.
+You must install Rust.
 
-To run map rendering server without mapserver, configure [.env](./.env), then cd to [./rust/crates/http](./rust/crates/http) and finally run `cargo run`.
+Configure [.env](./.env) and run `cargo run`.
 
-TMS URL is then `http://localhost:3050/{zoom}/{x}/{y}@2x[|.png|.svg]` (adjust your scaling).
+TMS URL is then `http://localhost:3050/{zoom}/{x}/{y}@2x` (adjust your scaling).
 
 ## Land polygons
 
