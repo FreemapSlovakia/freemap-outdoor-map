@@ -52,11 +52,6 @@ impl SvgRepo {
         }
     }
 
-    pub fn set_base(&mut self, base: impl Into<PathBuf>) {
-        self.base = base.into();
-        self.svg_map.clear();
-    }
-
     pub fn get(&mut self, key: &str) -> Result<&RecordingSurface, SvgRepoError> {
         self.get_extra::<fn() -> Options>(key, None)
     }

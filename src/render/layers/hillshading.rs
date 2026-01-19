@@ -12,7 +12,6 @@ pub enum Mode {
 }
 
 fn read_rgba_from_gdal(
-    country: &str,
     dataset: &Dataset,
     ctx: &Ctx,
     raster_scale: f64,
@@ -292,7 +291,7 @@ pub fn load_surface(
         .get(country)
         .unwrap_or_else(|| panic!("no such dataset {country}"));
 
-    let surface = read_rgba_from_gdal(country, hillshading_dataset, ctx, raster_scale, mode)?;
+    let surface = read_rgba_from_gdal(hillshading_dataset, ctx, raster_scale, mode)?;
 
     if surface.is_some() {
         shading_data.record_use(country);
