@@ -187,7 +187,9 @@ fn invalidate_tile_pyramid(config: &InvalidationConfig, zoom: u32, x: u32, y: u3
     if zoom <= config.max_zoom {
         delete_tile_files(&config.tile_base_path, zoom, x, y);
     }
+
     delete_parent_tiles(config, zoom, x, y);
+
     if zoom <= config.max_zoom {
         delete_indexed_children(config, zoom, x, y);
     }
@@ -207,7 +209,7 @@ fn delete_parent_tiles(config: &InvalidationConfig, zoom: u32, x: u32, y: u32) {
 }
 
 fn delete_indexed_children(config: &InvalidationConfig, zoom: u32, x: u32, y: u32) {
-    if zoom != config.index_zoom {
+    if zoom > config.index_zoom {
         eprintln!(
             "skipping indexed child deletion for {zoom}/{x}/{y}: expected index zoom {}",
             config.index_zoom
@@ -216,6 +218,18 @@ fn delete_indexed_children(config: &InvalidationConfig, zoom: u32, x: u32, y: u3
         return;
     }
 
+    let factor = 1 << (config.index_zoom - zoom);
+    let x_start = x * factor;
+    let y_start = y * factor;
+
+    for child_x in x_start..x_start + factor {
+        for child_y in y_start..y_start + factor {
+            process_index_tile(config, child_x, child_y);
+        }
+    }
+}
+
+fn process_index_tile(config: &InvalidationConfig, x: u32, y: u32) {
     let index_path = index_file_path(&config.tile_base_path, config.index_zoom, x, y);
 
     let processing_path = match snapshot_to_processing(&index_path) {
