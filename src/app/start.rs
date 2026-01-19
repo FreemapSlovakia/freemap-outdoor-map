@@ -77,7 +77,11 @@ pub(crate) async fn start() {
                 index_zoom: cli.index_zoom,
                 max_zoom: cli.max_zoom,
             };
+
+            println!("Processing tile index recovery files");
             tile_invalidation::process_recovery_files(&invalidation_config);
+
+            println!("Processing starting tile invalidation watcher");
             tile_invalidation::start_watcher(invalidation_config);
         } else {
             eprintln!("imposm watcher disabled: missing --tile-base-path");

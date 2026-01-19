@@ -75,9 +75,11 @@ fn run_watcher(config: InvalidationConfig) {
         }
 
         for path in event.paths {
-            if path.extension().and_then(|ext| ext.to_str()) != Some("tile") {
+            if path.extension().and_then(|ext| ext.to_str()) != Some("tiles") {
                 continue;
             }
+
+            println!("Processing {}", path.display());
 
             if let Err(err) = process_tile_expiration_file(&config, &path) {
                 eprintln!(

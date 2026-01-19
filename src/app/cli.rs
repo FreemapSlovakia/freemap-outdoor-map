@@ -13,7 +13,7 @@ pub struct Cli {
     pub hillshading_base_path: PathBuf,
 
     /// Number of rendering worker threads.
-    #[arg(long, env = "MAPRENDER_WORKER_COUNT", default_value_t = 24)]
+    #[arg(long, env = "MAPRENDER_WORKER_COUNT")]
     pub worker_count: usize,
 
     /// Database connection string (e.g. postgres://user:pass@host/dbname).
@@ -37,7 +37,7 @@ pub struct Cli {
     pub max_concurrent_connections: usize,
 
     /// Database pool max size.
-    #[arg(long, env = "MAPRENDER_POOL_MAX_SIZE", default_value_t = 48)]
+    #[arg(long, env = "MAPRENDER_POOL_MAX_SIZE")]
     pub pool_max_size: u32,
 
     /// Maximum supported zoom for serving tiles.
@@ -45,7 +45,12 @@ pub struct Cli {
     pub max_zoom: u32,
 
     /// Allowed tile scales (e.g. 1,2,3).
-    #[arg(long, env = "MAPRENDER_ALLOWED_SCALES", value_delimiter = ',', default_value = "1")]
+    #[arg(
+        long,
+        env = "MAPRENDER_ALLOWED_SCALES",
+        value_delimiter = ',',
+        default_value = "1"
+    )]
     pub allowed_scales: Vec<f64>,
 
     /// Optional polygon geojson limiting requested tiles.
