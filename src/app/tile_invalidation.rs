@@ -106,10 +106,10 @@ fn process_tile_expiration_file(config: &InvalidationConfig, path: &Path) -> Res
         }
     }
 
-    if let Err(err) = fs::remove_file(path) {
-        if err.kind() != std::io::ErrorKind::NotFound {
-            eprintln!("failed to remove tile file {}: {err}", path.display());
-        }
+    if let Err(err) = fs::remove_file(path)
+        && err.kind() != std::io::ErrorKind::NotFound
+    {
+        eprintln!("failed to remove tile file {}: {err}", path.display());
     }
 
     Ok(())
@@ -148,7 +148,7 @@ fn read_with_retry(path: &Path) -> std::io::Result<String> {
         }
         thread::sleep(Duration::from_millis(50));
     }
-    Err(last_err.unwrap_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "read failed")))
+    Err(last_err.unwrap_or_else(|| std::io::Error::other("read failed")))
 }
 
 fn parse_tile_line(line: &str) -> Option<(u32, u32, u32)> {
@@ -235,10 +235,10 @@ fn delete_tile_files(base: &Path, zoom: u32, x: u32, y: u32) {
             continue;
         }
 
-        if let Err(err) = fs::remove_file(entry.path()) {
-            if err.kind() != std::io::ErrorKind::NotFound {
-                eprintln!("failed to remove {}: {err}", entry.path().display());
-            }
+        if let Err(err) = fs::remove_file(entry.path())
+            && err.kind() != std::io::ErrorKind::NotFound
+        {
+            eprintln!("failed to remove {}: {err}", entry.path().display());
         }
     }
 }
@@ -265,6 +265,7 @@ fn snapshot_to_processing(path: &Path) -> std::io::Result<Option<PathBuf>> {
 
     let mut processing_file = std::fs::OpenOptions::new()
         .create(true)
+        .truncate(true)
         .write(true)
         .open(&processing_path)?;
 
@@ -293,10 +294,10 @@ fn process_processing_file(config: &InvalidationConfig, path: &Path) -> std::io:
 
         let path = config.tile_base_path.join(format!("{entry}.jpeg"));
 
-        if let Err(err) = fs::remove_file(&path) {
-            if err.kind() != std::io::ErrorKind::NotFound {
-                eprintln!("failed to remove {}: {err}", path.display());
-            }
+        if let Err(err) = fs::remove_file(&path)
+            && err.kind() != std::io::ErrorKind::NotFound
+        {
+            eprintln!("failed to remove {}: {err}", path.display());
         }
     }
 
@@ -324,10 +325,10 @@ fn collect_processing_files(dir: &Path, out: &mut Vec<PathBuf>) {
             continue;
         }
 
-        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-            if name.contains(".index.processing") {
-                out.push(path);
-            }
+        if let Some(name) = path.file_name().and_then(|n| n.to_str())
+            && name.contains(".index.processing")
+        {
+            out.push(path);
         }
     }
 }

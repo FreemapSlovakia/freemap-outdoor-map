@@ -116,10 +116,10 @@ pub(crate) async fn serve_tile(
 
     if let Some(tile) = rendered.into_iter().next() {
         if let Some(file_path) = file_path {
-            if let Some(parent) = file_path.parent() {
-                if let Err(err) = fs::create_dir_all(parent).await {
-                    eprintln!("create tile dir failed: {err}");
-                }
+            if let Some(parent) = file_path.parent()
+                && let Err(err) = fs::create_dir_all(parent).await
+            {
+                eprintln!("create tile dir failed: {err}");
             }
 
             if let Err(err) = fs::write(&file_path, &tile).await {
@@ -140,8 +140,8 @@ pub(crate) async fn serve_tile(
     .expect("body should be built")
 }
 
-fn tile_cache_path(base: &PathBuf, zoom: u32, x: u32, y: u32, scale: f64) -> PathBuf {
-    let mut path = base.clone();
+fn tile_cache_path(base: &std::path::Path, zoom: u32, x: u32, y: u32, scale: f64) -> PathBuf {
+    let mut path = base.to_owned();
     path.push(zoom.to_string());
     path.push(x.to_string());
     path.push(format!("{y}@{scale}.jpeg"));
@@ -184,20 +184,27 @@ fn parse_y_suffix(input: &str) -> Option<(u32, f64, Option<&str>)> {
     Some((y, scale, ext))
 }
 
-fn append_index_entry(base: &PathBuf, index_zoom: u32, zoom: u32, x: u32, y: u32, scale: f64) {
+fn append_index_entry(
+    base: &std::path::Path,
+    index_zoom: u32,
+    zoom: u32,
+    x: u32,
+    y: u32,
+    scale: f64,
+) {
     if zoom <= index_zoom {
         return;
     }
 
-    let shift = (zoom - index_zoom) as u32;
+    let shift = zoom - index_zoom;
 
     let index_path = index_file_path(base, index_zoom, x >> shift, y >> shift);
 
-    if let Some(parent) = index_path.parent() {
-        if let Err(err) = std::fs::create_dir_all(parent) {
-            eprintln!("create index dir failed: {err}");
-            return;
-        }
+    if let Some(parent) = index_path.parent()
+        && let Err(err) = std::fs::create_dir_all(parent)
+    {
+        eprintln!("create index dir failed: {err}");
+        return;
     }
 
     let mut file = match std::fs::OpenOptions::new()

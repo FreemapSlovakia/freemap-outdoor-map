@@ -97,7 +97,7 @@ pub fn render(
     let _span = tracy_client::span!("render_tile::draw");
 
     let context = &Context::new(surface)
-        .map_err(|err| LayerRenderError::from(err))
+        .map_err(LayerRenderError::from)
         .with_layer("top")?;
 
     if render_scale != 1.0 {
@@ -310,7 +310,7 @@ pub fn render(
     ctx.context
         .pop_group_to_source()
         .and_then(|_| ctx.context.paint())
-        .map_err(|err| LayerRenderError::from(err))
+        .map_err(LayerRenderError::from)
         .with_layer("top")?;
 
     if zoom < 8 {

@@ -757,7 +757,7 @@ pub fn render(
 
                     let is_mineral = h
                         .get("water_characteristic")
-                        .map_or(false, |v| v.is_some() && v.as_deref() != Some(""));
+                        .is_some_and(|v| v.is_some() && v.as_deref() != Some(""));
 
                     let mut key = (if is_mineral {
                         "mineral-spring"
@@ -770,13 +770,13 @@ pub fn render(
 
                     if !is_mineral
                         && h.get("refitted")
-                            .map_or(false, |r| r.as_deref() == Some("true"))
+                            .is_some_and(|r| r.as_deref() == Some("true"))
                     {
                         key.push_str("|refitted");
                         names.push("refitted_spring".into());
                     }
 
-                    let fill = if h.get("hot").map_or(false, |r| r.as_deref() == Some("true")) {
+                    let fill = if h.get("hot").is_some_and(|r| r.as_deref() == Some("true")) {
                         key.push_str("|hot");
 
                         "#e11919"
@@ -785,7 +785,7 @@ pub fn render(
                     };
 
                     if h.get("intermittent")
-                        .map_or(false, |r| r.as_deref() == Some("true"))
+                        .is_some_and(|r| r.as_deref() == Some("true"))
                     {
                         key.push_str("|tmp");
                         names.push("intermittent".into());
@@ -793,7 +793,7 @@ pub fn render(
 
                     stylesheet.push_str(&format!("#spring {{ fill: {fill} }}"));
 
-                    match h.get("drinkable").map_or(None, |r| r.as_deref()) {
+                    match h.get("drinkable").and_then(Option::as_deref) {
                         Some("true") => {
                             key.push_str("|drinkable");
                             names.push("drinkable_spring".into());
@@ -858,7 +858,7 @@ pub fn render(
                             Point::new(point.x() + dx, point.y() + dy),
                             he / 2.0,
                             name.into_owned(),
-                            h.get("ele").map_or(None, |ele| ele.clone()),
+                            h.get("ele").and_then(Option::clone),
                             bbox_idx,
                             def,
                         ));
@@ -871,7 +871,7 @@ pub fn render(
 
                 context.paint_with_alpha(
                     if typ != "cave_entrance"
-                        && h.get("access").map_or(false, |access| {
+                        && h.get("access").is_some_and(|access| {
                             matches!(access.as_deref(), Some("private" | "no"))
                         })
                     {

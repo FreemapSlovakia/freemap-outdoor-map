@@ -12,6 +12,7 @@ pub enum Mode {
 }
 
 fn read_rgba_from_gdal(
+    country: &str,
     dataset: &Dataset,
     ctx: &Ctx,
     raster_scale: f64,
@@ -97,76 +98,139 @@ fn read_rgba_from_gdal(
 
     let mut band_buffer = vec![0u8; resampled_height * resampled_width];
 
-    let mut has_data = false;
-
-    let band_count = dataset.raster_count();
-
-    if band_count != 4 {
+    if dataset.raster_count() != 4 {
         panic!("unsupported band count");
     }
 
-    let band_indices: &[usize] = match mode {
-        Mode::Shading => &[0, 1, 2, 3],
-        Mode::Mask => &[3],
-    };
+    if matches!(mode, Mode::Shading) {
+        for band_index in 0..3 {
+            let band = dataset.rasterband(band_index + 1)?;
 
-    for &band_index in band_indices {
-        let band = dataset.rasterband(band_index + 1)?;
+            if clamped_source_width > 0
+                && clamped_source_height > 0
+                && resampled_width > 0
+                && resampled_height > 0
+            {
+                band.read_into_slice::<u8>(
+                    (clamped_window_x, clamped_window_y),
+                    (clamped_source_width, clamped_source_height),
+                    (resampled_width, resampled_height), // Resampled size
+                    &mut band_buffer,
+                    Some(gdal::raster::ResampleAlg::Lanczos),
+                )?;
+            }
 
-        let no_data = band.no_data_value();
-
-        if clamped_source_width > 0
-            && clamped_source_height > 0
-            && resampled_width > 0
-            && resampled_height > 0
-        {
-            band.read_into_slice::<u8>(
-                (clamped_window_x, clamped_window_y),
-                (clamped_source_width, clamped_source_height),
-                (resampled_width, resampled_height), // Resampled size
-                &mut band_buffer,
-                Some(gdal::raster::ResampleAlg::Lanczos),
-            )?;
-        }
-
-        for y in 0..copy_height {
-            for x in 0..copy_width {
-                let data_index = y * resampled_width + x;
-
-                let rgba_index = ((y + offset_y) * buffered_w + (x + offset_x)) * 4;
-
-                let value = band_buffer[data_index];
-                let is_no_data = no_data.is_some_and(|nd| (nd as u8) == value);
-
-                if !is_no_data {
-                    has_data = true;
-                }
-
-                match mode {
-                    Mode::Shading => {
-                        rgba_data[rgba_index + band_index] = value;
-                    }
-                    Mode::Mask => {
-                        let alpha = if is_no_data { 0u8 } else { 255u8 };
-                        rgba_data[rgba_index] = 255;
-                        rgba_data[rgba_index + 1] = 255;
-                        rgba_data[rgba_index + 2] = 255;
-                        rgba_data[rgba_index + 3] = alpha;
-                    }
+            for y in 0..copy_height {
+                for x in 0..copy_width {
+                    let data_index = y * resampled_width + x;
+                    let rgba_index = ((y + offset_y) * buffered_w + (x + offset_x)) * 4;
+                    rgba_data[rgba_index + band_index] = band_buffer[data_index];
                 }
             }
         }
     }
 
-    let frac_x = pixel_min_x_f - pixel_min_x as f64;
-    let frac_y = pixel_min_y_f - pixel_min_y as f64;
+    let alpha_band = dataset.rasterband(4)?;
 
-    let crop_x_base = offset_x + (frac_x * scale_x).round().max(0.0) as usize;
-    let crop_y_base = offset_y + (frac_y * scale_y).round().max(0.0) as usize;
+    let alpha_no_data = alpha_band.no_data_value().map(|nd| nd as u8);
 
-    // If rounding pushed the origin too far, clamp so we still copy a full tile when possible.
-    let crop_x = crop_x_base.min(buffered_w.saturating_sub(scaled_width_px));
-    let crop_y = crop_y_base.min(buffered_h.saturating_sub(scaled_height_px));
+    let mask_band = alpha_band
+        .mask_flags()
+        .ok()
+        .filter(|f| {
+            // println!(
+            //     "MASK: {country} all_valid={} alpha={} nodata={} per_dataset={}",
+            //     f.is_all_valid(),
+            //     f.is_alpha(),
+            //     f.is_nodata(),
+            //     f.is_per_dataset()
+            // );
+
+            f.is_per_dataset()
+        })
+        .and_then(|_| alpha_band.open_mask_band().ok());
+
+    let mut mask_buffer = if mask_band.is_some() {
+        Some(vec![0u8; resampled_height * resampled_width])
+    } else {
+        None
+    };
+
+    if clamped_source_width > 0
+        && clamped_source_height > 0
+        && resampled_width > 0
+        && resampled_height > 0
+    {
+        alpha_band.read_into_slice::<u8>(
+            (clamped_window_x, clamped_window_y),
+            (clamped_source_width, clamped_source_height),
+            (resampled_width, resampled_height), // Resampled size
+            &mut band_buffer,
+            Some(gdal::raster::ResampleAlg::Lanczos),
+        )?;
+
+        if let (Some(mask_band), Some(mask_buffer)) = (mask_band.as_ref(), mask_buffer.as_mut()) {
+            mask_band.read_into_slice::<u8>(
+                (clamped_window_x, clamped_window_y),
+                (clamped_source_width, clamped_source_height),
+                (resampled_width, resampled_height), // Resampled size
+                mask_buffer,
+                Some(gdal::raster::ResampleAlg::Lanczos),
+            )?;
+        }
+    }
+
+    let mut has_data = false;
+
+    for y in 0..copy_height {
+        for x in 0..copy_width {
+            let (alpha, mask_alpha) = {
+                let data_index = y * resampled_width + x;
+
+                let value = band_buffer[data_index];
+
+                if alpha_no_data.is_some_and(|nd| nd == value)
+                    || mask_buffer
+                        .as_ref()
+                        .is_some_and(|mask_buffer| mask_buffer[data_index] == 0)
+                {
+                    (0, 0)
+                } else {
+                    has_data = true;
+
+                    (value, 255)
+                }
+            };
+
+            let rgba_index = ((y + offset_y) * buffered_w + (x + offset_x)) * 4;
+
+            match mode {
+                Mode::Shading => {
+                    rgba_data[rgba_index + 3] = alpha;
+                }
+                Mode::Mask => {
+                    rgba_data[rgba_index] = 255;
+                    rgba_data[rgba_index + 1] = 255;
+                    rgba_data[rgba_index + 2] = 255;
+                    rgba_data[rgba_index + 3] = mask_alpha;
+                }
+            }
+        }
+    }
+
+    let (crop_x, crop_y) = {
+        let frac_x = pixel_min_x_f - pixel_min_x as f64;
+        let frac_y = pixel_min_y_f - pixel_min_y as f64;
+
+        let crop_x_base = offset_x + (frac_x * scale_x).round().max(0.0) as usize;
+        let crop_y_base = offset_y + (frac_y * scale_y).round().max(0.0) as usize;
+
+        // If rounding pushed the origin too far, clamp so we still copy a full tile when possible.
+        let crop_x = crop_x_base.min(buffered_w.saturating_sub(scaled_width_px));
+        let crop_y = crop_y_base.min(buffered_h.saturating_sub(scaled_height_px));
+
+        (crop_x, crop_y)
+    };
 
     let crop_w = scaled_width_px.min(buffered_w.saturating_sub(crop_x));
     let crop_h = scaled_height_px.min(buffered_h.saturating_sub(crop_y));
@@ -228,7 +292,7 @@ pub fn load_surface(
         .get(country)
         .unwrap_or_else(|| panic!("no such dataset {country}"));
 
-    let surface = read_rgba_from_gdal(hillshading_dataset, ctx, raster_scale, mode)?;
+    let surface = read_rgba_from_gdal(country, hillshading_dataset, ctx, raster_scale, mode)?;
 
     if surface.is_some() {
         shading_data.record_use(country);

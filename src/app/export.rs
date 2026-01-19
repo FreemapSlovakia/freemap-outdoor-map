@@ -77,7 +77,7 @@ pub(crate) async fn export_post(
 ) -> Response<Body> {
     let (format, ext, content_type) = match parse_format(request.format.as_deref()) {
         Ok(value) => value,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
 
     let scale = request.scale.unwrap_or(1.0);
@@ -94,7 +94,7 @@ pub(crate) async fn export_post(
 
     let render_request = match build_render_request(&request, format, scale) {
         Ok(value) => value,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
 
     let job = spawn_export_job(
@@ -147,7 +147,7 @@ pub(crate) async fn export_get(
         return not_found();
     };
 
-    if let Err(_) = wait_job(&job).await {
+    if (wait_job(&job).await).is_err() {
         return Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
             .body(Body::empty())
@@ -214,7 +214,7 @@ fn generate_token() -> String {
 
 fn parse_format(
     format: Option<&str>,
-) -> Result<(ImageFormat, &'static str, &'static str), Response<Body>> {
+) -> Result<(ImageFormat, &'static str, &'static str), Box<Response<Body>>> {
     let format = format.unwrap_or("pdf");
 
     match format {
@@ -223,7 +223,7 @@ fn parse_format(
         "jpeg" => Ok((ImageFormat::Jpeg, "jpeg", "image/jpeg")),
         "jpg" => Ok((ImageFormat::Jpeg, "jpg", "image/jpeg")),
         "png" => Ok((ImageFormat::Png, "png", "image/png")),
-        _ => Err(bad_request()),
+        _ => Err(Box::new(bad_request())),
     }
 }
 
@@ -231,7 +231,7 @@ fn build_render_request(
     request: &ExportRequest,
     format: ImageFormat,
     scale: f64,
-) -> Result<RenderRequest, Response<Body>> {
+) -> Result<RenderRequest, Box<Response<Body>>> {
     let bbox = bbox4326_to_3857(request.bbox);
 
     let rect = Rect::new((bbox[0], bbox[1]), (bbox[2], bbox[3]));
@@ -249,8 +249,8 @@ fn build_render_request(
 
         if let Some(feature_collection) = &features.feature_collection {
             let geojson = serde_json::from_value::<GeoJson>(feature_collection.clone())
-                .map_err(|_| bad_request())?;
-            let features = geojson_to_features(geojson).map_err(|_| bad_request())?;
+                .map_err(|_| Box::new(bad_request()))?;
+            let features = geojson_to_features(geojson).map_err(|_| Box::new(bad_request()))?;
             render_request.featues = Some(features);
         }
 

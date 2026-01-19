@@ -16,13 +16,13 @@ use image::{ExtendedColorType, ImageEncoder};
 #[derive(Debug, thiserror::Error)]
 pub enum RenderError {
     #[error("Error rendering layers: {0}")]
-    LayersRenderError(#[from] layers::RenderError),
+    Layers(#[from] layers::RenderError),
 
     #[error(transparent)]
-    CairoError(#[from] cairo::Error),
+    Cairo(#[from] cairo::Error),
 
     #[error("Error encoding image: {0}")]
-    ImageEncodingError(Box<dyn std::error::Error + Send + Sync>),
+    ImageEncoding(Box<dyn std::error::Error + Send + Sync>),
 }
 
 pub fn render(
@@ -133,7 +133,7 @@ pub fn render(
 
                 surface
                     .write_to_png(&mut buffer)
-                    .map_err(|err| RenderError::ImageEncodingError(Box::new(err)))?;
+                    .map_err(|err| RenderError::ImageEncoding(Box::new(err)))?;
 
                 images.push(buffer);
             }
@@ -196,7 +196,7 @@ pub fn render(
 
                 JpegEncoder::new_with_quality(&mut buffer, 90)
                     .write_image(&rgb_data, width, height, ExtendedColorType::Rgb8)
-                    .map_err(|err| RenderError::ImageEncodingError(Box::new(err)))?;
+                    .map_err(|err| RenderError::ImageEncoding(Box::new(err)))?;
 
                 images.push(buffer);
             }

@@ -27,7 +27,7 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
     for row in rows {
         let Some(geometry) =
-            geometry_geometry(&row).map(|geom| geom.project_to_tile(&ctx.tile_projector))
+            geometry_geometry(row).map(|geom| geom.project_to_tile(&ctx.tile_projector))
         else {
             continue;
         };

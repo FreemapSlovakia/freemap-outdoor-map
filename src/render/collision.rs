@@ -32,12 +32,7 @@ impl<'a> Collision<'a> {
         ));
 
         if DEBUG && let Some(context) = self.context {
-            context.rectangle(
-                item.min().x.into(),
-                item.min().y.into(),
-                item.width().into(),
-                item.height().into(),
-            );
+            context.rectangle(item.min().x, item.min().y, item.width(), item.height());
 
             context.save().expect("context saved");
             context.set_source_color_a((0, 255, 0), 0.5);
@@ -58,12 +53,7 @@ impl<'a> Collision<'a> {
             && intersects
             && let Some(context) = self.context
         {
-            context.rectangle(
-                bb.min().x.into(),
-                bb.min().y.into(),
-                bb.width().into(),
-                bb.height().into(),
-            );
+            context.rectangle(bb.min().x, bb.min().y, bb.width(), bb.height());
 
             context.save().expect("context saved");
             context.set_source_color_a((255, 0, 0), 0.2);

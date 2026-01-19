@@ -95,7 +95,7 @@ impl SvgRepo {
                         source: Some(err.into()),
                     })?;
 
-                if svg_element.name.split(':').last() != Some("svg") {
+                if svg_element.name.split(':').next_back() != Some("svg") {
                     return Err(SvgRepoError {
                         msg: "Expected single <svg> root element".into(),
                         source: None,

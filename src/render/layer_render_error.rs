@@ -5,22 +5,22 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum LayerRenderError {
     #[error("DB error: {0}")]
-    PostgresError(#[from] PostgresRenderError),
+    Postgres(#[from] PostgresRenderError),
 
     #[error("Cairo error: {0}")]
-    CairoError(#[from] cairo::Error),
+    Cairo(#[from] cairo::Error),
 
     #[error("Error getting SVG: {0}")]
-    SvgError(#[from] SvgRepoError),
+    Svg(#[from] SvgRepoError),
 
     #[error("Invalid GeoJSON: {0}")]
-    GeoJsonError(#[from] geojson::Error),
+    GeoJson(Box<geojson::Error>),
 
     #[error("GDAL error: {0}")]
-    GdalError(#[from] gdal::errors::GdalError),
+    Gdal(#[from] gdal::errors::GdalError),
 
     #[error("Cairo borrow error: {0}")]
-    CairoBorrowError(#[from] cairo::BorrowError),
+    CairoBorrow(#[from] cairo::BorrowError),
 }
 
 pub type LayerRenderResult = Result<(), LayerRenderError>;
@@ -66,6 +66,12 @@ impl From<postgres::Error> for PostgresRenderError {
 
 impl From<postgres::Error> for LayerRenderError {
     fn from(err: postgres::Error) -> Self {
-        Self::PostgresError(err.into())
+        Self::Postgres(err.into())
+    }
+}
+
+impl From<geojson::Error> for LayerRenderError {
+    fn from(err: geojson::Error) -> Self {
+        Self::GeoJson(Box::new(err))
     }
 }
