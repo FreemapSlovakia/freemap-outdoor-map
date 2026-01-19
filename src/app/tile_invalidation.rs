@@ -94,8 +94,6 @@ fn run_watcher(config: InvalidationConfig) {
                 continue;
             }
 
-            println!("Processing {}", path.display());
-
             if let Err(err) = process_tile_expiration_file(&config, &path) {
                 eprintln!(
                     "tile expiration processing failed for {}: {err}",
@@ -112,6 +110,8 @@ fn process_tile_expiration_file(config: &InvalidationConfig, path: &Path) -> Res
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(err) => return Err(err.to_string()),
     };
+
+    println!("Processing {}", path.display());
 
     for line in content.lines() {
         let line = line.trim();
