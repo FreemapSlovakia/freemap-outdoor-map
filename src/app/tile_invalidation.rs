@@ -32,6 +32,21 @@ pub(crate) fn process_recovery_files(config: &InvalidationConfig) {
     }
 }
 
+pub(crate) fn process_existing_expiration_files(config: &InvalidationConfig) {
+    let mut pending = Vec::new();
+
+    collect_expiration_files(&config.watch_base, &mut pending);
+
+    for path in pending {
+        if let Err(err) = process_tile_expiration_file(config, &path) {
+            eprintln!(
+                "tile expiration processing failed for {}: {err}",
+                path.display()
+            );
+        }
+    }
+}
+
 pub(crate) fn start_watcher(config: InvalidationConfig) {
     thread::Builder::new()
         .name("imposm-tile-watcher".to_string())
@@ -92,7 +107,11 @@ fn run_watcher(config: InvalidationConfig) {
 }
 
 fn process_tile_expiration_file(config: &InvalidationConfig, path: &Path) -> Result<(), String> {
-    let content = read_with_retry(path).map_err(|err| err.to_string())?;
+    let content = match read_with_retry(path) {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(err) => return Err(err.to_string()),
+    };
 
     for line in content.lines() {
         let line = line.trim();
@@ -330,6 +349,31 @@ fn collect_processing_files(dir: &Path, out: &mut Vec<PathBuf>) {
         if let Some(name) = path.file_name().and_then(|n| n.to_str())
             && name.contains(".index.processing")
         {
+            out.push(path);
+        }
+    }
+}
+
+fn collect_expiration_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(err) => {
+            if err.kind() != std::io::ErrorKind::NotFound {
+                eprintln!("failed to read dir {}: {err}", dir.display());
+            }
+            return;
+        }
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+
+        if path.is_dir() {
+            collect_expiration_files(&path, out);
+            continue;
+        }
+
+        if path.extension().and_then(|ext| ext.to_str()) == Some("tiles") {
             out.push(path);
         }
     }

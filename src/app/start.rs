@@ -81,7 +81,10 @@ pub(crate) async fn start() {
             println!("Processing tile index recovery files");
             tile_invalidation::process_recovery_files(&invalidation_config);
 
-            println!("Processing starting tile invalidation watcher");
+            println!("Processing existing tile expiration files");
+            tile_invalidation::process_existing_expiration_files(&invalidation_config);
+
+            println!("Starting tile invalidation watcher");
             tile_invalidation::start_watcher(invalidation_config);
         } else {
             eprintln!("imposm watcher disabled: missing --tile-base-path");
