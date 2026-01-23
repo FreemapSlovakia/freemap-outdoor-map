@@ -85,7 +85,6 @@ pub(crate) async fn serve_tile(
                     return Response::builder()
                         .status(StatusCode::OK)
                         .header("Content-Type", "image/jpeg")
-                        .header("Access-Control-Allow-Origin", "*")
                         .body(Body::from(data))
                         .expect("cached body");
                 }
@@ -132,7 +131,6 @@ pub(crate) async fn serve_tile(
         Response::builder()
             .status(StatusCode::OK)
             .header("Content-Type", "image/jpeg")
-            .header("Access-Control-Allow-Origin", "*")
             .body(Body::from(tile))
     } else {
         Response::builder()
