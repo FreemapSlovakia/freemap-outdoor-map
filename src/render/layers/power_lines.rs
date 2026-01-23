@@ -57,7 +57,7 @@ pub fn render_towers_poles(ctx: &Ctx, client: &mut Client) -> LayerRenderResult 
     let sql = format!(
         "SELECT geometry, type
         FROM osm_features
-        WHERE type IN ('tower'{}) AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)",
+        WHERE type IN ('power_tower'{}) AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)",
         if ctx.zoom < 15 { "" } else { ", 'pylon', 'pole'" }
     );
 

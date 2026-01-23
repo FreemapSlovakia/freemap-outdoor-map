@@ -21,9 +21,10 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
                 NULLIF("addr:housenumber", ''),
                 NULLIF("addr:conscriptionnumber", '')
             ) AS housenumber,
-            ST_PointOnSurface(geometry) AS geometry
+            geometry
         FROM osm_housenumbers
-        WHERE geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)"#;
+        WHERE geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY osm_id"#;
 
     let text_options = TextOptions {
         flo: FontAndLayoutOptions {

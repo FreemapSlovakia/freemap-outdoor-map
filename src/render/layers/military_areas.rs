@@ -12,7 +12,7 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
     let sql = "
         SELECT geometry
-            FROM osm_landusages
+            FROM osm_landcovers
             WHERE
                 type = 'military'
                 AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)

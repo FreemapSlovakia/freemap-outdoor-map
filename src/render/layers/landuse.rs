@@ -50,7 +50,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
                 ],
                 type
             ) AS z_order
-        FROM osm_landusages{table_suffix}
+        FROM osm_landcovers{table_suffix}
         WHERE
             {excl_types}
             geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)

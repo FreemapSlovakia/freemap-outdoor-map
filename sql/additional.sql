@@ -134,17 +134,7 @@ AFTER DELETE ON osm_route_members
 FOR EACH ROW
 EXECUTE FUNCTION osm_route_members_gen0_delete_trigger();
 
-CREATE INDEX ON osm_sports (osm_id)
-WHERE type IN ('soccer', 'tennis', 'basketball', 'shooting');
--- z-order
---
-DROP TABLE IF EXISTS z_order_poi;
-
 CREATE TABLE z_order_poi (type VARCHAR PRIMARY KEY, z_order SERIAL);
-
-create index osm_sports_type on osm_sports(type);
-
-create index osm_feature_polys_type on osm_feature_polys(type);
 
 create index osm_shops_type on osm_shops(type);
 

@@ -424,14 +424,12 @@ pub fn render(
                     osm_id,
                     geometry,
                     name AS n,
-                    hstore('ele', ele) AS h,
-                    CASE
-                        WHEN type <> 'guidepost' OR name <> '' THEN type
-                        ELSE 'guidepost_noname'
-                    END AS type
+                    hstore('ele', tags->'ele') AS h,
+                    CASE WHEN type = 'guidepost' AND name = '' THEN 'guidepost_noname' ELSE type END
                 FROM
-                    osm_infopoints
+                    osm_features
                 WHERE
+                    type = 'guidepost' AND
                     geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)"#,
         );
     }
@@ -440,28 +438,14 @@ pub fn render(
         sql.push_str(
             r#"
                 UNION ALL
-
-                SELECT
-                    osm_id,
-                    geometry,
-                    name AS n,
-                    hstore('ele', tags->'ele') AS h,
-                    type
-                FROM
-                    osm_features
-                WHERE
-                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND type = 'aerodrome' AND
-                    tags ? 'icao'
-
-                UNION ALL
                     SELECT
                         osm_id,
-                        ST_PointOnSurface(geometry) AS geometry,
+                        geometry,
                         name AS n,
                         hstore('ele', tags->'ele') AS h,
                         type
                     FROM
-                        osm_feature_polys
+                        osm_features
                     WHERE
                         geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
                         type = 'aerodrome' AND
@@ -476,28 +460,31 @@ pub fn render(
 
             SELECT
                 osm_id,
-                ST_PointOnSurface(geometry) AS geometry,
-                name AS n,
-                hstore('access', tags->'access') AS h,
-                type
-            FROM
-                osm_sports
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                type IN ('free_flying', 'soccer', 'tennis', 'basketball', 'climbing', 'shooting')
-
-            UNION ALL
-
-            SELECT
-                osm_id,
                 geometry,
                 COALESCE(NULLIF(name, ''), tags->'ref', '') AS n,
-                hstore(ARRAY['ele', tags->'ele', 'access', tags->'access']) AS h,
+                hstore(ARRAY[
+                    'ele', tags->'ele',
+                    'access', tags->'access',
+                    'hot', (type = 'hot_spring')::text,
+                    'drinkable', tags->'drinking_water',
+                    'refitted', tags->'refitted',
+                    'intermittent', COALESCE(tags->'intermittent', tags->'seasonal'),
+                    'water_characteristic', tags->'water_characteristic'
+                ]) AS h,
                 CASE
+                    WHEN type = 'guidepost' AND name = '' THEN 'guidepost_noname'
                     WHEN type = 'tree' AND tags->'protected' <> 'no' THEN 'tree_protected'
                     WHEN type = 'communications_tower' THEN 'tower_communication'
                     WHEN type = 'shelter' AND tags->'shelter_type' IN ('shopping_cart', 'lean_to', 'public_transport', 'picnic_shelter', 'basic_hut', 'weather_shelter') THEN tags->'shelter_type'
                     WHEN type IN ('mine', 'adit', 'mineshaft') AND tags->'disused' <> 'no' THEN 'disused_mine'
+                    WHEN type IN ('hot_spring', 'geyser', 'spring_box') THEN 'spring'
+                    WHEN type IN ('tower', 'mast') THEN
+                        type || '_' || CASE tags->'tower:type'
+                            WHEN 'communication' THEN 'communication'
+                            WHEN 'observation' THEN 'observation'
+                            WHEN 'bell_tower' THEN 'bell_tower'
+                            ELSE 'other'
+                        END
                     ELSE type
                 END AS type
             FROM
@@ -512,45 +499,7 @@ pub fn render(
 
             SELECT
                 osm_id,
-                ST_PointOnSurface(geometry) AS geometry,
-                COALESCE(NULLIF(name, ''), tags->'ref', '') AS n,
-                hstore(ARRAY['ele', tags->'ele', 'access', tags->'access']) AS h,
-                CASE
-                    WHEN type = 'communications_tower' THEN 'tower_communication'
-                    WHEN type = 'shelter' AND tags->'shelter_type' IN ('shopping_cart', 'lean_to', 'public_transport', 'picnic_shelter', 'basic_hut', 'weather_shelter') THEN tags->'shelter_type'
-                    WHEN type IN ('mine', 'adit', 'mineshaft') AND tags->'disused' NOT IN ('', 'no') THEN 'disused_mine'
-                    ELSE type
-                END AS type
-            FROM
-                osm_feature_polys
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-
-            UNION ALL
-
-            SELECT
-                osm_id,
                 geometry,
-                name AS n,
-                hstore(ARRAY[
-                    'ele', ele,
-                    'hot', (type = 'hot_spring')::text,
-                    'drinkable', CASE WHEN drinking_water = 'yes' OR drinking_water = 'treated' THEN 'true' WHEN drinking_water = 'no' THEN 'false' ELSE null END,
-                    'refitted', refitted::text,
-                    'intermittent', COALESCE(intermittent, seasonal)::text,
-                    'water_characteristic', water_characteristic
-                ]) AS h,
-                'spring' AS type
-            FROM
-                osm_springs
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-
-            UNION ALL
-
-            SELECT
-                osm_id,
-                ST_PointOnSurface(geometry) AS geometry,
                 name AS n,
                 hstore('') as h,
                 building AS type
@@ -559,28 +508,6 @@ pub fn render(
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
                 building IN ('chapel', 'church', 'temple', 'mosque', 'cathedral', 'synagogue')
-
-            UNION ALL
-
-            SELECT
-                osm_id,
-                ST_PointOnSurface(geometry) AS geometry,
-                name AS n,
-                hstore('ele', ele) AS h,
-                CONCAT(
-                    "class",
-                    '_',
-                    CASE type
-                        WHEN 'communication' THEN 'communication'
-                        WHEN 'observation' THEN 'observation'
-                        WHEN 'bell_tower' THEN 'bell_tower'
-                        ELSE 'other'
-                    END
-                ) AS type
-            FROM
-                osm_towers
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
         "#);
     }
 
@@ -605,20 +532,7 @@ pub fn render(
 
                     SELECT
                         osm_id,
-                        ST_PointOnSurface(geometry) AS geometry,
-                        name AS n,
-                        hstore('') AS h,
-                        'ruins' AS type
-                    FROM
-                        osm_ruins
-                    WHERE
-                        geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-
-                    UNION ALL
-
-                    SELECT
-                        osm_id,
-                        ST_PointOnSurface(geometry) AS geometry,
+                        geometry,
                         name AS n,
                         hstore('') AS h,
                         type
@@ -712,13 +626,7 @@ pub fn render(
             ORDER BY
                 z_order,
                 h->'isolation' DESC NULLS LAST,
-                CASE
-                    WHEN (h->'ele') ~ '^\s*-?\d+(\.\d+)?\s*$' THEN
-                        (h->'ele')::real
-                    ELSE
-                        NULL
-                    END
-                DESC NULLS LAST,
+                CASE WHEN (h->'ele') ~ '^\s*-?\d+(\.\d+)?\s*$' THEN (h->'ele')::real ELSE NULL END DESC NULLS LAST,
                 osm_id
         "#,
     );
@@ -770,7 +678,7 @@ pub fn render(
 
                     if !is_mineral
                         && h.get("refitted")
-                            .is_some_and(|r| r.as_deref() == Some("true"))
+                            .is_some_and(|r| r.as_deref() == Some("yes"))
                     {
                         key.push_str("|refitted");
                         names.push("refitted_spring".into());
@@ -785,7 +693,7 @@ pub fn render(
                     };
 
                     if h.get("intermittent")
-                        .is_some_and(|r| r.as_deref() == Some("true"))
+                        .is_some_and(|r| r.as_deref() == Some("yes"))
                     {
                         key.push_str("|tmp");
                         names.push("intermittent".into());
@@ -794,12 +702,12 @@ pub fn render(
                     stylesheet.push_str(&format!("#spring {{ fill: {fill} }}"));
 
                     match h.get("drinkable").and_then(Option::as_deref) {
-                        Some("true") => {
+                        Some("yes" | "treated") => {
                             key.push_str("|drinkable");
                             names.push("drinkable_spring".into());
                             stylesheet.push_str(r#"#drinkable { fill: #00ff00 } "#);
                         }
-                        Some("false") => {
+                        Some("no") => {
                             key.push_str("|not_drinkable");
                             names.push("drinkable_spring".into());
                             stylesheet.push_str(r#"#drinkable { fill: #ff0000 } "#);

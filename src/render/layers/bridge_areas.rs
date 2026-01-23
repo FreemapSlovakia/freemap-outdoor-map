@@ -11,7 +11,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, mask: bool) -> LayerRenderResult {
     let _span = tracy_client::span!("bridge_areas::render");
 
     let query = concat!(
-        "SELECT geometry FROM osm_landusages ",
+        "SELECT geometry FROM osm_landcovers ",
         "WHERE geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857) AND type = 'bridge'"
     );
 

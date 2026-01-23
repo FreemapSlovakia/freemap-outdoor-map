@@ -20,11 +20,10 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
             REGEXP_REPLACE(osm_waterareas.name, '[Vv]odná [Nn]ádrž\\M', 'v. n.') AS name,
             ST_PointOnSurface(osm_waterareas.geometry) AS geometry
         FROM
-            osm_waterareas LEFT JOIN osm_feature_polys USING (osm_id)
+            osm_waterareas
         WHERE
-            osm_waterareas.name <> '' AND
             osm_waterareas.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-            osm_feature_polys.osm_id IS NULL AND
+            osm_waterareas.name <> '' AND
             osm_waterareas.type <> 'riverbank' AND
             osm_waterareas.water NOT IN ('river', 'stream', 'canal', 'ditch') AND
             ($6 >= 17 OR osm_waterareas.area > 800000 / POWER(2, (2 * ($6 - 10))))

@@ -1,4 +1,5 @@
 ---
+use_single_id_space: true
 areas:
   area_tags:
     - building
@@ -12,15 +13,24 @@ areas:
     - barrier
 tags:
   include:
-    - protected
-    - icao
-    - shelter_type
-    - disused
-    - wetland
+    - access
+    - covered
     - denotation
+    - disused
+    - drinking_water
+    - ele
     - fee
+    - icao
+    - intermittent
+    - protected
     - ref
-generalized_tables:
+    - refitted
+    - seasonal
+    - shelter_type
+    - tower:type
+    - water_characteristic
+    - wetland
+water_characteristicgeneralized_tables:
   waterareas_gen1:
     source: waterareas
     sql_filter: ST_Area(geometry)>50000.000000
@@ -51,12 +61,12 @@ generalized_tables:
     source: waterways
     sql_filter: type='river'
     tolerance: 50
-  landusages_gen1:
-    source: landusages
+  landcovers_gen1:
+    source: landcovers
     sql_filter: ST_Area(geometry)>50000.000000
     tolerance: 50
-  landusages_gen0:
-    source: landusages_gen1
+  landcovers_gen0:
+    source: landcovers_gen1
     sql_filter: ST_Area(geometry)>500000.000000
     tolerance: 200
   route_members_gen0:
@@ -166,7 +176,7 @@ tables:
       - name: type
         type: member_type
 
-  landusages:
+  landcovers:
     columns:
       - name: osm_id
         type: id
@@ -302,19 +312,16 @@ tables:
         type: id
       - name: geometry
         type: geometry
+        geometry_transform: point_on_surface
       - name: name
         type: string
         key: name
       - name: type
         type: mapping_value
-    type: geometry
-    type_mappings:
-      points:
-        shop:
-          - __any__
-      polygons:
-        shop:
-          - __any__
+    type: point_or_polygon
+    mapping:
+      shop:
+        - __any__
 
   places:
     columns:
@@ -544,770 +551,483 @@ tables:
         type: id
       - name: geometry
         type: geometry
+        geometry_transform: point_on_surface
       - name: name
         type: string
         key: name
       - name: type
         type: mapping_value
-      - name: tags
-        type: hstore_tags
-        args:
-          include:
-            - access
-            - ele
-            - icao
-            - protected
-            - shelter_type
-            - disused
-            - denotation
-            - fee
-            - ref
-    type: point
-    mappings:
-      aerialway:
-        mapping:
-          aerialway:
-            - pylon
-            # - station FIXME conflicts with railway=station
-      aeroway:
-        mapping:
-          aeroway:
-            - aerodrome
-      amenity:
-        mapping:
-          amenity:
-            - atm
-            - bank
-            - bar
-            - bbq
-            - bench
-            - bicycle_parking
-            - bicycle_rental
-            - biergarten
-            - bus_station
-            - cafe
-            - car_wash
-            - cinema
-            - clinic
-            - college
-            - community_centre
-            - dentist
-            - doctors
-            - drinking_water
-            - fast_food
-            - feeding_place
-            - fire_station
-            - fountain # TODO consider drinking_water=*
-            - fuel
-            - game_feeding
-            - hospital
-            - hunting_stand
-            - ice_cream
-            - kindergarten
-            - library
-            - monastery
-            - parking
-            - pharmacy
-            - police
-            - post_box
-            - post_office
-            - pub
-            - ranger_station
-            - recycling
-            - restaurant
-            - school
-            - shelter
-            - swimming_pool
-            - taxi
-            - telephone
-            - theatre
-            - toilets
-            - townhall
-            - university
-            - veterinary
-            - waste_basket
-            - waste_disposal
-            - water_point
-            - watering_place
-      boundary:
-        mapping:
-          boundary:
-            - marker
-      emergency:
-        mapping:
-          emergency:
-            - access_point # TODO
-      highway:
-        mapping:
-          highway:
-            - bus_stop
-            - rest_area
-      historic:
-        mapping:
-          historic:
-            - archaeological_site
-            - boundary_stone
-            - bunker
-            - castle
-            - manor
-            - memorial
-            - mine
-            - mine_shaft
-            - monastery
-            - monument
-            - tree_shrine
-            - wayside_cross
-            - wayside_shrine
-      leisure:
-        mapping:
-          leisure:
-            - beach_resort # TODO
-            - bird_hide
-            - dog_park # TODO
-            - firepit
-            - golf_course
-            - horse_riding
-            - miniature_golf
-            - outdoor_seating
-            - picnic_table
-            - playground
-            - resort # TODO
-            - sauna
-            - water_park
-      man_made:
-        mapping:
-          man_made:
-            - adit
-            - apiary
-            - beehive
-            - chimney
-            - communications_tower
-            - cross
-            - forester's_lodge
-            - ice_house # TODO
-            - mine
-            - mineshaft
-            - pumping_station
-            - reservoir_covered
-            - silo
-            - wastewater_plant
-            - water_tower
-            - water_well
-            - water_works
-      military:
-        mapping:
-          military:
-            - bunker
-      natural:
-        mapping:
-          natural:
-            - arch
-            - birds_nest
-            - cave_entrance
-            - peak
-            - rock
-            - saddle
-            - shrub
-            - sinkhole
-            - stone
-            - tree
-      power:
-        mapping:
+        aliases:
           power:
-            - pole
-            - tower
-      railway:
-        mapping:
-          railway:
-            - halt
-            - level_crossing # TODO
-            - station
-            - subway_entrance # TODO
-            - tram_stop # TODO
-      tourism:
-        mapping:
-          tourism:
-            - alpine_hut
-            - apartment
-            - artwork
-            - attraction
-            - camp_site
-            - caravan_site
-            - castle
-            - chalet
-            - guest_house
-            - hostel
-            - hotel
-            - memorial
-            - monument
-            - motel
-            - museum
-            - picnic_site
-            - theme_park
-            - viewpoint
-            - wilderness_hut
-            - zoo
-      waterway:
-        mapping:
-          waterway:
-            - waterfall
-            - weir
-            - dam
-
-  feature_polys: # NOTE used for rendering icons only
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: name
-        type: string
-        key: name
-      - name: type
-        type: mapping_value
+            tower: power_tower
+          aerialway:
+            station: aerialway_station
       - name: tags
         type: hstore_tags
         args:
           include:
+            - access
+            - covered
+            - denotation
+            - disused
+            - drinking_water
             - ele
-            - access
-            - shelter_type
+            - fee
             - icao
-            - disused
+            - intermittent
+            - protected
             - ref
-    type: polygon
-    mappings:
-      aeroway:
-        mapping:
+            - refitted
+            - seasonal
+            - shelter_type
+            - tower:type
+            - water_characteristic
+    type: point_or_polygon
+    type_mappings:
+      any:
+        mappings:
+          aerialway:
+            mapping:
+              aerialway:
+                - pylon
+                - station
           aeroway:
-            - aerodrome
-      amenity:
-        mapping:
+            mapping:
+              aeroway:
+                - aerodrome
           amenity:
-            - bank
-            - bar
-            - bbq
-            - bicycle_parking
-            - bicycle_rental
-            - biergarten
-            - bus_station
-            - cafe
-            - car_wash
-            - cinema
-            - clinic
-            - college
-            - community_centre
-            - dentist
-            - doctors
-            - fast_food
-            - feeding_place
-            - fire_station
-            - fountain
-            - fuel
-            - game_feeding
-            - hospital
-            - ice_cream
-            - kindergarten
-            - library
-            - parking
-            - pharmacy
-            - police
-            - post_office
-            - pub
-            - recycling
-            - restaurant
-            - school
-            - shelter
-            - swimming_pool
-            - taxi
-            - theatre
-            - toilets
-            - townhall
-            - university
-            - veterinary
-            - monastery
-            - ranger_station
-      highway:
-        mapping:
+            mapping:
+              amenity:
+                - atm
+                - bank
+                - bar
+                - bbq
+                - bench
+                - bicycle_parking
+                - bicycle_rental
+                - biergarten
+                - bus_station
+                - cafe
+                - car_wash
+                - cinema
+                - clinic
+                - college
+                - community_centre
+                - dentist
+                - doctors
+                - drinking_water
+                - fast_food
+                - feeding_place
+                - fire_station
+                - fountain # TODO consider drinking_water=*
+                - fuel
+                - game_feeding
+                - hospital
+                - hunting_stand
+                - ice_cream
+                - kindergarten
+                - library
+                - monastery
+                - parking
+                - pharmacy
+                - police
+                - post_box
+                - post_office
+                - pub
+                - ranger_station
+                - recycling
+                - restaurant
+                - school
+                - shelter
+                - swimming_pool
+                - taxi
+                - telephone
+                - theatre
+                - toilets
+                - townhall
+                - university
+                - veterinary
+                - waste_basket
+                - waste_disposal
+                - water_point
+                - watering_place
+          boundary:
+            mapping:
+              boundary:
+                - marker
+          emergency:
+            mapping:
+              emergency:
+                - access_point # TODO
           highway:
-            - rest_area
-      historic:
-        mapping:
+            mapping:
+              highway:
+                - bus_stop
+                - rest_area
           historic:
-            - archaeological_site
-            - bunker
-            - castle
-            - manor
-            - memorial
-            - mine
-            - mine_shaft
-            - monastery
-            - monument
-            - wayside_shrine
-      leisure:
-        mapping:
+            mapping:
+              historic:
+                - archaeological_site
+                - boundary_stone
+                - bunker
+                - castle
+                - manor
+                - memorial
+                - mine
+                - mine_shaft
+                - monastery
+                - monument
+                - ruins
+                - tree_shrine
+                - wayside_cross
+                - wayside_shrine
+          information:
+            mapping:
+              information:
+                - guidepost
+                - board
+                - map
+                - office
+                - route_marker
           leisure:
-            - beach_resort # TODO
-            - bird_hide
-            - dog_park # TODO
-            - firepit
-            - golf_course
-            - horse_riding
-            - miniature_golf
-            - outdoor_seating
-            - playground
-            - resort # TODO
-            - sauna
-            - track
-            - water_park
-      man_made:
-        mapping:
+            mapping:
+              leisure:
+                - beach_resort # TODO
+                - bird_hide
+                - dog_park # TODO
+                - firepit
+                - golf_course
+                - horse_riding
+                - miniature_golf
+                - outdoor_seating
+                - picnic_table
+                - playground
+                - resort # TODO
+                - sauna
+                - water_park
           man_made:
-            - adit
-            - apiary
-            - beehive
-            - chimney
-            - communications_tower
-            - cross
-            - forester's_lodge
-            - ice_house # TODO
-            - mine
-            - mineshaft
-            - pumping_station
-            - reservoir_covered
-            - silo
-            - wastewater_plant
-            - water_tower
-            - water_well
-            - water_works
-      military:
-        mapping:
+            mapping:
+              man_made:
+                - adit
+                - apiary
+                - beehive
+                - chimney
+                - communications_tower
+                - cross
+                - forester's_lodge
+                - ice_house # TODO
+                - mine
+                - mineshaft
+                - pumping_station
+                - reservoir_covered
+                - silo
+                - spring_box
+                - tower
+                - mast
+                - wastewater_plant
+                - water_tower
+                - water_well
+                - water_works
           military:
-            - bunker
-      # aerialway:
-      #  mapping:
-      #    aerialway:
-      #      - station # FIXME conflicts with railway=station
-      natural:
-        mapping:
+            mapping:
+              military:
+                - bunker
           natural:
-            - rock
-            - stone
-            - sinkhole
-      tourism:
-        mapping:
+            mapping:
+              natural:
+                - arch
+                - birds_nest
+                - cave_entrance
+                - geyser
+                - hot_spring
+                - peak
+                - rock
+                - saddle
+                - shrub
+                - sinkhole
+                - spring
+                - stone
+                - tree
+          power:
+            mapping:
+              power:
+                - pole
+                - tower
+          railway:
+            mapping:
+              railway:
+                - halt
+                - level_crossing # TODO
+                - station
+                - subway_entrance # TODO
+                - tram_stop # TODO
           tourism:
-            - alpine_hut
-            - apartment
-            - artwork
-            - attraction
-            - camp_site
-            - caravan_site
-            - castle
-            - chalet
-            - guest_house
-            - hostel
-            - hotel
-            - monument
-            - motel
-            - museum
-            - picnic_site
-            - theme_park
-            - wilderness_hut
-            - zoo
-      railway:
-        mapping:
-          railway:
-            - station
-      waterway:
-        mapping:
+            mapping:
+              tourism:
+                - alpine_hut
+                - apartment
+                - artwork
+                - attraction
+                - camp_site
+                - caravan_site
+                - castle
+                - chalet
+                - guest_house
+                - hostel
+                - hotel
+                - memorial
+                - monument
+                - motel
+                - museum
+                - picnic_site
+                - theme_park
+                - viewpoint
+                - wilderness_hut
+                - zoo
           waterway:
-            - weir
-            - dam
+            mapping:
+              waterway:
+                - waterfall
+                - weir
+                - dam
+          sport:
+            mapping:
+              sport:
+                - __any__
 
-  springs:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: name
-        type: string
-        key: name
-      - name: type
-        type: mapping_value
-      - name: ele
-        type: string
-        key: ele
-      - name: refitted
-        type: bool
-        key: refitted
-      - name: seasonal
-        type: bool
-        key: seasonal
-      - name: intermittent
-        type: bool
-        key: intermittent
-      - name: drinking_water
-        type: string
-        key: drinking_water
-      - name: water_characteristic
-        type: string
-        key: water_characteristic
-    type: point
-    mapping:
-      natural:
-        - geyser
-        - hot_spring
-        - spring
-      man_made:
-        - spring_box
-
-  building_points:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: name
-        type: string
-        key: name
-      - name: type
-        type: mapping_value
-      - name: tags
-        type: hstore_tags
-        args:
-          include:
-            - access
-    type: point
-    mapping:
-      building:
-        - __any__
-
-  sports:
-    columns:
-      - type: id
-        name: osm_id
-      - type: geometry
-        name: geometry
-      - type: string
-        name: name
-        key: name
-      - type: mapping_value
-        name: type
-      - type: hstore_tags
-        name: tags
-        args:
-          include:
-            - access
-    type: geometry
-    type_mappings:
-      points:
-        sport:
-          - __any__
-      polygons:
-        sport:
+    building_points:
+      columns:
+        - name: osm_id
+          type: id
+        - name: geometry
+          type: geometry
+        - name: name
+          type: string
+          key: name
+        - name: type
+          type: mapping_value
+        - name: tags
+          type: hstore_tags
+          args:
+            include:
+              - access
+      type: point
+      mapping:
+        building:
           - __any__
 
-  power_generators:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: name
-        type: string
-        key: name
-      - name: source
-        type: string
-        key: generator:source
-      - name: method
-        type: string
-        key: generator:method
-    type: geometry
-    type_mappings:
-      points:
-        power:
-          - generator
-      polygons:
-        power:
-          - generator
+    power_generators:
+      columns:
+        - name: osm_id
+          type: id
+        - name: geometry
+          type: geometry
+        - name: name
+          type: string
+          key: name
+        - name: source
+          type: string
+          key: generator:source
+        - name: method
+          type: string
+          key: generator:method
+      type: geometry
+      type_mappings:
+        points:
+          power:
+            - generator
+        polygons:
+          power:
+            - generator
 
-  ruins:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: name
-        type: string
-        key: name
-      - name: type
-        type: string
-        key: ruins
-    type: geometry
-    type_mappings:
-      points:
-        historic:
-          - ruins
-      polygons:
-        historic:
-          - ruins
-
-  towers:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: name
-        type: string
-        key: name
-      - name: ele
-        type: string
-        key: ele
-      - name: type
-        type: string
-        key: tower:type
-      - name: class
-        type: mapping_value
-    type: geometry
-    type_mappings:
-      points:
-        man_made:
-          - tower
-          - mast
-      polygons:
-        man_made:
-          - tower
-          - mast
-
-  place_of_worships:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: name
-        type: string
-        key: name
-      - name: building
-        type: string
-        key: building
-      - name: religion
-        type: string
-        key: religion
-    type: geometry
-    type_mappings:
-      points:
-        amenity:
-          - place_of_worship
-      polygons:
+    place_of_worships:
+      columns:
+        - name: osm_id
+          type: id
+        - name: geometry
+          type: geometry
+          geometry_transform: point_on_surface
+        - name: name
+          type: string
+          key: name
+        - name: building
+          type: string
+          key: building
+        - name: religion
+          type: string
+          key: religion
+      type: point_or_polygon
+      mapping:
         amenity:
           - place_of_worship
 
-  infopoints:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: name
-        type: string
-        key: name
-      - name: ele
-        type: string
-        key: ele
-      - name: foot
-        type: bool
-        key: foot
-      - name: bicycle
-        type: bool
-        key: bicycle
-      - name: ski
-        type: bool
-        key: ski
-      - name: horse
-        type: bool
-        key: horse
-      - name: type
-        type: mapping_value
-    type: point
-    mapping:
-      information:
-        - guidepost
-        - board
-        - map
-        - office
-        - route_marker
+    aerialways:
+      columns:
+        - name: osm_id
+          type: id
+        - name: geometry
+          type: geometry
+        - name: type
+          type: mapping_value
+        - name: name
+          type: string
+          key: name
+        - name: ref
+          type: string
+          key: ref
+      type: linestring
+      mapping:
+        aerialway:
+          - __any__
 
-  aerialways:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: type
-        type: mapping_value
-      - name: name
-        type: string
-        key: name
-      - name: ref
-        type: string
-        key: ref
-    type: linestring
-    mapping:
-      aerialway:
-        - __any__
-
-  roads:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: type
-        type: mapping_value
-      - name: name
-        type: string
-        key: name
-      - name: tunnel
-        type: boolint
-        key: tunnel
-      - name: embankment
-        type: boolint
-        key: embankment
-      - name: bridge
-        type: boolint
-        key: bridge
-      - name: oneway
-        type: direction
-        key: oneway
-      - name: cutting # TODO
-        type: enumerate
-        key: cutting
-        args:
-          values:
+    roads:
+      columns:
+        - name: osm_id
+          type: id
+        - name: geometry
+          type: geometry
+        - name: type
+          type: mapping_value
+        - name: name
+          type: string
+          key: name
+        - name: tunnel
+          type: boolint
+          key: tunnel
+        - name: embankment
+          type: boolint
+          key: embankment
+        - name: bridge
+          type: boolint
+          key: bridge
+        - name: oneway
+          type: direction
+          key: oneway
+        - name: cutting # TODO
+          type: enumerate
+          key: cutting
+          args:
+            values:
+              - "yes"
+              - left
+              - right
+        - name: ref
+          type: string
+          key: ref
+        - name: z_order
+          type: wayzorder
+          key: layer
+        - name: access
+          type: string
+          key: access
+        - name: bicycle
+          type: string
+          key: bicycle
+        - name: foot
+          type: string
+          key: foot
+        - name: vehicle
+          type: string
+          key: vehicle
+        - name: service
+          type: string
+          key: service
+        - name: tracktype
+          type: string
+          key: tracktype
+        - name: class
+          type: mapping_key
+        - name: trail_visibility
+          type: enumerate
+          key: trail_visibility
+          args:
+            values:
+              - excellent
+              - good
+              - intermediate
+              - bad
+              - horrible
+              - "no"
+        - name: sac_scale
+          type: enumerate
+          key: sac_scale
+          args:
+            values:
+              - hiking
+              - mountain_hiking
+              - demanding_mountain_hiking
+              - alpine_hiking
+              - demanding_alpine_hiking
+              - difficult_alpine_hiking
+        - name: fixme
+          type: string
+          key: fixme
+      type: linestring
+      filters:
+        reject:
+          area:
             - "yes"
-            - left
-            - right
-      - name: ref
-        type: string
-        key: ref
-      - name: z_order
-        type: wayzorder
-        key: layer
-      - name: access
-        type: string
-        key: access
-      - name: bicycle
-        type: string
-        key: bicycle
-      - name: foot
-        type: string
-        key: foot
-      - name: vehicle
-        type: string
-        key: vehicle
-      - name: service
-        type: string
-        key: service
-      - name: tracktype
-        type: string
-        key: tracktype
-      - name: class
-        type: mapping_key
-      - name: trail_visibility
-        type: enumerate
-        key: trail_visibility
-        args:
-          values:
-            - excellent
-            - good
-            - intermediate
-            - bad
-            - horrible
-            - "no"
-      - name: sac_scale
-        type: enumerate
-        key: sac_scale
-        args:
-          values:
-            - hiking
-            - mountain_hiking
-            - demanding_mountain_hiking
-            - alpine_hiking
-            - demanding_alpine_hiking
-            - difficult_alpine_hiking
-      - name: fixme
-        type: string
-        key: fixme
-    type: linestring
-    filters:
-      reject:
-        area:
-          - "yes"
-    mappings:
-      railway:
-        mapping:
-          railway:
-            - abandoned
-            - construction
-            - disused
-            - funicular
-            - light_rail
-            - monorail
-            - narrow_gauge
-            - preserved
-            - rail
-            - subway
-            - tram
-      roads:
-        mapping:
-          man_made:
-            - pier
-            - groyne
-          route:
-            - piste
-          highway:
-            - motorway
-            - motorway_link
-            - trunk
-            - trunk_link
-            - primary
-            - primary_link
-            - secondary
-            - secondary_link
-            - tertiary
-            - tertiary_link
-            - road
-            - path
-            - track
-            - service
-            - footway
-            - bridleway
-            - cycleway
-            - steps
-            - pedestrian
-            - living_street
-            - unclassified
-            - residential
-            - raceway
-            - platform
-            - construction
-            - piste
-            - escape
-            - corridor
-            - bus_guideway
-            - via_ferrata
-          railway:
-            - platform
-          public_transport:
-            - platform
-          attraction:
-            - water_slide
-          leisure:
-            - track
+      mappings:
+        railway:
+          mapping:
+            railway:
+              - abandoned
+              - construction
+              - disused
+              - funicular
+              - light_rail
+              - monorail
+              - narrow_gauge
+              - preserved
+              - rail
+              - subway
+              - tram
+        roads:
+          mapping:
+            man_made:
+              - pier
+              - groyne
+            route:
+              - piste
+            highway:
+              - motorway
+              - motorway_link
+              - trunk
+              - trunk_link
+              - primary
+              - primary_link
+              - secondary
+              - secondary_link
+              - tertiary
+              - tertiary_link
+              - road
+              - path
+              - track
+              - service
+              - footway
+              - bridleway
+              - cycleway
+              - steps
+              - pedestrian
+              - living_street
+              - unclassified
+              - residential
+              - raceway
+              - platform
+              - construction
+              - piste
+              - escape
+              - corridor
+              - bus_guideway
+              - via_ferrata
+            railway:
+              - platform
+            public_transport:
+              - platform
+            attraction:
+              - water_slide
+            leisure:
+              - track
 
   housenumbers:
     columns:
@@ -1315,6 +1035,7 @@ tables:
         type: id
       - name: geometry
         type: geometry
+        geometry_transform: point_on_surface
       - name: name
         type: string
         key: name
@@ -1329,16 +1050,9 @@ tables:
       - name: addr:conscriptionnumber
         type: string
         key: addr:conscriptionnumber
-    type: geometry
-    type_mappings:
+    type: point_or_polygon
+    mapping:
       points:
-        addr:housenumber:
-          - __any__
-        addr:streetnumber:
-          - __any__
-        addr:conscriptionnumber:
-          - __any__
-      polygons:
         addr:housenumber:
           - __any__
         addr:streetnumber:

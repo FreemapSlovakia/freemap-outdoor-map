@@ -35,27 +35,20 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
     // nested sql is to remove duplicate entries imported by imposm because we use `mappings` in yaml
     let sql = "
         WITH lcn AS (
-            SELECT DISTINCT ON (osm_landusages.osm_id)
-                osm_landusages.geometry, osm_landusages.name, osm_landusages.area,
-                osm_landusages.type IN ('forest', 'wood', 'scrub', 'heath', 'grassland', 'scree', 'blockfield', 'meadow', 'fell', 'wetland') AS natural,
+            SELECT DISTINCT ON (osm_landcovers.osm_id)
+                osm_landcovers.geometry, osm_landcovers.name, osm_landcovers.area,
+                osm_landcovers.type IN ('forest', 'wood', 'scrub', 'heath', 'grassland', 'scree', 'blockfield', 'meadow', 'fell', 'wetland') AS natural,
                 z_order,
-                osm_landusages.osm_id AS osm_id
+                osm_landcovers.osm_id AS osm_id
             FROM
-                osm_landusages
+                osm_landcovers
             LEFT JOIN
                 z_order_landuse USING (type)
-            LEFT JOIN
-                osm_feature_polys USING (osm_id)
-            LEFT JOIN
-                -- NOTE filtering some POIs (hacky because it affects also lower zooms)
-                osm_sports ON osm_landusages.osm_id = osm_sports.osm_id AND osm_sports.type IN ('soccer', 'tennis', 'basketball', 'shooting')
             WHERE
-                osm_landusages.name <> '' AND
-                osm_feature_polys.osm_id IS NULL AND
-                osm_sports.osm_id IS NULL AND
-                osm_landusages.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+                osm_landcovers.name <> '' AND
+                osm_landcovers.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
             ORDER BY
-                osm_landusages.osm_id, osm_landusages.type IN ('forest', 'wood', 'scrub', 'heath', 'grassland', 'scree', 'blockfield', 'meadow', 'fell', 'wetland') DESC
+                osm_landcovers.osm_id, osm_landcovers.type IN ('forest', 'wood', 'scrub', 'heath', 'grassland', 'scree', 'blockfield', 'meadow', 'fell', 'wetland') DESC
         ) SELECT name, area, \"natural\", ST_PointOnSurface(geometry) AS geometry FROM lcn ORDER BY z_order, osm_id";
 
     let mut text_options = TextOptions {

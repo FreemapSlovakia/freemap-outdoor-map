@@ -13,7 +13,7 @@ use pangocairo::pango::Style;
 use postgres::Client;
 
 pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
-    let _span = tracy_client::span!("national_park_names::render");
+    let _span = tracy_client::span!("special_national_park_names::render");
 
     let sql = "
         SELECT name, ST_PointOnSurface(geometry) AS geometry

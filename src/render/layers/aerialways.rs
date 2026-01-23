@@ -11,7 +11,8 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
     let sql = concat!(
         "SELECT geometry, type FROM osm_aerialways ",
-        "WHERE geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)"
+        "WHERE geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) ",
+        "ORDER BY osm_id"
     );
 
     let rows = client.query(sql, &ctx.bbox_query_params(Some(10.0)).as_params())?;
