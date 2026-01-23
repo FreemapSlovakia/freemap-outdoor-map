@@ -62,6 +62,7 @@ pub(crate) async fn start() {
     let app_state = AppState::new(
         worker_pool,
         cli.tile_base_path.clone(),
+        cli.serve_cached,
         cli.index_zoom,
         cli.max_zoom,
         limits_geometry,

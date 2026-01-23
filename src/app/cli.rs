@@ -65,6 +65,15 @@ pub struct Cli {
     #[arg(long, env = "MAPRENDER_TILE_BASE_PATH")]
     pub tile_base_path: Option<PathBuf>,
 
+    /// Serve cached tiles from the filesystem.
+    #[arg(
+        long,
+        env = "MAPRENDER_SERVE_CACHED",
+        default_value_t = true,
+        action = clap::ArgAction::Set
+    )]
+    pub serve_cached: bool,
+
     /// Base directory to watch for expire .tile updates.
     #[arg(long, env = "MAPRENDER_EXPIRES_BASE_PATH")]
     pub expires_base_path: Option<PathBuf>,
