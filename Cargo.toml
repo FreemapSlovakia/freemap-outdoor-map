@@ -10,7 +10,7 @@ image = { version = "0.25", default-features = false, features = [
   "png",
 ] }
 librsvg = { version = "2.61" }
-bitflags = "2.9"
+bitflags = "2.10.0"
 cairo-rs = { version = "0.21", features = ["png", "svg", "pdf"] }
 cavalier_contours = { version = "0.7.0" }
 colorsys = "0.7"
