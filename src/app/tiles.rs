@@ -146,7 +146,7 @@ fn tile_cache_path(base: &std::path::Path, zoom: u32, x: u32, y: u32, scale: f64
     let mut path = base.to_owned();
     path.push(zoom.to_string());
     path.push(x.to_string());
-    path.push(format!("{y}@{scale}x.jpeg"));
+    path.push(format!("{y}@{scale}.jpeg"));
     path
 }
 
