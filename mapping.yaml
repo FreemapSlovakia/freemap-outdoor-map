@@ -795,239 +795,239 @@ tables:
               sport:
                 - __any__
 
-    building_points:
-      columns:
-        - name: osm_id
-          type: id
-        - name: geometry
-          type: geometry
-        - name: name
-          type: string
-          key: name
-        - name: type
-          type: mapping_value
-        - name: tags
-          type: hstore_tags
-          args:
-            include:
-              - access
-      type: point
-      mapping:
-        building:
-          - __any__
+  building_points:
+    columns:
+      - name: osm_id
+        type: id
+      - name: geometry
+        type: geometry
+      - name: name
+        type: string
+        key: name
+      - name: type
+        type: mapping_value
+      - name: tags
+        type: hstore_tags
+        args:
+          include:
+            - access
+    type: point
+    mapping:
+      building:
+        - __any__
 
-    power_generators:
-      columns:
-        - name: osm_id
-          type: id
-        - name: geometry
-          type: geometry
-        - name: name
-          type: string
-          key: name
-        - name: source
-          type: string
-          key: generator:source
-        - name: method
-          type: string
-          key: generator:method
-      type: geometry
-      type_mappings:
-        points:
-          power:
-            - generator
-        polygons:
-          power:
-            - generator
+  power_generators:
+    columns:
+      - name: osm_id
+        type: id
+      - name: geometry
+        type: geometry
+      - name: name
+        type: string
+        key: name
+      - name: source
+        type: string
+        key: generator:source
+      - name: method
+        type: string
+        key: generator:method
+    type: geometry
+    type_mappings:
+      points:
+        power:
+          - generator
+      polygons:
+        power:
+          - generator
 
-    place_of_worships:
-      columns:
-        - name: osm_id
-          type: id
-        - name: geometry
-          type: geometry
-          geometry_transform: point_on_surface
-        - name: name
-          type: string
-          key: name
-        - name: building
-          type: string
-          key: building
-        - name: religion
-          type: string
-          key: religion
-      type: point_or_polygon
-      mapping:
-        amenity:
-          - place_of_worship
+  place_of_worships:
+    columns:
+      - name: osm_id
+        type: id
+      - name: geometry
+        type: geometry
+        geometry_transform: point_on_surface
+      - name: name
+        type: string
+        key: name
+      - name: building
+        type: string
+        key: building
+      - name: religion
+        type: string
+        key: religion
+    type: point_or_polygon
+    mapping:
+      amenity:
+        - place_of_worship
 
-    aerialways:
-      columns:
-        - name: osm_id
-          type: id
-        - name: geometry
-          type: geometry
-        - name: type
-          type: mapping_value
-        - name: name
-          type: string
-          key: name
-        - name: ref
-          type: string
-          key: ref
-      type: linestring
-      mapping:
-        aerialway:
-          - __any__
+  aerialways:
+    columns:
+      - name: osm_id
+        type: id
+      - name: geometry
+        type: geometry
+      - name: type
+        type: mapping_value
+      - name: name
+        type: string
+        key: name
+      - name: ref
+        type: string
+        key: ref
+    type: linestring
+    mapping:
+      aerialway:
+        - __any__
 
-    roads:
-      columns:
-        - name: osm_id
-          type: id
-        - name: geometry
-          type: geometry
-        - name: type
-          type: mapping_value
-        - name: name
-          type: string
-          key: name
-        - name: tunnel
-          type: boolint
-          key: tunnel
-        - name: embankment
-          type: boolint
-          key: embankment
-        - name: bridge
-          type: boolint
-          key: bridge
-        - name: oneway
-          type: direction
-          key: oneway
-        - name: cutting # TODO
-          type: enumerate
-          key: cutting
-          args:
-            values:
-              - "yes"
-              - left
-              - right
-        - name: ref
-          type: string
-          key: ref
-        - name: z_order
-          type: wayzorder
-          key: layer
-        - name: access
-          type: string
-          key: access
-        - name: bicycle
-          type: string
-          key: bicycle
-        - name: foot
-          type: string
-          key: foot
-        - name: vehicle
-          type: string
-          key: vehicle
-        - name: service
-          type: string
-          key: service
-        - name: tracktype
-          type: string
-          key: tracktype
-        - name: class
-          type: mapping_key
-        - name: trail_visibility
-          type: enumerate
-          key: trail_visibility
-          args:
-            values:
-              - excellent
-              - good
-              - intermediate
-              - bad
-              - horrible
-              - "no"
-        - name: sac_scale
-          type: enumerate
-          key: sac_scale
-          args:
-            values:
-              - hiking
-              - mountain_hiking
-              - demanding_mountain_hiking
-              - alpine_hiking
-              - demanding_alpine_hiking
-              - difficult_alpine_hiking
-        - name: fixme
-          type: string
-          key: fixme
-      type: linestring
-      filters:
-        reject:
-          area:
+  roads:
+    columns:
+      - name: osm_id
+        type: id
+      - name: geometry
+        type: geometry
+      - name: type
+        type: mapping_value
+      - name: name
+        type: string
+        key: name
+      - name: tunnel
+        type: boolint
+        key: tunnel
+      - name: embankment
+        type: boolint
+        key: embankment
+      - name: bridge
+        type: boolint
+        key: bridge
+      - name: oneway
+        type: direction
+        key: oneway
+      - name: cutting # TODO
+        type: enumerate
+        key: cutting
+        args:
+          values:
             - "yes"
-      mappings:
-        railway:
-          mapping:
-            railway:
-              - abandoned
-              - construction
-              - disused
-              - funicular
-              - light_rail
-              - monorail
-              - narrow_gauge
-              - preserved
-              - rail
-              - subway
-              - tram
-        roads:
-          mapping:
-            man_made:
-              - pier
-              - groyne
-            route:
-              - piste
-            highway:
-              - motorway
-              - motorway_link
-              - trunk
-              - trunk_link
-              - primary
-              - primary_link
-              - secondary
-              - secondary_link
-              - tertiary
-              - tertiary_link
-              - road
-              - path
-              - track
-              - service
-              - footway
-              - bridleway
-              - cycleway
-              - steps
-              - pedestrian
-              - living_street
-              - unclassified
-              - residential
-              - raceway
-              - platform
-              - construction
-              - piste
-              - escape
-              - corridor
-              - bus_guideway
-              - via_ferrata
-            railway:
-              - platform
-            public_transport:
-              - platform
-            attraction:
-              - water_slide
-            leisure:
-              - track
+            - left
+            - right
+      - name: ref
+        type: string
+        key: ref
+      - name: z_order
+        type: wayzorder
+        key: layer
+      - name: access
+        type: string
+        key: access
+      - name: bicycle
+        type: string
+        key: bicycle
+      - name: foot
+        type: string
+        key: foot
+      - name: vehicle
+        type: string
+        key: vehicle
+      - name: service
+        type: string
+        key: service
+      - name: tracktype
+        type: string
+        key: tracktype
+      - name: class
+        type: mapping_key
+      - name: trail_visibility
+        type: enumerate
+        key: trail_visibility
+        args:
+          values:
+            - excellent
+            - good
+            - intermediate
+            - bad
+            - horrible
+            - "no"
+      - name: sac_scale
+        type: enumerate
+        key: sac_scale
+        args:
+          values:
+            - hiking
+            - mountain_hiking
+            - demanding_mountain_hiking
+            - alpine_hiking
+            - demanding_alpine_hiking
+            - difficult_alpine_hiking
+      - name: fixme
+        type: string
+        key: fixme
+    type: linestring
+    filters:
+      reject:
+        area:
+          - "yes"
+    mappings:
+      railway:
+        mapping:
+          railway:
+            - abandoned
+            - construction
+            - disused
+            - funicular
+            - light_rail
+            - monorail
+            - narrow_gauge
+            - preserved
+            - rail
+            - subway
+            - tram
+      roads:
+        mapping:
+          man_made:
+            - pier
+            - groyne
+          route:
+            - piste
+          highway:
+            - motorway
+            - motorway_link
+            - trunk
+            - trunk_link
+            - primary
+            - primary_link
+            - secondary
+            - secondary_link
+            - tertiary
+            - tertiary_link
+            - road
+            - path
+            - track
+            - service
+            - footway
+            - bridleway
+            - cycleway
+            - steps
+            - pedestrian
+            - living_street
+            - unclassified
+            - residential
+            - raceway
+            - platform
+            - construction
+            - piste
+            - escape
+            - corridor
+            - bus_guideway
+            - via_ferrata
+          railway:
+            - platform
+          public_transport:
+            - platform
+          attraction:
+            - water_slide
+          leisure:
+            - track
 
   housenumbers:
     columns:
@@ -1052,13 +1052,12 @@ tables:
         key: addr:conscriptionnumber
     type: point_or_polygon
     mapping:
-      points:
-        addr:housenumber:
-          - __any__
-        addr:streetnumber:
-          - __any__
-        addr:conscriptionnumber:
-          - __any__
+      addr:housenumber:
+        - __any__
+      addr:streetnumber:
+        - __any__
+      addr:conscriptionnumber:
+        - __any__
 
   waterareas:
     columns:
