@@ -30,11 +30,12 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         }
     );
 
-    let mut params = ctx.bbox_query_params(Some(2.0));
-
-    params.push((20.0 - zoom as f64).exp2() / 25.0);
-
-    let rows = client.query(&sql, &params.as_params())?;
+    let rows = client.query(
+        &sql,
+        &ctx.bbox_query_params(Some(2.0))
+            .push((20.0 - zoom as f64).exp2() / 25.0)
+            .as_params(),
+    )?;
 
     for row in rows {
         let Some(geom) = geometry_geometry(&row) else {

@@ -83,16 +83,17 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         }
     );
 
-    let mut params = ctx.bbox_query_params(Some(10.0));
-
     let snap = (26f64 - ctx.zoom as f64).exp2();
 
-    params.push(((ctx.bbox.min().x - snap) / snap).floor() * snap);
-    params.push(((ctx.bbox.min().y - snap) / snap).floor() * snap);
-    params.push(((ctx.bbox.max().x + snap) / snap).ceil() * snap);
-    params.push(((ctx.bbox.max().y + snap) / snap).ceil() * snap);
-
-    let rows = &client.query(sql, &params.as_params())?;
+    let rows = &client.query(
+        sql,
+        &ctx.bbox_query_params(Some(10.0))
+            .push(((ctx.bbox.min().x - snap) / snap).floor() * snap)
+            .push(((ctx.bbox.min().y - snap) / snap).floor() * snap)
+            .push(((ctx.bbox.max().x + snap) / snap).ceil() * snap)
+            .push(((ctx.bbox.max().y + snap) / snap).ceil() * snap)
+            .as_params(),
+    )?;
 
     let geometries: Vec<_> = rows
         .iter()

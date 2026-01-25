@@ -20,7 +20,10 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         "ORDER BY osm_id"
     );
 
-    let rows = client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())?;
+    let rows = client.query(
+        sql,
+        &ctx.bbox_query_params(Some(512.0)).as_params(),
+    )?;
 
     let options = TextOnLineOptions {
         distribution: Distribution::Align {

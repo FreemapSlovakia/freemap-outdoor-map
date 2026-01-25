@@ -8,18 +8,17 @@ pub struct SqlParams {
 }
 
 impl SqlParams {
-    pub fn push<T>(&mut self, value: T)
+    pub fn push<T>(mut self, value: T) -> Self
     where
         T: ToSql + Sync + 'static,
     {
         self.params.push(Box::new(value));
+
+        return self;
     }
 
     pub fn as_params(&self) -> Vec<&(dyn ToSql + Sync)> {
-        self.params
-            .iter()
-            .map(|param| param.as_ref() as &(dyn ToSql + Sync))
-            .collect()
+        self.params.iter().map(|param| param.as_ref()).collect()
     }
 }
 

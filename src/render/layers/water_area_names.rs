@@ -39,10 +39,12 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         ..TextOptions::default()
     };
 
-    let mut params = ctx.bbox_query_params(Some(1024.0));
-    params.push(ctx.zoom as i32);
-
-    let rows = client.query(sql, &params.as_params())?;
+    let rows = client.query(
+        sql,
+        &ctx.bbox_query_params(Some(1024.0))
+            .push(ctx.zoom as i32)
+            .as_params(),
+    )?;
 
     for row in rows {
         draw_text(

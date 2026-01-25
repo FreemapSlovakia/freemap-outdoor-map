@@ -18,10 +18,12 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
                 AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
                 AND area / POWER(4, 19 - $6) > 10";
 
-    let mut params = ctx.bbox_query_params(Some(10.0));
-    params.push(ctx.zoom as i32);
-
-    let rows = &client.query(sql, &params.as_params())?;
+    let rows = &client.query(
+        sql,
+        &ctx.bbox_query_params(Some(10.0))
+            .push(ctx.zoom as i32)
+            .as_params(),
+    )?;
 
     ctx.context.push_group();
 

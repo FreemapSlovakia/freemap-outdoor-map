@@ -36,7 +36,8 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
     let sql = "
         WITH lcn AS (
             SELECT DISTINCT ON (osm_landcovers.osm_id)
-                osm_landcovers.geometry, osm_landcovers.name, osm_landcovers.area,
+                osm_landcovers.geometry,
+                osm_landcovers.name,
                 osm_landcovers.type IN ('forest', 'wood', 'scrub', 'heath', 'grassland', 'scree', 'blockfield', 'meadow', 'fell', 'wetland') AS natural,
                 z_order,
                 osm_landcovers.osm_id AS osm_id
@@ -47,10 +48,14 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
             WHERE
                 osm_landcovers.type NOT IN ('zoo', 'theme_park') AND
                 osm_landcovers.name <> '' AND
+                osm_landcovers.area >= $6 AND
                 osm_landcovers.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
             ORDER BY
                 osm_landcovers.osm_id, osm_landcovers.type IN ('forest', 'wood', 'scrub', 'heath', 'grassland', 'scree', 'blockfield', 'meadow', 'fell', 'wetland') DESC
-        ) SELECT name, area, \"natural\", ST_PointOnSurface(geometry) AS geometry FROM lcn ORDER BY z_order, osm_id";
+        )
+        SELECT name, \"natural\", ST_PointOnSurface(geometry) AS geometry
+        FROM lcn
+        ORDER BY z_order, osm_id";
 
     let mut text_options = TextOptions {
         flo: FontAndLayoutOptions {
@@ -61,17 +66,15 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         ..TextOptions::default()
     };
 
-    let rows = client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())?;
+    let rows = client.query(
+        sql,
+        &ctx.bbox_query_params(Some(512.0))
+            .push(2_400_000.0f64 / (2.0f64 * (ctx.zoom as f64 - 10.0)).exp2())
+            .as_params(),
+    )?;
 
     for row in rows {
-        let area: f32 = row.get("area");
-
         let natural: bool = row.get("natural");
-
-        // TODO move to SQL
-        if area < 2_400_000.0 / (2.0 * (ctx.zoom as f32 - 10.0)).exp2() {
-            continue;
-        }
 
         text_options.flo.style = if natural {
             Style::Italic

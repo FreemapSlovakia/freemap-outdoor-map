@@ -53,8 +53,11 @@ pub fn render(ctx: &Ctx, client: &mut Client, country: Option<&str>) -> LayerRen
         }
     };
 
-    let sql = format!(
-        "WITH contours AS (
+    let sql = {
+        let table;
+
+        format!(
+            "WITH contours AS (
             SELECT
                 ST_SimplifyVW(wkb_geometry, $6) AS geometry,
                 height_m,
@@ -64,20 +67,22 @@ pub fn render(ctx: &Ctx, client: &mut Client, country: Option<&str>) -> LayerRen
                 wkb_geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
         )
         SELECT geometry, height_m, width FROM contours WHERE width > 0",
-        &(if let Some(country) = country {
-            format!("contour_{country}_split")
-        } else {
-            "cont_dmr_split".to_string()
-        })
-    );
+            if let Some(country) = country {
+                table = format!("contour_{country}_split");
 
-    let mut params = ctx.bbox_query_params(Some(8.0));
+                &table
+            } else {
+                "cont_dmr_split"
+            }
+        )
+    };
 
-    params.push(simplify_factor);
-
-    let query_params = params.as_params();
-
-    let rows = client.query(&sql, &query_params)?;
+    let rows = client.query(
+        &sql,
+        &ctx.bbox_query_params(Some(8.0))
+            .push(simplify_factor)
+            .as_params(),
+    )?;
 
     for row in rows {
         let height: i16 = row.get("height_m");
