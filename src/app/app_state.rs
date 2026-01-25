@@ -7,6 +7,7 @@ pub(crate) struct AppState {
     pub(crate) worker_pool: Arc<RenderWorkerPool>,
     pub(crate) export_state: Arc<ExportState>,
     pub(crate) tile_base_path: Arc<Option<PathBuf>>,
+    pub(crate) serve_cached: bool,
     pub(crate) index_zoom: u32,
     pub(crate) max_zoom: u32,
     pub(crate) limits_geometry: Arc<Option<Geometry>>,
@@ -17,6 +18,7 @@ impl AppState {
     pub fn new(
         worker_pool: RenderWorkerPool,
         tile_base_path: Option<PathBuf>,
+        serve_cached: bool,
         index_zoom: u32,
         max_zoom: u32,
         limits_geometry: Option<Geometry>,
@@ -26,6 +28,7 @@ impl AppState {
             worker_pool: Arc::new(worker_pool),
             export_state: Arc::new(ExportState::new()),
             tile_base_path: Arc::new(tile_base_path),
+            serve_cached,
             index_zoom,
             max_zoom,
             limits_geometry: Arc::new(limits_geometry),

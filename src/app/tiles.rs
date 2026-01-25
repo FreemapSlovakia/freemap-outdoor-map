@@ -79,18 +79,19 @@ pub(crate) async fn serve_tile(
     let file_path = if let Some(ref tile_base_path) = *state.tile_base_path {
         let file_path = tile_cache_path(tile_base_path, zoom, x, y, scale);
 
-        match fs::read(&file_path).await {
-            Ok(data) => {
-                return Response::builder()
-                    .status(StatusCode::OK)
-                    .header("Content-Type", "image/jpeg")
-                    .header("Access-Control-Allow-Origin", "*")
-                    .body(Body::from(data))
-                    .expect("cached body");
-            }
-            Err(err) => {
-                if err.kind() != std::io::ErrorKind::NotFound {
-                    eprintln!("read tile failed: {err}");
+        if state.serve_cached {
+            match fs::read(&file_path).await {
+                Ok(data) => {
+                    return Response::builder()
+                        .status(StatusCode::OK)
+                        .header("Content-Type", "image/jpeg")
+                        .body(Body::from(data))
+                        .expect("cached body");
+                }
+                Err(err) => {
+                    if err.kind() != std::io::ErrorKind::NotFound {
+                        eprintln!("read tile failed: {err}");
+                    }
                 }
             }
         }
@@ -130,7 +131,6 @@ pub(crate) async fn serve_tile(
         Response::builder()
             .status(StatusCode::OK)
             .header("Content-Type", "image/jpeg")
-            .header("Access-Control-Allow-Origin", "*")
             .body(Body::from(tile))
     } else {
         Response::builder()
