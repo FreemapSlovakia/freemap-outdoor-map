@@ -457,11 +457,28 @@ tables:
         key: name
       - name: type
         type: mapping_value
+        aliases:
+          ford:
+            __any__: ford
       - name: fixme
         type: string
         key: fixme
+    filters:
+      reject:
+        ford:
+          - "no"
     type: linestring
     mapping:
+      barrier:
+        - ditch # TODO
+      ford:
+        - __any__
+      man_made:
+        - cutline
+        - embankment
+        - dyke
+      millitary:
+        - trench
       natural:
         - cliff
         - valley
@@ -472,14 +489,6 @@ tables:
       power:
         - line
         - minor_line
-      man_made:
-        - cutline
-        - embankment
-        - dyke
-      millitary:
-        - trench
-      barrier:
-        - ditch # TODO
       waterway:
         - dam
         - weir
@@ -528,23 +537,6 @@ tables:
       leisure:
         - nature_reserve
 
-  fords:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: type
-        type: mapping_value
-    type: geometry
-    type_mappings:
-      points:
-        ford:
-          - __any__
-      linestrings:
-        ford:
-          - __any__
-
   features:
     columns:
       - name: osm_id
@@ -562,6 +554,11 @@ tables:
             tower: power_tower
           aerialway:
             station: aerialway_station
+          building:
+            ruins: building_ruins
+            __any__: building
+          ford:
+            __any__: ford
       - name: tags
         type: hstore_tags
         args:
@@ -583,7 +580,18 @@ tables:
             - tower:type
             - water_characteristic
     type: point_or_polygon
+    filters:
+      reject:
+        building:
+          - "no"
+        ford:
+          - "no"
     type_mappings:
+      points:
+        building:
+          - __any__
+        ford:
+          - __any__
       any:
         mappings:
           aerialway:
@@ -793,29 +801,119 @@ tables:
           sport:
             mapping:
               sport:
-                - __any__
-
-  building_points:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: name
-        type: string
-        key: name
-      - name: type
-        type: mapping_value
-      - name: tags
-        type: hstore_tags
-        args:
-          include:
-            - access
-    type: point
-    mapping:
-      building:
-        - __any__
-
+                - 10pin
+                - 9pin
+                - aikido
+                - american_football
+                - archery
+                - athletics
+                - badminton
+                - baseball
+                - basketball
+                - beachvolleyball
+                - biathlon
+                - billiards
+                - bmx
+                - boules
+                - bowls
+                - boxing
+                - bullfighting
+                - calisthenics
+                - canoe
+                - chess
+                - climbing
+                - climbing_adventure
+                - cricket
+                - cricket_nets
+                - croquet
+                - crossfit
+                - cycling
+                - darts
+                - disc_golf
+                - dog_agility
+                - dog_racing
+                - dog_training
+                - equestrian
+                - fencing
+                - field_hockey
+                - fishing
+                - fitness
+                - five-a-side
+                - football
+                - free_flying
+                - futsal
+                - gaelic_games
+                - golf
+                - gymnastics
+                - handball
+                - hockey
+                - horse_racing
+                - horse_riding
+                - ice_hockey
+                - ice_skating
+                - ice_stock
+                - judo
+                - karate
+                - karting
+                - kitesurfing
+                - korfball
+                - laser_tag
+                - long_jump
+                - martial_arts
+                - mini_tennis
+                - miniature_golf
+                - model_aerodrome
+                - motocross
+                - motor
+                - mtb
+                - multi
+                - netball
+                - orienteering
+                - paddle_tennis
+                - padel
+                - paintball
+                - paragliding
+                - parkour
+                - pelota
+                - petanque
+                - pickleball
+                - pilates
+                - racquet
+                - rc_car
+                - roller_skating
+                - rowing
+                - rugby
+                - rugby_league
+                - rugby_union
+                - running
+                - sailing
+                - scuba_diving
+                - shooting
+                - skateboard
+                - skating
+                - ski
+                - ski_jumping
+                - skiing
+                - skittles
+                - snooker
+                - soccer
+                - squash
+                - surfing
+                - swimming
+                - table_soccer
+                - table_tennis
+                - taekwondo
+                - team_handball
+                - tennis
+                - toboggan
+                - trampoline
+                - ultralight_aviation
+                - via_ferrata
+                - volleyball
+                - wakeboarding
+                - water_ski
+                - weightlifting
+                - yoga
   power_generators:
     columns:
       - name: osm_id

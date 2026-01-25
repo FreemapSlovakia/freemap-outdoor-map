@@ -395,24 +395,25 @@ pub fn render(
 
     let zoom = ctx.zoom;
 
-    let mut sql = r#"SELECT * FROM (
-        SELECT
-            osm_id,
-            geometry,
-            name AS n,
-            hstore(ARRAY['ele', tags->'ele', 'isolation', tags->'isolation']) AS h,
-            CASE WHEN isolation > 4500 THEN 'peak1'
-                WHEN isolation BETWEEN 3000 AND 4500 THEN 'peak2'
-                WHEN isolation BETWEEN 1500 AND 3000 THEN 'peak3'
-                ELSE 'peak'
-            END AS type
-        FROM
-            osm_features
-        NATURAL LEFT JOIN
-            isolations
-        WHERE
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-            type = 'peak' AND name <> ''"#
+    let mut sql = r#"
+        SELECT * FROM (
+            SELECT
+                osm_id,
+                geometry,
+                name AS n,
+                hstore(ARRAY['ele', tags->'ele', 'isolation', tags->'isolation']) AS h,
+                CASE WHEN isolation > 4500 THEN 'peak1'
+                    WHEN isolation BETWEEN 3000 AND 4500 THEN 'peak2'
+                    WHEN isolation BETWEEN 1500 AND 3000 THEN 'peak3'
+                    ELSE 'peak'
+                END AS type
+            FROM
+                osm_features
+            NATURAL LEFT JOIN
+                isolations
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                type = 'peak' AND name <> ''"#
         .to_string();
 
     if zoom >= 13 {
@@ -438,18 +439,19 @@ pub fn render(
         sql.push_str(
             r#"
                 UNION ALL
-                    SELECT
-                        osm_id,
-                        geometry,
-                        name AS n,
-                        hstore('ele', tags->'ele') AS h,
-                        type
-                    FROM
-                        osm_features
-                    WHERE
-                        geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                        type = 'aerodrome' AND
-                        tags ? 'icao'
+
+                SELECT
+                    osm_id,
+                    geometry,
+                    name AS n,
+                    hstore('ele', tags->'ele') AS h,
+                    type
+                FROM
+                    osm_features
+                WHERE
+                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                    type = 'aerodrome' AND
+                    tags ? 'icao'
           "#,
         );
     }
@@ -513,109 +515,69 @@ pub fn render(
 
     if zoom >= 15 {
         sql.push_str(
-                r#"
-                    UNION ALL
+            r#"
+                UNION ALL
 
-                    SELECT
-                        osm_id,
-                        ST_PointOnSurface(geometry) AS geometry,
-                        name AS n,
-                        hstore('') AS h,
-                        'generator_wind' AS type
-                    FROM
-                        osm_power_generators
-                    WHERE
-                        geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                        (source = 'wind' OR method = 'wind_turbine')
+                SELECT
+                    osm_id,
+                    ST_PointOnSurface(geometry) AS geometry,
+                    name AS n,
+                    hstore('') AS h,
+                    'generator_wind' AS type
+                FROM
+                    osm_power_generators
+                WHERE
+                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                    (source = 'wind' OR method = 'wind_turbine')
 
-                    UNION ALL
+                UNION ALL
 
-                    SELECT
-                        osm_id,
-                        geometry,
-                        name AS n,
-                        hstore('') AS h,
-                        type
-                    FROM
-                        osm_shops
-                    WHERE
-                        geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                        type IN ('convenience', 'fuel', 'confectionery', 'pastry', 'bicycle', 'supermarket', 'greengrocer', 'farm')
+                SELECT
+                    osm_id,
+                    geometry,
+                    name AS n,
+                    hstore('') AS h,
+                    type
+                FROM
+                    osm_shops
+                WHERE
+                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                    type IN ('convenience', 'fuel', 'confectionery', 'pastry', 'bicycle', 'supermarket', 'greengrocer', 'farm')
 
-                    UNION ALL
+                UNION ALL
 
-                    SELECT
-                        osm_id,
-                        geometry,
-                        name AS n,
-                        hstore('access', tags->'access') AS h,
-                        CASE type WHEN 'ruins' THEN 'building_ruins' ELSE 'building' END AS type
-                    FROM
-                        osm_building_points
-                    WHERE
-                        geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                        type <> 'no'
-
-                    UNION ALL
-
-                    SELECT
-                        osm_id,
-                        ST_LineInterpolatePoint(geometry, 0.5) AS geometry,
-                        name AS n,
-                        hstore('') AS h,
-                        type
-                    FROM
-                        osm_feature_lines
-                    WHERE
-                        geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                        type IN ('dam', 'weir')
-                "#,
-            );
+                SELECT
+                    osm_id,
+                    ST_LineInterpolatePoint(geometry, 0.5) AS geometry,
+                    name AS n,
+                    hstore('') AS h,
+                    type
+                FROM
+                    osm_feature_lines
+                WHERE
+                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                    type IN ('dam', 'weir', 'ford')
+            "#,
+        );
     }
 
     if zoom >= 17 {
         sql.push_str(
             r#"
-                    UNION ALL
+                UNION ALL
 
-                    SELECT
-                        osm_id,
-                        geometry,
-                        name AS n,
-                        hstore('') AS h,
-                        type
-                    FROM
-                        osm_barrierpoints
-                    WHERE
-                        geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                        type IN ('lift_gate', 'swing_gate', 'gate')
-
-                    UNION ALL
-
-                    SELECT
-                        osm_id,
-                        ST_Centroid(geometry) AS geometry,
-                        '' AS n,
-                        hstore('') AS h,
-                        'ford' AS type
-                    FROM
-                        osm_fords
-                    WHERE
-                        geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-
-                    UNION ALL
-
-                    SELECT
-                        osm_id,
-                        ST_PointOnSurface(geometry) AS geometry,
-                        name AS n,
-                        hstore('') AS h,
-                        'building_ruins' AS type
-                    FROM
-                        osm_buildings
-                    WHERE
-                        geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                        type = 'ruins'"#,
+                SELECT
+                    osm_id,
+                    geometry,
+                    name AS n,
+                    hstore('') AS h,
+                    type
+                FROM
+                    osm_barrierpoints
+                WHERE
+                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                    type IN ('lift_gate', 'swing_gate', 'gate')
+            "#,
         );
     }
 
