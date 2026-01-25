@@ -69,7 +69,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
     let rows = client.query(
         sql,
         &ctx.bbox_query_params(Some(512.0))
-            .push(2_400_000.0f64 / (2.0f64 * (ctx.zoom as f64 - 10.0)).exp2())
+            .push(2_400_000.0f32 / (2.0f32 * (ctx.zoom as f32 - 10.0)).exp2())
             .as_params(),
     )?;
 
