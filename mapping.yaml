@@ -427,25 +427,6 @@ tables:
       barrier:
         - __any__
 
-  barrierpoints:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: name
-        type: string
-        key: name
-      - name: type
-        type: mapping_value
-      - name: access
-        type: string
-        key: access
-    type: point
-    mapping:
-      barrier:
-        - __any__ # TODO only gate, lift_gate and swing_gate is renderred now
-
   feature_lines:
     columns:
       - name: osm_id
@@ -659,6 +640,36 @@ tables:
                 - waste_disposal
                 - water_point
                 - watering_place
+          # TODO only gate, lift_gate and swing_gate is renderred now
+          barrier:
+            mapping:
+              barrier:
+                - block
+                - bollard
+                - border_control
+                - bump_gate
+                - chain
+                - cycle_barrier
+                - debris
+                - entrance
+                - fence
+                - gate
+                - hampshire_gate
+                - height_restrictor
+                - jersey_barrier
+                - kissing_gate
+                - lift_gate
+                - log
+                - planter
+                - rope
+                - sally_port
+                - sliding_gate
+                - stile
+                - swing_gate
+                - toll_booth
+                - turnstile
+                - wall
+                - wicket_gate
           boundary:
             mapping:
               boundary:
