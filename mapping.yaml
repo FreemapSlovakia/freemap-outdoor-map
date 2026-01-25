@@ -222,7 +222,7 @@ tables:
             - garden
             - playground
             - golf_course
-            - sports_centre
+            - sports_centre # TODO
             - pitch
             - stadium
             - dog_park # TODO
