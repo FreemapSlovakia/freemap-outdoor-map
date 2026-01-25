@@ -11,7 +11,7 @@ use cairo::{Extend, Matrix, SurfacePattern};
 use postgres::Client;
 
 pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRenderResult {
-    let _span = tracy_client::span!("landuse::render");
+    let _span = tracy_client::span!("landcover::render");
 
     let context = ctx.context;
     let min = ctx.bbox.min();

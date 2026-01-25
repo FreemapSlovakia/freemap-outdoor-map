@@ -8,13 +8,16 @@ use crate::render::{
 use postgres::Client;
 
 pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
-    let _span = tracy_client::span!("protected_areas::render");
+    let _span = tracy_client::span!("special_parks::render");
+
+    // TODO consired area
+    // TODO maybe move to landcovers.rs
 
     let sql = "
         SELECT geometry
-        FROM osm_feature_polys
+        FROM osm_landcovers
         WHERE
-            (type = 'zoo' OR type = 'theme_park') AND
+            type IN ('zoo', 'theme_park') AND
             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)";
 
     let rows = &client.query(sql, &ctx.bbox_query_params(Some(10.0)).as_params())?;

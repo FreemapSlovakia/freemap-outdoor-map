@@ -45,6 +45,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
             LEFT JOIN
                 z_order_landuse USING (type)
             WHERE
+                osm_landcovers.type NOT IN ('zoo', 'theme_park') AND
                 osm_landcovers.name <> '' AND
                 osm_landcovers.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
             ORDER BY
@@ -67,6 +68,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
 
         let natural: bool = row.get("natural");
 
+        // TODO move to SQL
         if area < 2_400_000.0 / (2.0 * (ctx.zoom as f32 - 10.0)).exp2() {
             continue;
         }

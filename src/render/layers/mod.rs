@@ -32,8 +32,8 @@ mod highway_names;
 mod hillshading;
 pub(crate) mod hillshading_datasets;
 mod housenumbers;
+mod landcover;
 mod landcover_names;
-mod landuse;
 mod locality_names;
 mod military_areas;
 mod national_park_names;
@@ -120,7 +120,7 @@ pub fn render(
 
     ctx.context.push_group();
 
-    landuse::render(ctx, client, svg_repo).with_layer("landuse")?;
+    landcover::render(ctx, client, svg_repo).with_layer("landuse")?;
 
     if zoom >= 13 {
         cutlines::render(ctx, client).with_layer("cutlines")?;
@@ -217,9 +217,9 @@ pub fn render(
         protected_areas::render(ctx, client, svg_repo).with_layer("protected_areas")?;
     }
 
-    // if zoom >= 13 {
-    //     special_parks::render(ctx, client).with_layer("special_parks")?;
-    // }
+    if zoom >= 13 {
+        special_parks::render(ctx, client).with_layer("special_parks")?;
+    }
 
     if zoom >= 10 {
         military_areas::render(ctx, client).with_layer("military_areas")?;
@@ -243,9 +243,9 @@ pub fn render(
         national_park_names::render(ctx, client, collision).with_layer("national_park_names")?;
     }
 
-    // if (13..=16).contains(&zoom) {
-    //     special_park_names::render(ctx, client, collision).with_layer("special_park_names")?;
-    // }
+    if (13..=16).contains(&zoom) {
+        special_park_names::render(ctx, client, collision).with_layer("special_park_names")?;
+    }
 
     if zoom >= 10 {
         features::render(ctx, client, collision, svg_repo).with_layer("features")?;

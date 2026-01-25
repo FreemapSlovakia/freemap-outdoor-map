@@ -13,11 +13,14 @@ use pangocairo::pango::Style;
 use postgres::Client;
 
 pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
-    let _span = tracy_client::span!("special_national_park_names::render");
+    let _span = tracy_client::span!("special_park_names::render");
+
+    // TODO consired area
+    // TODO maybe move to landcover_names.rs
 
     let sql = "
-        SELECT name, ST_PointOnSurface(geometry) AS geometry
-        FROM osm_feature_polys
+        SELECT name, geometry AS geometry
+        FROM osm_features
         WHERE
             name <> '' AND
             (type = 'zoo' OR type = 'theme_park') AND

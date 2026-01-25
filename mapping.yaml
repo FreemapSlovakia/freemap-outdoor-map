@@ -231,6 +231,7 @@ tables:
         mapping:
           tourism:
             - zoo
+            - theme_park
       natural:
         mapping:
           natural:
