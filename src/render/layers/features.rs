@@ -492,13 +492,12 @@ pub fn render(
                 osm_features
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                type <> 'peak' AND
                 (type <> 'tree' OR tags->'protected' NOT IN ('', 'no') OR tags->'denotation' = 'natural_monument') AND
                 (type <> 'saddle' OR name <> '')
                 {}
             ",
             {
-                let mut omit_types = vec![];
+                let mut omit_types = vec!["'peak'"];
 
                 // TODO add more types; maybe derive from POIS
 
@@ -522,10 +521,9 @@ pub fn render(
                     omit_types.push("'waste_basket'");
                 }
 
-                if omit_types.is_empty() { "" } else {
-                    omit_sql = format!("AND type NOT IN ({})", omit_types.join(", "));
-                    &omit_sql
-                }
+                omit_sql = format!("AND type NOT IN ({})", omit_types.join(", "));
+
+                &omit_sql
             }
         );
 
