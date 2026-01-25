@@ -532,8 +532,6 @@ tables:
       - name: type
         type: mapping_value
         aliases:
-          power:
-            tower: power_tower
           aerialway:
             station: aerialway_station
           building:
@@ -541,8 +539,12 @@ tables:
             __any__: building
           ford:
             __any__: ford
+          historic:
+            mine: disused_mine
           mountain_pass:
             yes: mountain_pass
+          power:
+            tower: power_tower
       - name: tags
         type: hstore_tags
         args:
