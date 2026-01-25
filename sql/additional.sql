@@ -263,6 +263,7 @@ VALUES
   ('tower_other'),
   ('mast_other'),
   ('saddle'),
+  ('mountain_pass'),
   ('peak1'),
   ('peak2'),
   ('peak3'),

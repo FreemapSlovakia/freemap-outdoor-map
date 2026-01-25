@@ -541,6 +541,8 @@ tables:
             __any__: building
           ford:
             __any__: ford
+          mountain_pass:
+            yes: mountain_pass
       - name: tags
         type: hstore_tags
         args:
@@ -574,6 +576,8 @@ tables:
           - __any__
         ford:
           - __any__
+        mountain_pass:
+          - yes
       any:
         mappings:
           aerialway:

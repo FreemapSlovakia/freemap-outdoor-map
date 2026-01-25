@@ -200,6 +200,7 @@ static POIS: LazyLock<HashMap<&'static str, Vec<Def>>> = LazyLock::new(|| {
         // TODO (14, 14, N, N, "recycling", Extra { text_color: colors::AREA_LABEL, ..Extra::default() }), // { icon: null } // has no icon yet - render as area name
         (15, NN, Y, N, "guidepost_noname", Extra { icon: Some("guidepost_x"), ..Extra::default() }),
         (15, 15, Y, Y, "saddle", Extra { font_size: 13.0, halo: false, ..Extra::default() }),
+        (15, 15, Y, Y, "mountain_pass", Extra { icon: Some("saddle"), font_size: 13.0, halo: false, ..Extra::default() }),
         (15, 16, N, N, "ruins", Extra::default()),
         (15, 16, N, N, "generator_wind", Extra::default()),
         (15, 16, N, N, "chimney", Extra::default()),
@@ -493,7 +494,7 @@ pub fn render(
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
                 (type <> 'tree' OR tags->'protected' NOT IN ('', 'no') OR tags->'denotation' = 'natural_monument') AND
-                (type <> 'saddle' OR name <> '')
+                (type NOT IN ('saddle', 'mountain_pass') OR name <> '')
                 {}
             ",
             {
@@ -502,7 +503,7 @@ pub fn render(
                 // TODO add more types; maybe derive from POIS
 
                 if zoom < 15 {
-                    omit_types.push("'bus_stop', 'mast', 'tree', 'tower', 'hunting_stand', 'shelter', 'saddle'");
+                    omit_types.push("'bus_stop', 'mast', 'tree', 'tower', 'hunting_stand', 'shelter', 'saddle', 'mountain_pass'");
                 }
 
                 if zoom < 16 {
