@@ -5,10 +5,7 @@ use crate::render::{
     svg_repo::SvgRepo,
     xyz::bbox_size_in_pixels,
 };
-use cairo::{
-    Content, Context, Format, ImageSurface, PdfSurface, RecordingSurface, Rectangle, Surface,
-    SvgSurface,
-};
+use cairo::{Format, ImageSurface, PdfSurface, Surface, SvgSurface};
 use geo::Geometry;
 use image::codecs::jpeg::JpegEncoder;
 use image::{ExtendedColorType, ImageEncoder};
@@ -31,18 +28,12 @@ pub fn render(
     svg_repo: &mut SvgRepo,
     hillshading_datasets: &mut Option<HillshadingDatasets>,
     mask_geometry: Option<&Geometry>,
-) -> Result<Vec<Vec<u8>>, RenderError> {
+) -> Result<Vec<u8>, RenderError> {
     let _span = tracy_client::span!("render_tile");
-
-    if request.scales.is_empty() {
-        return Ok(Vec::new());
-    }
 
     let size = bbox_size_in_pixels(request.bbox, request.zoom as f64);
 
-    let scales = request.scales.clone();
-
-    let mut render = |surface: &Surface, hillshade_scale: f64, render_scale: f64| {
+    let mut render = |surface: &Surface| {
         layers::render(
             surface,
             request,
@@ -51,169 +42,106 @@ pub fn render(
             size,
             svg_repo,
             hillshading_datasets,
-            hillshade_scale,
             mask_geometry,
-            render_scale,
+            request.scale,
         )
     };
 
     match request.format {
         ImageFormat::Svg => {
-            let primary_scale = scales.first().copied().unwrap_or(1.0);
+            let scale = request.scale;
 
             let surface = SvgSurface::for_stream(
-                size.width as f64 * primary_scale,
-                size.height as f64 * primary_scale,
+                size.width as f64 * scale,
+                size.height as f64 * scale,
                 Vec::new(),
             )?;
 
-            render(&surface, primary_scale.max(1.0), primary_scale)?;
+            render(&surface)?;
 
-            Ok(vec![
-                *surface
-                    .finish_output_stream()
-                    .expect("finished output stream")
-                    .downcast::<Vec<u8>>()
-                    .expect("vector of bytes"),
-            ])
+            Ok(*surface
+                .finish_output_stream()
+                .expect("finished output stream")
+                .downcast::<Vec<u8>>()
+                .expect("vector of bytes"))
         }
         ImageFormat::Pdf => {
-            let primary_scale = scales.first().copied().unwrap_or(1.0);
+            let scale = request.scale;
 
             let surface = PdfSurface::for_stream(
-                size.width as f64 * primary_scale,
-                size.height as f64 * primary_scale,
+                size.width as f64 * scale,
+                size.height as f64 * scale,
                 Vec::new(),
             )?;
 
-            render(&surface, primary_scale.max(1.0), primary_scale)?;
+            render(&surface)?;
 
-            Ok(vec![
-                *surface
-                    .finish_output_stream()
-                    .expect("finished output stream")
-                    .downcast::<Vec<u8>>()
-                    .expect("vector of bytes"),
-            ])
+            Ok(*surface
+                .finish_output_stream()
+                .expect("finished output stream")
+                .downcast::<Vec<u8>>()
+                .expect("vector of bytes"))
         }
         ImageFormat::Png => {
-            let max_scale = scales
-                .iter()
-                .copied()
-                .fold(1.0_f64, |acc, scale| acc.max(scale));
+            let scale = request.scale;
 
-            let recording_surface = RecordingSurface::create(
-                Content::ColorAlpha,
-                Some(Rectangle::new(
-                    0.0,
-                    0.0,
-                    size.width as f64,
-                    size.height as f64,
-                )),
+            let mut buffer = Vec::new();
+
+            let surface = ImageSurface::create(
+                Format::ARgb32,
+                (size.width as f64 * scale) as i32,
+                (size.height as f64 * scale) as i32,
             )?;
 
-            render(&recording_surface, max_scale.max(1.0), 1.0)?;
+            render(&surface)?;
 
-            let mut images = Vec::with_capacity(scales.len());
+            let _span = tracy_client::span!("render_tile::write_to_png");
 
-            for scale in scales {
-                let mut buffer = Vec::new();
+            surface
+                .write_to_png(&mut buffer)
+                .map_err(|err| RenderError::ImageEncoding(Box::new(err)))?;
 
-                let surface = ImageSurface::create(
-                    Format::ARgb32,
-                    (size.width as f64 * scale) as i32,
-                    (size.height as f64 * scale) as i32,
-                )?;
-
-                if let Err(err) = paint_recording_surface(&recording_surface, &surface, scale) {
-                    panic!("Error rendering {:?}@{}: {err}", request.bbox, request.zoom);
-                }
-
-                let _span = tracy_client::span!("render_tile::write_to_png");
-
-                surface
-                    .write_to_png(&mut buffer)
-                    .map_err(|err| RenderError::ImageEncoding(Box::new(err)))?;
-
-                images.push(buffer);
-            }
-
-            Ok(images)
+            Ok(buffer)
         }
         ImageFormat::Jpeg => {
-            let max_scale = scales
-                .iter()
-                .copied()
-                .fold(1.0_f64, |acc, scale| acc.max(scale));
+            let scale = request.scale;
 
-            let recording_surface = RecordingSurface::create(
-                Content::ColorAlpha,
-                Some(Rectangle::new(
-                    0.0,
-                    0.0,
-                    size.width as f64,
-                    size.height as f64,
-                )),
+            let mut surface = ImageSurface::create(
+                Format::Rgb24,
+                (size.width as f64 * scale) as i32,
+                (size.height as f64 * scale) as i32,
             )?;
 
-            render(&recording_surface, max_scale.max(1.0), 1.0)?;
+            render(&surface)?;
 
-            let mut images = Vec::with_capacity(scales.len());
+            let width = surface.width() as u32;
+            let height = surface.height() as u32;
+            let stride = surface.stride() as usize;
+            let data = surface.data().expect("surface data");
 
-            for scale in scales {
-                let mut surface = ImageSurface::create(
-                    Format::Rgb24,
-                    (size.width as f64 * scale) as i32,
-                    (size.height as f64 * scale) as i32,
-                )?;
+            let mut rgb_data = Vec::with_capacity((width * height * 3) as usize);
 
-                if let Err(err) = paint_recording_surface(&recording_surface, &surface, scale) {
-                    panic!("Error rendering {:?}@{}: {err}", request.bbox, request.zoom);
+            for y in 0..height as usize {
+                let row_start = y * stride;
+                let row_end = row_start + width as usize * 4;
+                let row = &data[row_start..row_end];
+
+                for chunk in row.chunks(4) {
+                    let b = chunk[0];
+                    let g = chunk[1];
+                    let r = chunk[2];
+
+                    rgb_data.extend_from_slice(&[r, g, b]);
                 }
-
-                let width = surface.width() as u32;
-                let height = surface.height() as u32;
-                let stride = surface.stride() as usize;
-                let data = surface.data().expect("surface data");
-
-                let mut rgb_data = Vec::with_capacity((width * height * 3) as usize);
-
-                for y in 0..height as usize {
-                    let row_start = y * stride;
-                    let row_end = row_start + width as usize * 4;
-                    let row = &data[row_start..row_end];
-
-                    for chunk in row.chunks(4) {
-                        let b = chunk[0];
-                        let g = chunk[1];
-                        let r = chunk[2];
-
-                        rgb_data.extend_from_slice(&[r, g, b]);
-                    }
-                }
-
-                let mut buffer = Vec::new();
-
-                JpegEncoder::new_with_quality(&mut buffer, 90)
-                    .write_image(&rgb_data, width, height, ExtendedColorType::Rgb8)
-                    .map_err(|err| RenderError::ImageEncoding(Box::new(err)))?;
-
-                images.push(buffer);
             }
 
-            Ok(images)
+            let mut buffer = Vec::new();
+
+            JpegEncoder::new_with_quality(&mut buffer, 90)
+                .write_image(&rgb_data, width, height, ExtendedColorType::Rgb8)
+                .map_err(|err| RenderError::ImageEncoding(Box::new(err)))?;
+
+            Ok(buffer)
         }
     }
-}
-
-fn paint_recording_surface(
-    recording_surface: &RecordingSurface,
-    target_surface: &Surface,
-    scale: f64,
-) -> cairo::Result<()> {
-    let context = Context::new(target_surface)?;
-    context.scale(scale, scale);
-    context.set_source_surface(recording_surface, 0.0, 0.0)?;
-    context.paint()?;
-    Ok(())
 }

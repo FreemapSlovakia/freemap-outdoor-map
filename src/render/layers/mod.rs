@@ -90,7 +90,6 @@ pub fn render(
     size: Size<u32>,
     svg_repo: &mut SvgRepo,
     hillshading_datasets: &mut Option<HillshadingDatasets>,
-    hillshade_scale: f64,
     mask_geometry: Option<&Geometry>,
     render_scale: f64,
 ) -> Result<(), RenderError> {
@@ -114,6 +113,7 @@ pub fn render(
         size,
         zoom,
         tile_projector: TileProjector::new(bbox, size),
+        scale: render_scale,
     };
 
     sea::render(ctx, client).with_layer("sea")?;
@@ -153,7 +153,6 @@ pub fn render(
             svg_repo,
             hillshading_datasets,
             request.shading,
-            hillshade_scale,
         )
         .with_layer("feature_lines_maskable")?;
     }
@@ -180,7 +179,6 @@ pub fn render(
             hillshading_datasets,
             request.shading,
             request.contours,
-            hillshade_scale,
         )
         .with_layer("shading_and_contours")?;
     }

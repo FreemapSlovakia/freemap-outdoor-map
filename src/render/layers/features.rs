@@ -724,10 +724,8 @@ pub fn render(
             let corner_y = point.y() - he / 2.0;
 
             'outer: for &(dx, dy) in OFFSETS.iter() {
-                // NOTE 0.5 is for icnos not to be blurred on MDPI
-                // TODO align by scale
-                let corner_x = (corner_x + dx - 0.5).round() + 0.5;
-                let corner_y = (corner_y + dy - 0.5).round() + 0.5;
+                let corner_x = ctx.hint(corner_x + dx - 0.5) + 0.5;
+                let corner_y = ctx.hint(corner_y + dy - 0.5) + 0.5;
 
                 let bbox = Rect::new((corner_x, corner_y), (corner_x + w, corner_y + he));
 

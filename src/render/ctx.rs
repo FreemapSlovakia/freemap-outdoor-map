@@ -28,6 +28,7 @@ pub struct Ctx<'a> {
     pub size: Size<u32>,
     pub zoom: u32,
     pub tile_projector: TileProjector,
+    pub scale: f64,
 }
 
 impl Ctx<'_> {
@@ -51,5 +52,9 @@ impl Ctx<'_> {
         }
 
         SqlParams { params }
+    }
+
+    pub(crate) fn hint(&self, x: f64) -> f64 {
+        (x * self.scale).round() / self.scale
     }
 }

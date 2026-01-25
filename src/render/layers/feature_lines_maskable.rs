@@ -15,7 +15,6 @@ pub fn render(
     svg_repo: &mut SvgRepo,
     hillshading_datasets: &mut Option<HillshadingDatasets>,
     shading: bool,
-    hillshade_scale: f64,
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("feature_lines_maskable::render");
 
@@ -38,13 +37,8 @@ pub fn render(
         for cc in [
             "pl", "sk", "cz", "at", /*"ch", "it" (CH, IT are not so detailed) */
         ] {
-            let mask_surface = hillshading::load_surface(
-                ctx,
-                cc,
-                hillshading_datasets,
-                hillshade_scale,
-                hillshading::Mode::Mask,
-            )?;
+            let mask_surface =
+                hillshading::load_surface(ctx, cc, hillshading_datasets, hillshading::Mode::Mask)?;
 
             if let Some(mask_surface) = mask_surface {
                 mask_surfaces.push(mask_surface);
@@ -102,7 +96,7 @@ pub fn render(
         context.push_group();
 
         for mask_surface in &mask_surfaces {
-            hillshading::paint_surface(ctx, mask_surface, hillshade_scale, 1.0)?;
+            hillshading::paint_surface(ctx, mask_surface, 1.0)?;
         }
 
         context.pop_group_to_source()?;

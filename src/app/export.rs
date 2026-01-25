@@ -236,7 +236,7 @@ fn build_render_request(
 
     let rect = Rect::new((bbox[0], bbox[1]), (bbox[2], bbox[3]));
 
-    let mut render_request = RenderRequest::new(rect, request.zoom, vec![scale], format);
+    let mut render_request = RenderRequest::new(rect, request.zoom, scale, format);
 
     if let Some(features) = &request.features {
         if let Some(shading) = features.shading {
@@ -361,14 +361,10 @@ async fn run_export(
     file_path: PathBuf,
     request: RenderRequest,
 ) -> Result<(), String> {
-    let images = worker_pool
+    let image = worker_pool
         .render(request)
         .await
         .map_err(|err| err.to_string())?;
-
-    let Some(image) = images.into_iter().next() else {
-        return Err("empty render result".into());
-    };
 
     fs::write(&file_path, image)
         .await

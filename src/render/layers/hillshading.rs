@@ -14,7 +14,6 @@ pub enum Mode {
 fn read_rgba_from_gdal(
     dataset: &Dataset,
     ctx: &Ctx,
-    raster_scale: f64,
     mode: Mode,
 ) -> Result<Option<ImageSurface>, LayerRenderError> {
     let bbox = ctx.bbox;
@@ -45,8 +44,8 @@ fn read_rgba_from_gdal(
     let window_width_px = (pixel_max_x - pixel_min_x) as usize;
     let window_height_px = (pixel_max_y - pixel_min_y) as usize;
 
-    let scaled_width_px = (size.width as f64 * raster_scale) as usize;
-    let scaled_height_px = (size.height as f64 * raster_scale) as usize;
+    let scaled_width_px = (size.width as f64 * ctx.scale) as usize;
+    let scaled_height_px = (size.height as f64 * ctx.scale) as usize;
 
     let scale_x = scaled_width_px as f64 / (pixel_max_x_f - pixel_min_x_f).abs().max(1e-6);
     let scale_y = scaled_height_px as f64 / (pixel_max_y_f - pixel_min_y_f).abs().max(1e-6);
@@ -272,9 +271,9 @@ fn read_rgba_from_gdal(
     let surface = ImageSurface::create_for_data(
         final_rgba_data,
         Format::ARgb32,
-        (size.width as f64 * raster_scale) as i32,
-        (size.height as f64 * raster_scale) as i32,
-        (size.width as f64 * raster_scale) as i32 * 4,
+        (size.width as f64 * ctx.scale) as i32,
+        (size.height as f64 * ctx.scale) as i32,
+        (size.width as f64 * ctx.scale) as i32 * 4,
     )?;
 
     Ok(Some(surface))
@@ -284,14 +283,13 @@ pub fn load_surface(
     ctx: &Ctx,
     country: &str,
     shading_data: &mut HillshadingDatasets,
-    raster_scale: f64,
     mode: Mode,
 ) -> Result<Option<ImageSurface>, LayerRenderError> {
     let hillshading_dataset = shading_data
         .get(country)
         .unwrap_or_else(|| panic!("no such dataset {country}"));
 
-    let surface = read_rgba_from_gdal(hillshading_dataset, ctx, raster_scale, mode)?;
+    let surface = read_rgba_from_gdal(hillshading_dataset, ctx, mode)?;
 
     if surface.is_some() {
         shading_data.record_use(country);
@@ -300,18 +298,13 @@ pub fn load_surface(
     Ok(surface)
 }
 
-pub fn paint_surface(
-    ctx: &Ctx,
-    surface: &ImageSurface,
-    raster_scale: f64,
-    alpha: f64,
-) -> LayerRenderResult {
+pub fn paint_surface(ctx: &Ctx, surface: &ImageSurface, alpha: f64) -> LayerRenderResult {
     let context = ctx.context;
 
     context.save()?;
 
-    if raster_scale != 1.0 {
-        context.scale(1.0 / raster_scale, 1.0 / raster_scale);
+    if ctx.scale != 1.0 {
+        context.scale(1.0 / ctx.scale, 1.0 / ctx.scale);
     }
 
     context.set_source_surface(surface, 0.0, 0.0)?;
@@ -380,13 +373,12 @@ pub fn load_and_paint(
     country: &str,
     alpha: f64,
     shading_data: &mut HillshadingDatasets,
-    raster_scale: f64,
     mode: Mode,
 ) -> Result<bool, LayerRenderError> {
-    let surface = load_surface(ctx, country, shading_data, raster_scale, mode)?;
+    let surface = load_surface(ctx, country, shading_data, mode)?;
 
     if let Some(surface) = surface.as_ref() {
-        paint_surface(ctx, surface, raster_scale, alpha)?;
+        paint_surface(ctx, surface, alpha)?;
     }
 
     Ok(surface.is_some())

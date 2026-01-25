@@ -76,8 +76,12 @@ pub fn render_towers_poles(ctx: &Ctx, client: &mut Client) -> LayerRenderResult 
 
         let p = geometry_point(&row).project_to_tile(&ctx.tile_projector);
 
-        // TODO align by scale
-        context.rectangle((p.x() - 1.5).round(), (p.y() - 1.5).round(), 3.0, 3.0);
+        context.rectangle(
+            ctx.hint(p.x() - 1.5),
+            ctx.hint(p.y() - 1.5),
+            ctx.hint(3.0),
+            ctx.hint(3.0),
+        );
 
         context.fill()?;
     }

@@ -10,7 +10,7 @@ use tokio::sync::{mpsc, oneshot};
 
 struct RenderTask {
     request: RenderRequest,
-    resp_tx: oneshot::Sender<Result<Vec<Vec<u8>>, ReError>>,
+    resp_tx: oneshot::Sender<Result<Vec<u8>, ReError>>,
 }
 
 pub(crate) struct RenderWorkerPool {
@@ -90,7 +90,7 @@ impl RenderWorkerPool {
         Self { tx }
     }
 
-    pub(crate) async fn render(&self, request: RenderRequest) -> Result<Vec<Vec<u8>>, ReError> {
+    pub(crate) async fn render(&self, request: RenderRequest) -> Result<Vec<u8>, ReError> {
         let (resp_tx, resp_rx) = oneshot::channel();
 
         self.tx

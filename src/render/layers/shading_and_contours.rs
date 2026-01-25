@@ -13,7 +13,6 @@ pub fn render(
     hillshading_datasets: &mut HillshadingDatasets,
     shading: bool,
     contours: bool,
-    hillshade_scale: f64,
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("shading_and_contours::render");
 
@@ -44,13 +43,8 @@ pub fn render(
     ];
 
     for (country, better_countries) in config {
-        let mask_surface = hillshading::load_surface(
-            ctx,
-            country,
-            hillshading_datasets,
-            hillshade_scale,
-            hillshading::Mode::Mask,
-        )?;
+        let mask_surface =
+            hillshading::load_surface(ctx, country, hillshading_datasets, hillshading::Mode::Mask)?;
 
         let Some(mask_surface) = mask_surface else {
             continue;
@@ -58,7 +52,7 @@ pub fn render(
 
         context.push_group(); // country-contours-and-shading
 
-        hillshading::paint_surface(ctx, &mask_surface, hillshade_scale, 1.0)?;
+        hillshading::paint_surface(ctx, &mask_surface, 1.0)?;
 
         context.push_group(); // contours-and-shading
 
@@ -75,7 +69,6 @@ pub fn render(
                 country,
                 fade_alpha,
                 hillshading_datasets,
-                hillshade_scale,
                 hillshading::Mode::Shading,
             )?;
         }
@@ -93,7 +86,6 @@ pub fn render(
                     better_country,
                     1.0,
                     hillshading_datasets,
-                    hillshade_scale,
                     hillshading::Mode::Mask,
                 )?;
             }
@@ -111,7 +103,6 @@ pub fn render(
                 ctx,
                 country,
                 hillshading_datasets,
-                hillshade_scale,
                 hillshading::Mode::Mask,
             )?;
 
@@ -124,7 +115,7 @@ pub fn render(
             context.push_group(); // mask
 
             for mask_surface in &mask_surfaces {
-                hillshading::paint_surface(ctx, mask_surface, hillshade_scale, 1.0)?;
+                hillshading::paint_surface(ctx, mask_surface, 1.0)?;
             }
 
             context.push_group(); // fallback
@@ -146,7 +137,6 @@ pub fn render(
                     "_",
                     fade_alpha,
                     hillshading_datasets,
-                    hillshade_scale,
                     hillshading::Mode::Shading,
                 )?;
             }

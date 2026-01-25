@@ -74,7 +74,7 @@ pub(crate) async fn serve_tile(
         }
     }
 
-    let tile_request = RenderRequest::new(bbox, zoom, vec![scale], ImageFormat::Jpeg);
+    let tile_request = RenderRequest::new(bbox, zoom, scale, ImageFormat::Jpeg);
 
     let file_path = if let Some(ref tile_base_path) = *state.tile_base_path {
         let file_path = tile_cache_path(tile_base_path, zoom, x, y, scale);
@@ -115,29 +115,23 @@ pub(crate) async fn serve_tile(
         }
     };
 
-    if let Some(tile) = rendered.into_iter().next() {
-        if let Some(file_path) = file_path {
-            if let Some(parent) = file_path.parent()
-                && let Err(err) = fs::create_dir_all(parent).await
-            {
-                eprintln!("create tile dir failed: {err}");
-            }
-
-            if let Err(err) = fs::write(&file_path, &tile).await {
-                eprintln!("write tile failed: {err}");
-            }
+    if let Some(file_path) = file_path {
+        if let Some(parent) = file_path.parent()
+            && let Err(err) = fs::create_dir_all(parent).await
+        {
+            eprintln!("create tile dir failed: {err}");
         }
 
-        Response::builder()
-            .status(StatusCode::OK)
-            .header("Content-Type", "image/jpeg")
-            .body(Body::from(tile))
-    } else {
-        Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body(Body::from("empty render result"))
+        if let Err(err) = fs::write(&file_path, &rendered).await {
+            eprintln!("write tile failed: {err}");
+        }
     }
-    .expect("body should be built")
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "image/jpeg")
+        .body(Body::from(rendered))
+        .expect("body should be built")
 }
 
 fn tile_cache_path(base: &std::path::Path, zoom: u32, x: u32, y: u32, scale: f64) -> PathBuf {
