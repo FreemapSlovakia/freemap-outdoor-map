@@ -12,11 +12,15 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     let _span = tracy_client::span!("feature_lines::render");
 
     let sql = "
-        SELECT geometry, type
-        FROM osm_feature_lines
+        SELECT
+            geometry,
+            type
+        FROM
+            osm_feature_lines
         WHERE
             type IN ('weir', 'dam', 'tree_row') AND
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)";
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+    ";
 
     let rows = client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())?;
 

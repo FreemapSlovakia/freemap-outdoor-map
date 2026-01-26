@@ -1,3 +1,4 @@
+use super::landcover_z_order::build_landcover_z_order_case;
 use crate::render::{
     collision::Collision,
     colors,
@@ -32,30 +33,45 @@ static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
 pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
     let _span = tracy_client::span!("landcover_names::render");
 
-    // nested sql is to remove duplicate entries imported by imposm because we use `mappings` in yaml
-    let sql = "
-        WITH lcn AS (
-            SELECT DISTINCT ON (osm_landcovers.osm_id)
-                osm_landcovers.geometry,
-                osm_landcovers.name,
-                osm_landcovers.type IN ('forest', 'wood', 'scrub', 'heath', 'grassland', 'scree', 'blockfield', 'meadow', 'fell', 'wetland') AS natural,
-                z_order,
-                osm_landcovers.osm_id AS osm_id
+    let rows = {
+        let z_order_case = build_landcover_z_order_case("type");
+
+        // nested sql is to remove duplicate entries imported by imposm because we use `mappings` in yaml
+        let sql = format!(
+            "
+            WITH main AS (
+                SELECT DISTINCT ON (osm_id)
+                    geometry,
+                    name,
+                    type,
+                    osm_id AS osm_id
+                FROM
+                    osm_landcovers
+                WHERE
+                    type NOT IN ('zoo', 'theme_park') AND
+                    name <> '' AND
+                    area >= $6 AND
+                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            )
+            SELECT
+                name,
+                type IN ('forest', 'wood', 'scrub', 'heath', 'grassland', 'scree', 'blockfield', 'meadow', 'fell', 'wetland') AS natural,
+                ST_PointOnSurface(geometry) AS geometry
             FROM
-                osm_landcovers
-            LEFT JOIN
-                z_order_landuse USING (type)
-            WHERE
-                osm_landcovers.type NOT IN ('zoo', 'theme_park') AND
-                osm_landcovers.name <> '' AND
-                osm_landcovers.area >= $6 AND
-                osm_landcovers.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+                main
             ORDER BY
-                osm_landcovers.osm_id, osm_landcovers.type IN ('forest', 'wood', 'scrub', 'heath', 'grassland', 'scree', 'blockfield', 'meadow', 'fell', 'wetland') DESC
-        )
-        SELECT name, \"natural\", ST_PointOnSurface(geometry) AS geometry
-        FROM lcn
-        ORDER BY z_order, osm_id";
+                {z_order_case} DESC,
+                osm_id
+            ",
+        );
+
+        client.query(
+            &sql,
+            &ctx.bbox_query_params(Some(512.0))
+                .push(2_400_000.0f32 / (2.0f32 * (ctx.zoom as f32 - 10.0)).exp2())
+                .as_params(),
+        )?
+    };
 
     let mut text_options = TextOptions {
         flo: FontAndLayoutOptions {
@@ -65,13 +81,6 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         color: colors::PROTECTED,
         ..TextOptions::default()
     };
-
-    let rows = client.query(
-        sql,
-        &ctx.bbox_query_params(Some(512.0))
-            .push(2_400_000.0f32 / (2.0f32 * (ctx.zoom as f32 - 10.0)).exp2())
-            .as_params(),
-    )?;
 
     for row in rows {
         let natural: bool = row.get("natural");

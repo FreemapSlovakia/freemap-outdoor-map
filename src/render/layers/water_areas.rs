@@ -18,10 +18,15 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
     let rows = client.query(
         &format!(
-            "SELECT
-                type, geometry, COALESCE(intermittent OR seasonal, false) AS tmp
-            FROM osm_waterareas{table_suffix}
-            WHERE geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)"
+            "
+            SELECT
+                type,
+                geometry, COALESCE(intermittent OR seasonal, false) AS tmp
+            FROM
+                osm_waterareas{table_suffix}
+            WHERE
+                geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
+            "
         ),
         &ctx.bbox_query_params(None).as_params(),
     )?;

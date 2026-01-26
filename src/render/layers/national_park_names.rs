@@ -32,13 +32,22 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
     let _span = tracy_client::span!("national_park_names::render");
 
     let sql = "
-        SELECT type, name, protect_class, ST_PointOnSurface(geometry) AS geometry
-        FROM osm_protected_areas
+        SELECT
+            type,
+            name,
+            protect_class,
+            ST_PointOnSurface(geometry) AS geometry
+        FROM
+            osm_protected_areas
         WHERE
             name <> '' AND
             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
             (type = 'national_park' OR (type = 'protected_area' AND protect_class = '2'))
-        ORDER BY name LIKE ('Ochranné pásmo %'), area DESC";
+        ORDER BY
+            name LIKE ('Ochranné pásmo %'),
+            area DESC,
+            osm_id
+    ";
 
     let text_options = TextOptions {
         flo: FontAndLayoutOptions {

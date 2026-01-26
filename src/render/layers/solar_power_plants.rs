@@ -12,10 +12,13 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
     let d = 4.0f64.max(1.33f64.powf(ctx.zoom as f64) / 20.0).round();
 
-    let sql = concat!(
-        "SELECT geometry FROM osm_power_generators ",
-        "WHERE source = 'solar' AND geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)"
-    );
+    let sql = "
+        SELECT
+            geometry FROM osm_power_generators
+        WHERE
+            source = 'solar' AND geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
+        ORDER BY osm_id
+    ";
 
     let rows = client.query(sql, &ctx.bbox_query_params(None).as_params())?;
 

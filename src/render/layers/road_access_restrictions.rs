@@ -14,19 +14,23 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     let sql = "
         SELECT
             CASE
-            WHEN bicycle NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-            OR bicycle = '' AND vehicle NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-            OR bicycle = '' AND vehicle = '' AND access NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-            THEN 1 ELSE 0 END AS no_bicycle,
+                WHEN bicycle NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                    OR bicycle = '' AND vehicle NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                    OR bicycle = '' AND vehicle = '' AND access NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                THEN 1 ELSE 0 END AS no_bicycle,
             CASE
-            WHEN foot NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-            OR foot = '' AND access NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-            THEN 1 ELSE 0 END AS no_foot,
+                WHEN foot NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                    OR foot = '' AND access NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                THEN 1
+            ELSE 0
+            END AS no_foot,
             geometry
-        FROM osm_roads
+        FROM
+            osm_roads
         WHERE
-            type NOT IN ('trunk', 'motorway', 'trunk_link', 'motorway_link')
-                AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)";
+            type NOT IN ('trunk', 'motorway', 'trunk_link', 'motorway_link') AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+    ";
 
     // TODO lazy
 

@@ -1,3 +1,4 @@
+use super::feature_z_order::build_feature_z_order_case;
 use crate::render::{
     SvgRepo,
     collision::Collision,
@@ -594,19 +595,23 @@ pub fn render(
     }
 
     let rows = {
+        let z_order_case = build_feature_z_order_case("type");
+
         let sql = format!(
-            r"SELECT *
-            FROM ({}) AS abc
-            LEFT JOIN z_order_poi USING (type)
+            r"
+            SELECT
+                *
+            FROM
+                ({}) AS tmp
             ORDER BY
-                z_order,
+                {z_order_case},
                 h->'isolation' DESC NULLS LAST,
                 CASE
                     WHEN (h->'ele') ~ '^\s*-?\d+(\.\d+)?\s*$' THEN (h->'ele')::real
                     ELSE NULL
                 END DESC NULLS LAST,
                 osm_id
-        ",
+            ",
             selects.join(" UNION ALL ")
         );
 

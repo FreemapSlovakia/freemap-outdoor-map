@@ -14,7 +14,17 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     let zoom = ctx.zoom;
 
     let sql = &format!(
-        "SELECT {}, type, seasonal OR intermittent AS tmp, tunnel FROM {} WHERE geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)",
+        "
+            SELECT
+                {},
+                type,
+                seasonal OR intermittent AS tmp,
+                tunnel
+            FROM
+                {}
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ",
         match zoom {
             12 => "ST_Segmentize(ST_Simplify(geometry, 24), 200) AS geometry",
             13 => "ST_Segmentize(ST_Simplify(geometry, 12), 200) AS geometry",

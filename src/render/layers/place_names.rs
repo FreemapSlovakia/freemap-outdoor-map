@@ -21,10 +21,21 @@ pub fn render(
     let zoom = ctx.zoom;
 
     let sql = &format!(
-        "SELECT name, type, geometry
-            FROM osm_places
-            WHERE {} AND name <> '' AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            ORDER BY z_order DESC, population DESC, osm_id",
+        "
+        SELECT
+            name,
+            type,
+            geometry
+        FROM
+            osm_places
+        WHERE
+            {} AND
+             name <> '' AND
+             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            z_order DESC,
+            population DESC,
+            osm_id",
         match zoom {
             8 => "type = 'city'",
             9..=10 => "(type = 'city' OR type = 'town')",

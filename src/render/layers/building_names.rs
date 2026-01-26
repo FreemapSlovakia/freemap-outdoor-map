@@ -11,23 +11,27 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
     let _span = tracy_client::span!("building_names::render");
 
     let sql = "
-        SELECT osm_buildings.name, ST_Centroid(osm_buildings.geometry) AS geometry
-            FROM osm_buildings
-            LEFT JOIN osm_landcovers USING (osm_id)
-            LEFT JOIN osm_features USING (osm_id)
-            LEFT JOIN osm_place_of_worships USING (osm_id)
-            LEFT JOIN osm_ruins USING (osm_id)
-            LEFT JOIN osm_shops USING (osm_id)
-            WHERE
-                osm_buildings.name <> '' AND
-                osm_buildings.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                osm_buildings.type <> 'no' AND
-                osm_landcovers.osm_id IS NULL AND
-                osm_features.osm_id IS NULL AND
-                osm_place_of_worships.osm_id IS NULL AND
-                osm_ruins.osm_id IS NULL AND
-                osm_shops.osm_id IS NULL
-            ORDER BY osm_buildings.osm_id";
+        SELECT
+            osm_buildings.name,
+            ST_Centroid(osm_buildings.geometry) AS geometry
+        FROM osm_buildings
+        LEFT JOIN osm_landcovers USING (osm_id)
+        LEFT JOIN osm_features USING (osm_id)
+        LEFT JOIN osm_place_of_worships USING (osm_id)
+        LEFT JOIN osm_ruins USING (osm_id)
+        LEFT JOIN osm_shops USING (osm_id)
+        WHERE
+            osm_buildings.name <> '' AND
+            osm_buildings.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+            osm_buildings.type <> 'no' AND
+            osm_landcovers.osm_id IS NULL AND
+            osm_features.osm_id IS NULL AND
+            osm_place_of_worships.osm_id IS NULL AND
+            osm_ruins.osm_id IS NULL AND
+            osm_shops.osm_id IS NULL
+        ORDER BY
+            osm_buildings.osm_id
+    ";
 
     let rows = client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())?;
 

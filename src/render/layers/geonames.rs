@@ -14,10 +14,15 @@ use postgres::Client;
 pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let _span = tracy_client::span!("geonames::render");
 
-    let sql = concat!(
-        "SELECT name, geometry FROM geonames_smooth ",
-        "WHERE geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)"
-    );
+    let sql = "
+        SELECT
+            name,
+            geometry FROM geonames_smooth
+        WHERE
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            ogc_fid
+    ";
 
     let rows = client.query(sql, &ctx.bbox_query_params(Some(20.0)).as_params())?;
 

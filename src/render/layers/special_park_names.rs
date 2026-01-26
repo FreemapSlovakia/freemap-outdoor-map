@@ -19,13 +19,18 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
     // TODO maybe move to landcover_names.rs
 
     let sql = "
-        SELECT name, geometry AS geometry
-        FROM osm_features
+        SELECT
+            name,
+            geometry
+        FROM
+            osm_features
         WHERE
             name <> '' AND
             (type = 'zoo' OR type = 'theme_park') AND
             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ORDER BY osm_id";
+        ORDER BY
+            osm_id
+    ";
 
     let text_options = TextOptions {
         flo: FontAndLayoutOptions {

@@ -19,11 +19,17 @@ pub fn render(
     let _span = tracy_client::span!("feature_lines_maskable::render");
 
     let sql = "
-        SELECT geometry, type
-        FROM osm_feature_lines
+        SELECT
+            geometry,
+            type
+        FROM
+            osm_feature_lines
         WHERE
             type NOT IN ('cutline', 'valley', 'ridge') AND
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)";
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            osm_id
+    ";
 
     let rows = client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())?;
 

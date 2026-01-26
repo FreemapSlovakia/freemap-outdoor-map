@@ -14,11 +14,14 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     // TODO maybe move to landcovers.rs
 
     let sql = "
-        SELECT geometry
-        FROM osm_landcovers
+        SELECT
+            geometry
+        FROM
+            osm_landcovers
         WHERE
             type IN ('zoo', 'theme_park') AND
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)";
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+    ";
 
     let rows = &client.query(sql, &ctx.bbox_query_params(Some(10.0)).as_params())?;
 

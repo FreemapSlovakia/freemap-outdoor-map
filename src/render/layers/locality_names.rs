@@ -14,10 +14,21 @@ use postgres::Client;
 pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
     let _span = tracy_client::span!("locality_names::render");
 
-    let sql = "SELECT name, geometry
-        FROM osm_places
-        WHERE name <> '' AND type IN ('locality', 'city_block', 'plot') AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ORDER BY z_order DESC, population DESC, osm_id";
+    let sql = "
+        SELECT
+            name,
+            geometry
+        FROM
+            osm_places
+        WHERE
+            name <> '' AND
+            type IN ('locality', 'city_block', 'plot') AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            z_order DESC,
+            population DESC,
+            osm_id
+    ";
 
     let text_options = TextOptions {
         flo: FontAndLayoutOptions {

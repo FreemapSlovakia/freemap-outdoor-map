@@ -17,17 +17,30 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
 
     let sql = "
         WITH merged AS (
-            SELECT name, ST_LineMerge(ST_Collect(geometry)) AS geometry, type, z_order, MIN(osm_id) AS osm_id
-            FROM osm_roads
+            SELECT
+                name,
+                ST_LineMerge(ST_Collect(geometry)) AS geometry,
+                type,
+                z_order,
+                MIN(osm_id) AS osm_id
+            FROM
+                osm_roads
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
                 name <> '' AND
                 NOT (class = 'railway' AND type = 'abandoned')
                 GROUP BY z_order, name, type
         )
-        SELECT name, geometry, type
-        FROM merged
-        ORDER BY z_order DESC, osm_id";
+        SELECT
+            name,
+            geometry,
+            type
+        FROM
+            merged
+        ORDER BY
+            z_order DESC,
+            osm_id
+    ";
 
     let rows = client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())?;
 

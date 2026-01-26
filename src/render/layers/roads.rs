@@ -24,12 +24,32 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     };
 
     let query = format!("
-        SELECT {table}.geometry, {table}.type, tracktype, class, service, bridge, tunnel, oneway, bicycle, foot,
+        SELECT
+            {table}.geometry,
+            {table}.type,
+            tracktype,
+            class,
+            service,
+            bridge,
+            tunnel,
+            oneway,
+            bicycle,
+            foot,
             power(0.666, greatest(0, trail_visibility - 1))::DOUBLE PRECISION AS trail_visibility,
             osm_route_members.member IS NOT NULL AS is_in_route
-        FROM {table} LEFT JOIN osm_route_members ON osm_route_members.type = 1 AND osm_route_members.member = {table}.osm_id
-        WHERE {table}.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ORDER BY z_order, CASE WHEN {table}.type = 'rail' AND service IN ('', 'main') THEN 2 ELSE 1 END, {table}.osm_id");
+        FROM
+            {table}
+        LEFT JOIN
+            osm_route_members
+        ON
+            osm_route_members.type = 1 AND
+            osm_route_members.member = {table}.osm_id
+        WHERE
+            {table}.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            z_order,
+            CASE WHEN {table}.type = 'rail' AND service IN ('', 'main') THEN 2 ELSE 1 END, {table}.osm_id
+    ");
 
     let apply_highway_defaults = |width: f64| {
         context.set_dash(&[], 0.0);

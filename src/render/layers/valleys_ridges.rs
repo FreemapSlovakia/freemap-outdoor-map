@@ -85,15 +85,23 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
     context.push_group();
 
-    let sql = format!("
+    let sql = format!(
+        "
         SELECT
-            geometry, name, LEAST(1.2, ST_Length(geometry) / 5000) AS offset_factor
+            geometry,
+            name,
+            LEAST(1.2, ST_Length(geometry) / 5000) AS offset_factor
         FROM
             osm_feature_lines
         WHERE
-            type = 'valley' AND name <> '' AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            type = 'valley' AND
+            name <> '' AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
         ORDER BY
-            ST_Length(geometry) {}", if ctx.zoom > 14 {"ASC"} else {"DESC"});
+            ST_Length(geometry) {}
+        ",
+        if ctx.zoom > 14 { "ASC" } else { "DESC" }
+    );
 
     render_rows(client.query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params())?)?;
 

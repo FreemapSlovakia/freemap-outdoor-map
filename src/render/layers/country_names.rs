@@ -57,10 +57,16 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         ..Default::default()
     };
 
-    let sql = concat!(
-        r#"SELECT name, "name:en",  geometry FROM country_names_smooth "#,
-        "WHERE geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)"
-    );
+    let sql = r#"
+        SELECT
+            name,
+            "name:en",
+            geometry
+        FROM
+            country_names_smooth
+        WHERE
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+    "#;
 
     let rows = client.query(sql, &ctx.bbox_query_params(Some(128.0)).as_params())?;
 

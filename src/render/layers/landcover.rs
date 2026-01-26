@@ -1,3 +1,4 @@
+use super::landcover_z_order::build_landcover_z_order_case;
 use crate::render::{
     SvgRepo,
     colors::{self, Color, ContextExt},
@@ -16,49 +17,47 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     let context = ctx.context;
     let min = ctx.bbox.min();
 
-    let a = "'pitch', 'playground', 'golf_course', 'track'";
+    let rows = {
+        let a = "'pitch', 'playground', 'golf_course', 'track'";
 
-    let excl_types = match ctx.zoom {
-        ..12 => &format!("type NOT IN ({a}) AND"),
-        12..13 => {
-            &format!("type NOT IN ({a}, 'parking', 'bunker_silo', 'storage_tank', 'silo') AND")
-        }
-        _ => "",
+        let excl_types = match ctx.zoom {
+            ..12 => &format!("type NOT IN ({a}) AND"),
+            12..13 => {
+                &format!("type NOT IN ({a}, 'parking', 'bunker_silo', 'storage_tank', 'silo') AND")
+            }
+            _ => "",
+        };
+
+        let table_suffix = match ctx.zoom {
+            ..=9 => "_gen0",
+            10..=11 => "_gen1",
+            12.. => "",
+        };
+
+        let z_order_case = build_landcover_z_order_case("type");
+
+        let query = &format!("
+            SELECT
+                CASE
+                    WHEN type = 'wetland' AND tags->'wetland' IN ('bog', 'reedbed', 'marsh', 'swamp', 'wet_meadow', 'mangrove', 'fen')
+                    THEN tags->'wetland'
+                    ELSE type
+                END AS type,
+                ST_Intersection(ST_MakeValid(geometry), ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), 100)) AS geometry,
+                osm_id,
+                {z_order_case} AS z_order
+            FROM
+                osm_landcovers{table_suffix}
+            WHERE
+                {excl_types}
+                geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
+            ORDER BY
+                z_order DESC NULLS LAST,
+                osm_id
+        ");
+
+        client.query(query, &ctx.bbox_query_params(None).as_params())?
     };
-
-    let table_suffix = match ctx.zoom {
-        ..=9 => "_gen0",
-        10..=11 => "_gen1",
-        12.. => "",
-    };
-
-    let query = &format!(
-        "SELECT
-            CASE
-                WHEN type = 'wetland' AND tags->'wetland' IN ('bog', 'reedbed', 'marsh', 'swamp', 'wet_meadow', 'mangrove', 'fen')
-                THEN tags->'wetland'
-                ELSE type
-            END AS type,
-            ST_Intersection(ST_MakeValid(geometry), ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), 100)) AS geometry,
-            array_position(
-                ARRAY[
-                    'pedestrian', 'footway', 'pitch', 'library', 'barracks', 'parking', 'cemetery', 'grave_yard', 'place_of_worship',
-                    'dam', 'weir', 'clearcut', 'wetland', 'scrub', 'orchard', 'vineyard', 'railway', 'landfill', 'scree', 'blockfield',
-                    'quarry', 'park', 'garden', 'allotments', 'village_green', 'grass', 'recreation_ground', 'fell', 'bare_rock', 'heath',
-                    'meadow', 'wood', 'forest', 'golf_course', 'grassland', 'farm', 'zoo', 'farmyard', 'hospital', 'kindergarten',
-                    'school', 'college', 'university', 'retail', 'commercial', 'industrial', 'farmland', 'residential', 'glacier'
-                ],
-                type
-            ) AS z_order
-        FROM osm_landcovers{table_suffix}
-        WHERE
-            {excl_types}
-            geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
-        ORDER BY z_order DESC NULLS LAST, osm_id",
-
-    );
-
-    let rows = client.query(query, &ctx.bbox_query_params(None).as_params())?;
 
     context.save()?;
 

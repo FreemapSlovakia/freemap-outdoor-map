@@ -9,10 +9,13 @@ use postgres::Client;
 pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let _span = tracy_client::span!("buildings::render");
 
-    let sql = concat!(
-        "SELECT type, geometry FROM osm_buildings ",
-        "WHERE geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)"
-    );
+    let sql = "
+        SELECT
+            type,
+            geometry FROM osm_buildings
+        WHERE
+            geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
+    ";
 
     let rows = client.query(sql, &ctx.bbox_query_params(None).as_params())?;
 

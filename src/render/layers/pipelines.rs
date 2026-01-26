@@ -11,9 +11,16 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let _span = tracy_client::span!("pipelines::render");
 
     let sql = format!(
-        "SELECT geometry, location IN('underground', 'underwater') AS below
-        FROM osm_pipelines
-        WHERE geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND location IN ({})",
+        "
+        SELECT
+            geometry,
+            location IN('underground', 'underwater') AS below
+        FROM
+            osm_pipelines
+        WHERE
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+            location IN ({})
+        ",
         if ctx.zoom < 15 {
             "'overground', 'overhead', ''"
         } else {

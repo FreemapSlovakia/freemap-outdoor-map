@@ -14,16 +14,20 @@ use postgres::Client;
 pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
     let _span = tracy_client::span!("aerialway_names::render");
 
-    let sql = concat!(
-        "SELECT geometry, name FROM osm_aerialways ",
-        "WHERE name <> '' AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) ",
-        "ORDER BY osm_id"
-    );
+    let sql = "
+        SELECT
+            geometry,
+            name
+        FROM
+            osm_aerialways
+        WHERE
+            name <> '' AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            osm_id
+    ";
 
-    let rows = client.query(
-        sql,
-        &ctx.bbox_query_params(Some(512.0)).as_params(),
-    )?;
+    let rows = client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())?;
 
     let options = TextOnLineOptions {
         distribution: Distribution::Align {

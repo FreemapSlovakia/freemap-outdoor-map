@@ -11,7 +11,16 @@ pub fn render_lines(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let _span = tracy_client::span!("power_lines::render_lines");
 
     let sql = &format!(
-        "SELECT geometry, type FROM osm_feature_lines WHERE {} AND geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)",
+        "
+        SELECT
+            geometry,
+            type
+        FROM
+            osm_feature_lines
+        WHERE
+            {} AND
+             geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
+        ",
         if ctx.zoom < 14 {
             "type = 'line'"
         } else {

@@ -11,11 +11,14 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     let _span = tracy_client::span!("embankments::render");
 
     let sql = "
-        SELECT geometry
-        FROM osm_roads
+        SELECT
+            geometry
+        FROM
+            osm_roads
         WHERE
             embankment = 1 AND
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)";
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+    ";
 
     let rows = client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())?;
 

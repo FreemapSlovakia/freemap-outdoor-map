@@ -57,16 +57,26 @@ pub fn render(ctx: &Ctx, client: &mut Client, country: Option<&str>) -> LayerRen
         let table;
 
         format!(
-            "WITH contours AS (
-            SELECT
-                ST_SimplifyVW(wkb_geometry, $6) AS geometry,
-                height_m,
-                ({width_case})::double precision AS width
-            FROM {}
-            WHERE
-                wkb_geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        )
-        SELECT geometry, height_m, width FROM contours WHERE width > 0",
+            "
+                WITH contours AS (
+                    SELECT
+                        ST_SimplifyVW(wkb_geometry, $6) AS geometry,
+                        height_m,
+                        ({width_case})::double precision AS width
+                    FROM
+                        {}
+                    WHERE
+                        wkb_geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+                )
+                SELECT
+                    geometry,
+                    height_m,
+                    width
+                FROM
+                    contours
+                WHERE
+                    width > 0
+            ",
             if let Some(country) = country {
                 table = format!("contour_{country}_split");
 

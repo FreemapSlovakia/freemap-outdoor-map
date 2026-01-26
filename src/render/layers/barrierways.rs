@@ -11,10 +11,17 @@ use crate::render::{
 pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let _span = tracy_client::span!("barrierways::render");
 
-    let sql = concat!(
-        "SELECT geometry, type FROM osm_barrierways ",
-        "WHERE geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)"
-    );
+    let sql = "
+        SELECT
+            geometry,
+            type
+        FROM
+            osm_barrierways
+        WHERE
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            osm_id
+    ";
 
     let rows = client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())?;
 

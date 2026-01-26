@@ -20,8 +20,14 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let zoom = ctx.zoom;
 
     let sql = format!(
-        "SELECT ST_Intersection(ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5), ST_Buffer(geometry, $6)) AS geometry FROM {}
-        WHERE geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)",
+        "
+        SELECT
+            ST_Intersection(ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5), ST_Buffer(geometry, $6)) AS geometry
+        FROM
+            {}
+        WHERE
+            geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
+        ",
         match zoom {
             ..=7 => "land_z5_7",
             8..=10 => "land_z8_10",

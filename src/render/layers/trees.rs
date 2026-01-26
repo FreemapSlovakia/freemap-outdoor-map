@@ -10,15 +10,22 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     let _span = tracy_client::span!("trees::render");
 
     let sql = "
-        SELECT type, geometry
-        FROM osm_features
+        SELECT
+            type,
+            geometry
+        FROM
+            osm_features
         WHERE
             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
             (
                 type = 'tree' AND (NOT (tags ? 'protected') OR tags->'protected' = 'no') AND (NOT (tags ? 'denotation') OR tags->'denotation' <> 'natural_monument')
                 OR type = 'shrub'
             )
-        ORDER BY type, st_x(geometry)";
+        ORDER BY
+            type,
+            st_x(geometry),
+            osm_id
+    ";
 
     let rows = client.query(sql, &ctx.bbox_query_params(Some(32.0)).as_params())?;
 

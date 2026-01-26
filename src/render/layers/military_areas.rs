@@ -11,12 +11,15 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let _span = tracy_client::span!("military_areas::render");
 
     let sql = "
-        SELECT geometry
-            FROM osm_landcovers
-            WHERE
-                type = 'military'
-                AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-                AND area / POWER(4, 19 - $6) > 10";
+        SELECT
+            geometry
+        FROM
+            osm_landcovers
+        WHERE
+            type = 'military'
+            AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            AND area / POWER(4, 19 - $6) > 10
+    ";
 
     let rows = &client.query(
         sql,

@@ -17,10 +17,17 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         _ => panic!("unsupported zoom"),
     };
 
-    let sql = concat!(
-        "SELECT geometry, type FROM osm_aeroways ",
-        "WHERE geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)"
-    );
+    let sql = "
+        SELECT
+            geometry,
+            type
+        FROM
+            osm_aeroways
+        WHERE
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            osm_id
+    ";
 
     let rows = client.query(sql, &ctx.bbox_query_params(Some(12.0)).as_params())?;
 
