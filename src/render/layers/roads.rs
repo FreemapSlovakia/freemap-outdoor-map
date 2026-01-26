@@ -23,7 +23,12 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         12.. => "osm_roads",
     };
 
-    let query = format!("
+    let ex;
+
+    // TODO for zoom < 12 we select too much
+
+    let query = format!(
+        "
         SELECT
             {table}.geometry,
             {table}.type,
@@ -35,21 +40,39 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             oneway,
             bicycle,
             foot,
-            power(0.666, greatest(0, trail_visibility - 1))::DOUBLE PRECISION AS trail_visibility,
-            osm_route_members.member IS NOT NULL AS is_in_route
+            power(0.666, greatest(0, trail_visibility - 1))::DOUBLE PRECISION AS trail_visibility
+            {}
         FROM
             {table}
-        LEFT JOIN
-            osm_route_members
-        ON
-            osm_route_members.type = 1 AND
-            osm_route_members.member = {table}.osm_id
+            {}
         WHERE
             {table}.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
         ORDER BY
             z_order,
-            CASE WHEN {table}.type = 'rail' AND service IN ('', 'main') THEN 2 ELSE 1 END, {table}.osm_id
-    ");
+            CASE WHEN {table}.type = 'rail' AND service IN ('', 'main') THEN 2 ELSE 1 END,
+            {table}.osm_id
+        ",
+        if zoom <= 12 {
+            ",osm_route_members.member IS NOT NULL AS is_in_route"
+        } else {
+            ""
+        },
+        if zoom <= 12 {
+            ex = format!(
+                "
+                LEFT JOIN
+                    osm_route_members
+                ON
+                    osm_route_members.type = 1 AND
+                    osm_route_members.member = -{table}.osm_id
+                "
+            );
+
+            &ex
+        } else {
+            ""
+        },
+    );
 
     let apply_highway_defaults = |width: f64| {
         context.set_dash(&[], 0.0);
