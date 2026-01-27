@@ -529,6 +529,8 @@ tables:
       - name: name
         type: string
         key: name
+      - name: area
+        type: webmerc_area
       - name: type
         type: mapping_value
         aliases:
