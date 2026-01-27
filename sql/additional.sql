@@ -1,7 +1,5 @@
 CREATE TABLE IF NOT EXISTS isolations (
   osm_id BIGINT PRIMARY KEY,
-  lon FLOAT,
-  lat FLOAT,
   isolation INT NOT NULL
 );
 

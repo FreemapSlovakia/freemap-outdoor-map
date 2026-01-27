@@ -308,6 +308,7 @@ tables:
         - __any__
 
   shops:
+    multi_values: [shop]
     columns:
       - name: osm_id
         type: id
@@ -520,6 +521,7 @@ tables:
         - nature_reserve
 
   features:
+    multi_values: [sport, amenity]
     columns:
       - name: osm_id
         type: id
@@ -581,7 +583,7 @@ tables:
         ford:
           - __any__
         mountain_pass:
-          - yes
+          - "yes"
       any:
         mappings:
           aerialway:
