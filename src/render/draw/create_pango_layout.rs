@@ -9,6 +9,7 @@ use pangocairo::{
     },
 };
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::cell::RefCell;
 
 thread_local! {
@@ -172,6 +173,11 @@ pub struct MissingGlyphsSummary {
     pub total: usize,
 }
 
+pub struct UniformGlyphsSummary {
+    pub glyph: pango::Glyph,
+    pub total: usize,
+}
+
 impl MissingGlyphsSummary {
     pub fn all_missing(&self) -> bool {
         self.total > 0 && self.missing == self.total
@@ -223,18 +229,29 @@ pub fn create_layout_checked(
     let mut layout = create_pango_layout_with_attrs(context, text, attrs, options);
 
     let mut missing = layout_missing_glyphs_summary_no_wrap(&layout);
+    let uniform = layout_uniform_glyphs_summary(&layout);
+    let suspicious_uniform = uniform.as_ref().map(|summary| summary.total >= 2).unwrap_or(false)
+        && text_has_multiple_distinct_ascii_alnum(text);
 
     if missing.missing > 0 {
         log_missing_glyphs_layout(kind, text, &layout, point, &missing);
     }
 
-    if missing.all_missing() {
+    if suspicious_uniform {
+        log_uniform_glyphs_layout(kind, text, &layout, point, uniform.as_ref().unwrap());
+    }
+
+    if missing.all_missing() || suspicious_uniform {
         let (fresh_layout, fresh_map) =
             create_pango_layout_with_attrs_fresh_map(context, text, attrs_for_retry, options);
 
         let fresh_missing = layout_missing_glyphs_summary_no_wrap(&fresh_layout);
+        let fresh_uniform = layout_uniform_glyphs_summary(&fresh_layout);
+        let fresh_suspicious_uniform =
+            fresh_uniform.as_ref().map(|summary| summary.total >= 2).unwrap_or(false)
+                && text_has_multiple_distinct_ascii_alnum(text);
 
-        if !fresh_missing.all_missing() {
+        if !fresh_missing.all_missing() && !fresh_suspicious_uniform {
             replace_thread_font_map(fresh_map);
             layout = fresh_layout;
             missing = fresh_missing;
@@ -297,5 +314,79 @@ fn layout_missing_glyphs_summary(layout: &Layout) -> MissingGlyphsSummary {
     MissingGlyphsSummary {
         missing: missing_count,
         total: total_count,
+    }
+}
+
+fn layout_uniform_glyphs_summary(layout: &Layout) -> Option<UniformGlyphsSummary> {
+    let mut iter = layout.iter();
+    let mut total_count = 0_usize;
+    let mut distinct = HashSet::new();
+
+    loop {
+        if let Some(run) = iter.run_readonly() {
+            let glyphs = run.glyph_string();
+
+            for info in glyphs.glyph_info() {
+                let glyph = info.glyph();
+                total_count += 1;
+                distinct.insert(glyph);
+            }
+        }
+
+        if !iter.next_run() {
+            break;
+        }
+    }
+
+    if total_count >= 2 && distinct.len() == 1 {
+        let glyph = *distinct.iter().next().unwrap();
+        Some(UniformGlyphsSummary {
+            glyph,
+            total: total_count,
+        })
+    } else {
+        None
+    }
+}
+
+fn text_has_multiple_distinct_ascii_alnum(text: &str) -> bool {
+    let mut distinct = HashSet::new();
+
+    for ch in text.chars() {
+        if ch.is_ascii_alphanumeric() {
+            distinct.insert(ch.to_ascii_lowercase());
+            if distinct.len() >= 2 {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+fn log_uniform_glyphs_layout(
+    kind: &str,
+    text: &str,
+    layout: &Layout,
+    point: Option<(f64, f64)>,
+    uniform: &UniformGlyphsSummary,
+) {
+    let desc = layout
+        .font_description()
+        .map(|d| d.to_str().to_string())
+        .unwrap_or_else(|| "<none>".to_string());
+    match point {
+        Some((x, y)) => {
+            eprintln!(
+                "Suspicious glyphs (uniform) in {kind} layout: text={text:?} point=({x:.2},{y:.2}) font={desc} glyph={} total={}",
+                uniform.glyph, uniform.total
+            );
+        }
+        None => {
+            eprintln!(
+                "Suspicious glyphs (uniform) in {kind} layout: text={text:?} font={desc} glyph={} total={}",
+                uniform.glyph, uniform.total
+            );
+        }
     }
 }
