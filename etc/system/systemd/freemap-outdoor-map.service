@@ -1,0 +1,18 @@
+[Unit]
+Description=Freemap Outdoor Map
+Requires=postgresql.service
+After=postgresql.service
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=freemap
+LimitNOFILE=200000
+EnvironmentFile=/etc/freemap-outdoor-map.env
+ExecStart=/home/freemap/.cargo/bin/freemap-outdoor-map
+# there seems to be some memory leak so restart the service every day
+RuntimeMaxSec=14400
+
+[Install]
+WantedBy=multi-user.target

@@ -1,10 +1,10 @@
-# RustMap
+# Freemap Outdoor Map
 
 Reimplementation of https://github.com/FreemapSlovakia/freemap-mapnik into Rust, helping Mapnik to rest in peace.
 
 ## Why?
 
-- Mapnik is no more actively developed except for keeping it to build itself with tools of the recent versions.
+- [Mapnik](https://github.com/mapnik/mapnik/) is no more actively developed except for keeping it to build itself with tools of the recent versions.
 - Better control of the rendering
 - Massively improve resource demands (CPU, memory)
 
@@ -67,6 +67,6 @@ Install Rust and build+install the app:
 cargo install --path .
 ```
 
-Configure env variables (you can use `.env` file) or pass arguments to `maprender`. Run `maprender --help` for details.
+Configure env variables (you can use `.env` file) or pass arguments to `freemap-outdoor-map`. Run `freemap-outdoor-map --help` for details.
 
 TMS URL is then `http://localhost:3050/{zoom}/{x}/{y}@2x` (adjust your scaling).
