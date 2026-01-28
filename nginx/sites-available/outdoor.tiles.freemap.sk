@@ -1,0 +1,178 @@
+log_format json_access escape=json
+'{'
+'"time":"$time_iso8601",'
+'"request_id":"$request_id",'
+'"remote_addr":"$remote_addr",'
+'"xff":"$http_x_forwarded_for",'
+'"method":"$request_method",'
+'"uri":"$uri",'
+'"args":"$args",'
+'"status":$status,'
+'"bytes_sent":$body_bytes_sent,'
+'"request_time":$request_time,'
+'"upstream_time":"$upstream_response_time",'
+'"upstream_status":"$upstream_status",'
+'"upstream_addr":"$upstream_addr",'
+'"referer":"$referrer_norm",'
+'"user_agent":"$http_user_agent",'
+'"tile":"$tile_bucket_scaled"'
+'}';
+
+map $uri $tile_bucket {
+        ~^/(?<z>\d+)/ /z/$z;
+        default /other;
+}
+
+map $uri $tile_scale {
+        ~@3x(?:\.|$) @3x;
+        ~@2x(?:\.|$) @2x;
+        default "";
+}
+
+map "$tile_bucket$tile_scale" $tile_bucket_scaled {
+        default "$tile_bucket$tile_scale";
+}
+
+map $http_referer $referrer_norm {
+        ~^https?://([^.]+\.)*oma\.sk(/.*)?$ https://oma.sk/$1$2;
+        default $http_referer;
+}
+
+map $http_origin $cors_origin {
+        default "";
+        "https://www.freemap.sk" $http_origin;
+        "https://www.freemap.eu" $http_origin;
+}
+
+map $url_scale $scale {
+        default $url_scale;
+        "" 1;
+}
+
+server {
+        server_name outdoor.tiles.freemap.sk;
+
+        access_log /var/log/nginx/outdoor.tiles.freemap.sk.access.jsonl json_access;
+
+        error_log /var/log/nginx/outdoor.tiles.freemap.sk.error.log;
+
+        add_header Alt-Svc 'h3=":$server_port"; ma=86400';
+
+        location = /robots.txt {
+                default_type text/plain;
+                return 200 "User-agent: *\nDisallow: /\n";
+        }
+
+        location /goaccess {
+                auth_basic "Go home, you are drunk!";
+                auth_basic_user_file /etc/nginx/.htpasswd-goaccess;
+                alias /var/www/goaccess/;
+        }
+
+        location /goaccess/ws {
+                auth_basic "Go home, you are drunk!";
+                auth_basic_user_file /etc/nginx/.htpasswd-goaccess;
+
+                proxy_pass http://127.0.0.1:7890;
+
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+
+                proxy_set_header Host $host;
+                proxy_read_timeout 1h;
+        }
+
+        location /wmts {
+                root /var/www/outdoor.wmts;
+        }
+
+        location /service {
+                proxy_pass http://localhost:4000/service;
+        }
+
+        location /export {
+                if ($request_method = OPTIONS) {
+                        add_header Access-Control-Allow-Origin $http_origin;
+                        add_header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS";
+                        add_header Access-Control-Allow-Headers "Authorization, Content-Type, Accept, Origin";
+                        add_header Access-Control-Max-Age 86400;
+                        return 204;
+                }
+
+                add_header Access-Control-Allow-Origin $http_origin always;
+
+                proxy_pass http://localhost:4000/export;
+        }
+
+        location ~ ^/legend-image/([0-9]+)$ {
+                default_type image/png;
+
+                set $scale $arg_scale;
+
+                if ($scale = "") {
+                        set $scale 1;
+                }
+
+                root /var/www; # parent of legend-static
+                try_files /legend-static/$1--scale=$scale =404;
+        }
+
+        location ~ /(legend-image/.*|legend) {
+                proxy_pass http://localhost:4000/$1$is_args$args;
+                proxy_cache LEGEND;
+                proxy_ignore_headers Cache-Control;
+                proxy_cache_valid 200 60d;
+                proxy_cache_use_stale error timeout invalid_header updating http_500 http_502 http_503 http_504;
+                proxy_cache_key $scheme$proxy_host$uri$is_args$args;
+        }
+
+        location ~ \.index$ {
+                return 404;
+        }
+
+        location ~ ^/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[123])x)?(?:\.(?:jpe?g|png))?$ {
+                add_header Cache-Control no-cache;
+                add_header Access-Control-Allow-Origin $http_origin always;
+                add_header X-Tile-Source cache;
+
+                alias /fm/data4/X-tiles/;
+
+                try_files $ {
+                        bas
+                }
+                @$ {
+                        scal
+                }
+                .jpeg =404;
+                error_page 404 = @fallback;
+        }
+
+        location @fallback {
+                add_header Access-Control-Allow-Origin $http_origin always;
+                add_header Cache-Control no-cache;
+                add_header X-Tile-Source render;
+                proxy_pass http://localhost:4000/$ {
+                        bas
+                }
+                @$ {
+                        scal
+                }
+                x.jpeg;
+                error_page 404 /40x.html;
+        }
+
+        http2 on;
+        http3 on;
+
+        listen 443 quic reuseport;
+        listen [::]:443 quic reuseport;
+
+        listen 443 ssl;
+        listen [::]:443 ssl;
+
+        ssl_certificate /etc/letsencrypt/live/outdoor.tiles.freemap.sk/fullchain.pem; # managed by Certbot
+        ssl_certificate_key /etc/letsencrypt/live/outdoor.tiles.freemap.sk/privkey.pem; # managed by Certbot
+        include /etc/letsencrypt/options-ssl-nginx.conf;
+        ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+}
