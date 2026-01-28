@@ -9,8 +9,8 @@ use pangocairo::{
     },
 };
 use std::borrow::Cow;
-use std::collections::HashSet;
 use std::cell::RefCell;
+use std::collections::HashSet;
 
 thread_local! {
     static PANGO_FONT_MAP: RefCell<pango::FontMap> = RefCell::new(FontMap::new());
@@ -168,52 +168,9 @@ fn create_pango_layout_with_attrs_on_font_map(
     layout
 }
 
-pub struct MissingGlyphsSummary {
-    pub missing: usize,
-    pub total: usize,
-}
-
 pub struct UniformGlyphsSummary {
     pub glyph: pango::Glyph,
     pub total: usize,
-}
-
-impl MissingGlyphsSummary {
-    pub fn all_missing(&self) -> bool {
-        self.total > 0 && self.missing == self.total
-    }
-}
-
-pub fn log_missing_glyphs_layout(
-    kind: &str,
-    text: &str,
-    layout: &Layout,
-    point: Option<(f64, f64)>,
-    missing: &MissingGlyphsSummary,
-) {
-    let desc = layout
-        .font_description()
-        .map(|d| d.to_str().to_string())
-        .unwrap_or_else(|| "<none>".to_string());
-    let all_missing = if missing.all_missing() {
-        "all"
-    } else {
-        "partial"
-    };
-    match point {
-        Some((x, y)) => {
-            eprintln!(
-                "Missing glyphs ({all_missing}) in {kind} layout: text={text:?} point=({x:.2},{y:.2}) font={desc} missing={} total={}",
-                missing.missing, missing.total
-            );
-        }
-        None => {
-            eprintln!(
-                "Missing glyphs ({all_missing}) in {kind} layout: text={text:?} font={desc} missing={} total={}",
-                missing.missing, missing.total
-            );
-        }
-    }
 }
 
 pub fn create_layout_checked(
@@ -228,93 +185,36 @@ pub fn create_layout_checked(
 
     let mut layout = create_pango_layout_with_attrs(context, text, attrs, options);
 
-    let mut missing = layout_missing_glyphs_summary_no_wrap(&layout);
     let uniform = layout_uniform_glyphs_summary(&layout);
-    let suspicious_uniform = uniform.as_ref().map(|summary| summary.total >= 2).unwrap_or(false)
+    let suspicious_uniform = uniform
+        .as_ref()
+        .map(|summary| summary.total >= 2)
+        .unwrap_or(false)
         && text_has_multiple_distinct_ascii_alnum(text);
-
-    if missing.missing > 0 {
-        log_missing_glyphs_layout(kind, text, &layout, point, &missing);
-    }
 
     if suspicious_uniform {
         log_uniform_glyphs_layout(kind, text, &layout, point, uniform.as_ref().unwrap());
     }
 
-    if missing.all_missing() || suspicious_uniform {
+    if suspicious_uniform {
         let (fresh_layout, fresh_map) =
             create_pango_layout_with_attrs_fresh_map(context, text, attrs_for_retry, options);
 
-        let fresh_missing = layout_missing_glyphs_summary_no_wrap(&fresh_layout);
         let fresh_uniform = layout_uniform_glyphs_summary(&fresh_layout);
-        let fresh_suspicious_uniform =
-            fresh_uniform.as_ref().map(|summary| summary.total >= 2).unwrap_or(false)
-                && text_has_multiple_distinct_ascii_alnum(text);
+        let fresh_suspicious_uniform = fresh_uniform
+            .as_ref()
+            .map(|summary| summary.total >= 2)
+            .unwrap_or(false)
+            && text_has_multiple_distinct_ascii_alnum(text);
 
-        if !fresh_missing.all_missing() && !fresh_suspicious_uniform {
+        if !fresh_suspicious_uniform {
             replace_thread_font_map(fresh_map);
             layout = fresh_layout;
-            missing = fresh_missing;
             eprintln!("Recovered missing glyphs with fresh font map: text={text:?}");
         }
     }
 
-    if missing.all_missing() {
-        eprintln!("Recovery (glyphs) did not help!");
-
-        return Err(cairo::Error::InvalidString);
-    }
-
     Ok(layout)
-}
-
-fn layout_missing_glyphs_summary_no_wrap(layout: &Layout) -> MissingGlyphsSummary {
-    let width = layout.width();
-    let wrap = layout.wrap();
-
-    layout.set_width(-1);
-    layout.set_wrap(WrapMode::Word);
-
-    let missing = layout_missing_glyphs_summary(layout);
-
-    layout.set_width(width);
-    layout.set_wrap(wrap);
-
-    missing
-}
-
-fn layout_missing_glyphs_summary(layout: &Layout) -> MissingGlyphsSummary {
-    let mut iter = layout.iter();
-    let mut missing_count = 0_usize;
-    let mut total_count = 0_usize;
-
-    loop {
-        if let Some(run) = iter.run_readonly() {
-            let glyphs = run.glyph_string();
-
-            for info in glyphs.glyph_info() {
-                let glyph = info.glyph();
-
-                total_count += 1;
-
-                if glyph == pango::GLYPH_EMPTY
-                    || glyph == pango::GLYPH_INVALID_INPUT
-                    || (glyph & pango::GLYPH_UNKNOWN_FLAG) != 0
-                {
-                    missing_count += 1;
-                }
-            }
-        }
-
-        if !iter.next_run() {
-            break;
-        }
-    }
-
-    MissingGlyphsSummary {
-        missing: missing_count,
-        total: total_count,
-    }
 }
 
 fn layout_uniform_glyphs_summary(layout: &Layout) -> Option<UniformGlyphsSummary> {
