@@ -61,8 +61,12 @@ TODO
 
 ## Running
 
-Install Rust.
+Install Rust and build+install the app:
 
-Configure [.env](./.env) and run `cargo run`.
+```sh
+cargo install --path .
+```
+
+Configure env variables (you can use `.env` file) or pass arguments to `maprender`. Run `maprender --help` for details.
 
 TMS URL is then `http://localhost:3050/{zoom}/{x}/{y}@2x` (adjust your scaling).
