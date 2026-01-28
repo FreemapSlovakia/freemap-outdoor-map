@@ -1,0 +1,15 @@
+[Unit]
+Description=Imposm
+Requires=postgresql.service
+After=postgresql.service
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=freemap
+WorkingDirectory=/home/freemap/X
+ExecStart=/home/freemap/X/imposm3-fm/imposm run -connection postgis://freemap:freemap4ever@localhost/freemap -mapping mapping.yaml -limitto europe-ok.geojson -limittocachebuffer 10000 -cachedir cache -diffdir diff -expiretiles-zoom 14 -expiretiles-dir expires
+
+[Install]
+WantedBy=multi-user.target
