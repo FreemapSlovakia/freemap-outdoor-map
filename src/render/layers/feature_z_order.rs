@@ -51,6 +51,7 @@ pub(crate) const FEATURE_Z_ORDER: &[&str] = &[
     "pharmacy",
     "golf_course",
     "miniature_golf",
+    "skiing",
     "soccer",
     "tennis",
     "basketball",
