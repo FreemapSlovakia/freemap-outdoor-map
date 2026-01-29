@@ -197,6 +197,8 @@ static POIS: LazyLock<HashMap<&'static str, Vec<Def>>> = LazyLock::new(|| {
         (14, 15, N, N, "free_flying", Extra::default()),
         (14, 15, N, N, "forester's_lodge", Extra::default()),
         (14, 15, N, N, "horse_riding", Extra::default()),
+        (14, 15, N, N, "equestrian", Extra { icon: Some("horse_riding"), ..Extra::default() }),
+        (14, 15, N, N, "horse_racing", Extra { icon: Some("horse_riding"), ..Extra::default() }), // TODO use different icon
         (14, 15, N, N, "golf_course", Extra::default()),
         // TODO (14, 14, N, N, "recycling", Extra { text_color: colors::AREA_LABEL, ..Extra::default() }), // { icon: null } // has no icon yet - render as area name
         (15, NN, Y, N, "guidepost_noname", Extra { icon: Some("guidepost_x"), ..Extra::default() }),
