@@ -21,6 +21,7 @@ pub(crate) const LANDCOVER_Z_ORDER: &[&str] = &[
     "blockfield",
     "quarry",
     "park",
+    "dog_park",
     "garden",
     "allotments",
     "village_green",

@@ -207,6 +207,10 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             "park" => {
                 colour_area(colors::GRASSY)?;
             }
+            "dog_park" => {
+                colour_area(colors::GRASSY)?;
+                pattern_area("dog_park")?;
+            }
             "parking" => {
                 colour_area(colors::PARKING)?;
 
