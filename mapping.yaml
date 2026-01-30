@@ -595,62 +595,211 @@ tables:
             mapping:
               aeroway:
                 - aerodrome
+                - helipad
           amenity:
             mapping:
               amenity:
+                - animal_boarding
+                - animal_breeding
+                - animal_shelter
+                - animal_training
+                - archive
+                - arts_centre
                 - atm
+                - baby_hatch
+                - baking_oven
                 - bank
                 - bar
                 - bbq
                 - bench
                 - bicycle_parking
                 - bicycle_rental
+                - bicycle_repair_station
+                - bicycle_wash
                 - biergarten
+                - binoculars
+                - boat_rental
+                - boat_sharing
+                - boat_storage
+                - border_control
+                - brothel
+                - bts
+                - building_yard
+                - bureau_de_change
                 - bus_station
                 - cafe
+                - camping
+                - canteen
+                - car_pooling
+                - car_rental
+                - car_sharing
                 - car_wash
+                - carpet_washing
+                - casino
+                - chair
+                - charging_station
+                - checkpoint
+                - childcare
                 - cinema
                 - clinic
+                - clock
+                - clothes_dryer
+                - clubhouse
                 - college
                 - community_centre
+                - compressed_air
+                - concert_hall
+                - conference_centre
+                - courthouse
+                - coworking_space
+                - crematorium
+                - customs
+                - dancing_school
                 - dentist
+                - device_charging_station
+                - dive_centre
                 - doctors
+                - dog_toilet
+                - dojo
+                - dormitory
+                - dressing_room
                 - drinking_water
+                - driver_training
+                - driving_school
+                - events_venue
+                - exhibition_centre
                 - fast_food
                 - feeding_place
+                - ferry_terminal
+                - festival_grounds
                 - fire_station
-                - fountain # TODO consider drinking_water=*
+                - food_court
+                - food_sharing
+                - fountain
                 - fuel
+                - funeral_hall
+                - gambling
                 - game_feeding
+                - give_box
+                - grave_yard
+                - grit_bin
+                - harbourmaster
+                - hookah_lounge
                 - hospital
                 - hunting_stand
+                - hydrant
                 - ice_cream
+                - internet_cafe
+                - kick-scooter_parking
+                - kick-scooter_rental
                 - kindergarten
+                - kitchen
+                - kneipp_water_cure
+                - language_school
+                - lavoir
+                - letter_box
                 - library
+                - library_dropoff
+                - loading_dock
+                - locker
+                - lounge
+                - lounger
+                - luggage_locker
+                - marketplace
+                - mobile_library
+                - mobility_hub
                 - monastery
+                - money_transfer
+                - mortuary
+                - motorcycle_parking
+                - motorcycle_rental
+                - music_school
+                - music_venue
+                - nameplate
+                - nightclub
+                - nursing_home
+                - office
+                - parcel_locker
                 - parking
+                - parking_entrance
+                - parking_space
+                - payment_centre
+                - payment_terminal
                 - pharmacy
+                - photo_booth
+                - piano
+                - place_of_mourning
+                - place_of_worship
+                - planetarium
                 - police
+                - polling_station
                 - post_box
+                - post_depot
                 - post_office
+                - power_supply
+                - prep_school
+                - prison
                 - pub
+                - public_bath
+                - public_bookcase
+                - public_building
                 - ranger_station
+                - reception_desk
                 - recycling
+                - refugee_site
+                - rescue_station
+                - research_institute
                 - restaurant
+                - sanatorium
+                - sanitary_dump_station
                 - school
+                - scooter_parking
+                - security_booth
+                - shelf
                 - shelter
-                - swimming_pool
+                - shower
+                - ski_rental
+                - ski_school
+                - smoking_area
+                - social_centre
+                - social_club
+                - social_facility
+                - spa
+                - stables
+                - stage
+                - stripclub
+                - student_accommodation
+                - studio
+                - surf_school
+                - swingerclub
+                - table
                 - taxi
                 - telephone
                 - theatre
+                - ticket_validator
                 - toilets
                 - townhall
+                - toy_library
+                - traffic_park
+                - training
+                - trolley_bay
                 - university
+                - vacuum_cleaner
+                - vehicle_inspection
+                - vehicle_ramp
+                - vending_machine
                 - veterinary
+                - veterinary_pharmacy
+                - warehouse
+                - washing_machine
                 - waste_basket
                 - waste_disposal
+                - waste_transfer_station
+                - water
                 - water_point
                 - watering_place
+                - weighbridge
+                - workshop
           # TODO only gate, lift_gate and swing_gate is renderred now
           barrier:
             mapping:
@@ -688,12 +837,24 @@ tables:
           emergency:
             mapping:
               emergency:
-                - access_point # TODO
+                - access_point
+                - ambulance_station
+                - defibrillator
+                - fire_extinguisher
+                - fire_hydrant
+                - first_aid_kit
+                - lifeguard
+                - life_ring
+                - mountain_rescue
+                - phone
+                - siren
+                - water_rescue
           highway:
             mapping:
               highway:
                 - bus_stop
                 - rest_area
+                - street_lamp
           historic:
             mapping:
               historic:
@@ -708,6 +869,7 @@ tables:
                 - monastery
                 - monument
                 - ruins
+                - tomb
                 - tree_shrine
                 - wayside_cross
                 - wayside_shrine
