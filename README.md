@@ -1,12 +1,12 @@
 # Freemap Outdoor Map
 
-Reimplementation of https://github.com/FreemapSlovakia/freemap-mapnik into Rust, helping Mapnik to rest in peace.
+Reimplementation of https://github.com/FreemapSlovakia/freemap-mapnik into Rust.
 
 ## Why?
 
 - [Mapnik](https://github.com/mapnik/mapnik/) is no more actively developed except for keeping it to build itself with tools of the recent versions.
-- Better control of the rendering
-- Massively improve resource demands (CPU, memory)
+- Total control of the rendering
+- Massively improved resource demands (CPU, memory)
 
 ## Technical details
 
@@ -18,7 +18,9 @@ Reimplementation of https://github.com/FreemapSlovakia/freemap-mapnik into Rust,
 
 ```sh
 wget https://osmdata.openstreetmap.de/download/land-polygons-complete-3857.zip
+
 unzip land-polygons-complete-3857.zip
+
 ogr2ogr \
   -f PostgreSQL \
   PG:"host=localhost dbname=osm_db user=osm_user password=pw" \
@@ -30,34 +32,109 @@ ogr2ogr \
   -t_srs EPSG:3857 \
   -nlt PROMOTE_TO_MULTI \
   -overwrite
+
+psql < sql/land-polygons.sql
 ```
 
-## Import country borders
+## Peak isolations
 
-TODO: try to replace `borders-tool` and JOSM steps
+TBD
+
+Old manual can be found at https://github.com/FreemapSlovakia/freemap-mapnik/blob/develop/doc/PEAK_ISOLATION.md
+
+## Contours and shaded relief
+
+TBD
+
+Old manual can be found at https://github.com/FreemapSlovakia/freemap-mapnik/blob/develop/doc/SHADING_AND_CONTOURS.md
+
+## Country labels
+
+Import hand-crafted country labels:
 
 ```sh
+psql < sql/country-names.sql
+```
+
+## Geonames
+
+Import hand-crafted country geonames (eg.mountain range names):
+
+```sh
+psql < sql/geonames.sql
+```
+
+## Country borders
+
+Geofabrik extracts don't contain complete borders of coutrines of our interest. Therefore we import all country borders from `planet.osm.pbf`:
+
+```sh
+# fast-download planet file (use wget if you are poor)
 aria2c -x 16 https://planet.osm.org/pbf/planet-latest.osm.pbf
-osmium tags-filter -t -o admin_level_2.osm.pbf planet-251215.osm.pbf r/admin_level=2
-borders-tool make-borders planet-251215.osm.pbf countries.osm.pbf
-```
 
-Now open countries.osm.pbf in JOSM and download missing members and save it. Follow:
+# extract country boundaries
+osmium tags-filter -t -o admin_level_2_with_refs.osm.pbf planet-251215.osm.pbf r/admin_level=2
+osmium tags-filter -o boundary_admin_level_2_with_refs.osm.pbf admin_level_2_with_refs.osm.pbf r/boundary=administrative
+osmium tags-filter -R -i -o boundary_admin_level_not2_with_garbage.osm.pbf boundary_admin_level_2_with_refs.osm.pbf r/admin_level=2
+osmium cat -t relation -o boundary_admin_level_not2.osm.pbf boundary_admin_level_not2_with_garbage.osm.pbf
+osmium removeid -I boundary_admin_level_not2.osm.pbf -o country_borders_with_garbage.osm.pbf boundary_admin_level_2_with_refs.osm.pbf
+osmium tags-filter -o country_borders.osm.pbf country_borders_with_garbage.osm.pbf r/admin_level=2
 
-```sh
-imposm import -connection postgis://osm_db:pw@localhost/osm_db -mapping borders.yaml -read countries.osm.pbf -write -overwritecache
-imposm import -connection postgis://osm_db:pw@localhost/osm_db -mapping borders.yaml -deployproduction
+# import country bondaries
+imposm import -connection postgis: -mapping borders.yaml -read countries.osm.pbf -write -overwritecache
+imposm import -connection postgis: -mapping borders.yaml -deployproduction
 ```
 
 ## Importing OSM data
 
-You must use [Imposm with improvements](https://github.com/FreemapSlovakia/imposm3).
+Create new postgres database and initialize it as DB superuser with [initial.sql](./sql/initial.sql):
 
-TODO document. For now see https://github.com/FreemapSlovakia/freemap-mapnik/blob/develop/doc/INSTALL.md but ignore Nodejs stuff.
+```sh
+export PGDATABASE=...
+export PGPASSWORD=...
+export PGUSER=...
+sudo -u postgres psql < sql/initial.sql
+```
+
+⚠️ You must use [Imposm with improvements](https://github.com/FreemapSlovakia/imposm3).
+
+Import OSM data:
+
+```sh
+imposm import \
+  -connection postgis: \
+  -mapping mapping.yaml \
+  -read europe-latest.osm.pbf \
+  -diff \
+  -write \
+  -cachedir ./cache \
+  -diffdir ./diff \
+  -overwritecache \
+  -limitto limit-europe.geojson \
+  -limittocachebuffer 10000 \
+  -optimize
+```
+
+\* includes arguments that enable (eg minutely) updates
+
+Deploy the import:
+
+```sh
+imposm import \
+  -connection postgis: \
+  -mapping mapping.yaml \
+  -deployproduction
+```
+
+Now import [additional.sql](./sql/additional.sql):
+
+```sh
+psql < sql/additional.sql
+```
 
 ## Fonts
 
-TODO
+Install fonts referenced from [fonts.conf](./fonts.conf).
 
 ## Running
 
@@ -70,3 +147,18 @@ cargo install --path .
 Configure env variables (you can use `.env` file) or pass arguments to `freemap-outdoor-map`. Run `freemap-outdoor-map --help` for details.
 
 TMS URL is then `http://localhost:3050/{zoom}/{x}/{y}@2x` (adjust your scaling).
+
+## Nginx
+
+For production it is advisable to use a proxy server.
+For Nginx you can find configuration in [outdoor.tiles.freemap.sk](./etc/nginx/sites-available/outdoor.tiles.freemap.sk).
+
+## Systemd service
+
+In the production the freemap-outdoor-map should run as a system service.
+You can use [freemap-outdoor-map.service](./etc/system/systemd/freemap-outdoor-map.service) systemd unit file.
+For Imposm3 see [imposm.service](./etc/system/systemd/imposm.service).
+
+## API
+
+TBD

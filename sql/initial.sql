@@ -1,3 +1,17 @@
+\getenv db_name PGDATABASE
+\getenv db_password PGPASSWORD
+\getenv db_user PGUSER
+
+GRANT CREATE ON DATABASE :db_name TO :db_user;
+
+ALTER USER :db_user WITH PASSWORD :db_password;
+
+GRANT ALL ON SCHEMA public TO :db_name;
+
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+CREATE EXTENSION IF NOT EXISTS postgis_topology;
+
 CREATE EXTENSION IF NOT EXISTS intarray;
 
 CREATE EXTENSION IF NOT EXISTS hstore;
