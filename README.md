@@ -74,7 +74,7 @@ psql < sql/country-names.sql
 
 ## Geonames
 
-Import hand-crafted country geonames (e.g., mountain range names):
+Import hand-crafted geonames (e.g., mountain range names):
 
 ```sh
 psql < sql/geonames.sql
