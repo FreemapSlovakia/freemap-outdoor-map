@@ -144,9 +144,9 @@ Install Rust and build+install the app:
 cargo install --path .
 ```
 
-Configure env variables (you can use `.env` file) or pass arguments to `freemap-outdoor-map`. Run `freemap-outdoor-map --help` for details.
+Configure environment variables or pass configuration as commandline arguments to `freemap-outdoor-map`. Run `freemap-outdoor-map --help` for details.
 
-The TMS URL is `http://localhost:3050/{zoom}/{x}/{y}@2x` (adjust your scaling).
+For enfironment variables you can use `.env` file. See [.env.sample](./.env.sample).
 
 ## Nginx
 
@@ -161,4 +161,104 @@ For Imposm3 see [imposm.service](./etc/system/systemd/imposm.service).
 
 ## API
 
-TBD
+### TMS
+
+"TMS" URL template:
+
+`http://localhost:3050/{zoom}/{x}/{y}@{scale}x`
+
+### Map export
+
+Request:
+
+<details>
+<summary>POST /export</summary>
+
+```http
+POST /export
+Content-Type: application/json
+
+{
+  "bbox": [
+    20.973758697509766,
+    48.749454680489244,
+    21.086025238037113,
+    48.81325072203008
+  ],
+  "zoom": 14,
+  "format": "jpeg",
+  "scale": 3.125,
+  "features": {
+    "shading": true,
+    "contours": true,
+    "hikingTrails": true,
+    "bicycleTrails": true,
+    "skiTrails": true,
+    "horseTrails": true,
+    "featureCollection": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": {
+            "name": "Yay!",
+            "color": "#1100ff",
+            "width": 4
+          },
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [
+              [
+                21.031780242919922,
+                48.77615934438715
+              ],
+              [
+                21.043024063110355,
+                48.7859437268498
+              ]
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
+
+```
+
+</details>
+<br>
+Response:
+
+```http
+200 OK
+Content-Type: aaplication/json
+
+{"token":"6f41b0ebf3bef99cad07c1041fac3339"}
+```
+
+**Waiting for export:**
+
+Request:
+
+```http
+HEAD /export?token=6f41b0ebf3bef99cad07c1041fac3339
+```
+
+Responds with 200 OK if ready or times out if still exporting.
+
+**Downloading export:**
+
+```http
+GET /export?token=6f41b0ebf3bef99cad07c1041fac3339
+```
+
+**Deleting export:**
+
+```http
+DELETE /export?token=6f41b0ebf3bef99cad07c1041fac3339
+```
+
+### WMTS
+
+Endpoint: `/service`

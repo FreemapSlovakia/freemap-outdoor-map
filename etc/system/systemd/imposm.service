@@ -9,7 +9,15 @@ Restart=always
 RestartSec=1
 User=freemap
 WorkingDirectory=/home/freemap/X
-ExecStart=/home/freemap/X/imposm3-fm/imposm run -connection postgis://osm_user:osm_password@localhost/osm_db -mapping mapping.yaml -limitto limit.geojson -limittocachebuffer 10000 -cachedir cache -diffdir diff -expiretiles-zoom 14 -expiretiles-dir expires
+ExecStart=/home/freemap/X/imposm3-fm/imposm run \
+  -connection postgis://osm_user:osm_password@localhost/osm_db \
+  -mapping freemap-outdoor-map/mapping.yaml \
+  -limitto freemap-outdoor-map/limit-europe.geojson \
+  -limittocachebuffer 10000 \
+  -cachedir cache \
+  -diffdir diff \
+  -expiretiles-zoom 14 \
+  -expiretiles-dir expires
 
 [Install]
 WantedBy=multi-user.target
