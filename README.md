@@ -153,7 +153,7 @@ cargo install --path .
 
 Configure environment variables or pass configuration as commandline arguments to `freemap-outdoor-map`. Run `freemap-outdoor-map --help` for details.
 
-For enfironment variables you can use `.env` file. See [.env.sample](./.env.sample).
+For environment variables you can use `.env` file. See [.env.sample](./.env.sample).
 
 ## Nginx
 
