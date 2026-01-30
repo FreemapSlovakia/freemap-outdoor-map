@@ -14,6 +14,22 @@ Reimplementation of https://github.com/FreemapSlovakia/freemap-mapnik in Rust.
 - Uses Cairo for rendering
 - Uses GDAL to read GeoTIFFs
 
+## Create database
+
+Setup DB environment variables. We will use them later at other places too:
+
+```sh
+export PGDATABASE=...
+export PGPASSWORD=...
+export PGUSER=...
+```
+
+Create new postgres database and initialize it as DB superuser with [initial.sql](./sql/initial.sql):
+
+```sh
+sudo -u postgres psql < sql/initial.sql
+```
+
 ## Land polygons
 
 ```sh
@@ -87,15 +103,6 @@ imposm import -connection postgis: -mapping borders.yaml -deployproduction
 
 ## Importing OSM data
 
-Create new postgres database and initialize it as DB superuser with [initial.sql](./sql/initial.sql):
-
-```sh
-export PGDATABASE=...
-export PGPASSWORD=...
-export PGUSER=...
-sudo -u postgres psql < sql/initial.sql
-```
-
 ⚠️ You must use [Imposm with improvements](https://github.com/FreemapSlovakia/imposm3).
 
 Import OSM data:
@@ -134,7 +141,7 @@ psql < sql/additional.sql
 
 ## Fonts
 
-Install fonts referenced from [fonts.conf](./fonts.conf).
+Install fonts referenced from [fonts.conf](./fonts.conf) and upon running `freemap-outdoor-map` set its pathname to environment variable `FONTCONFIG_FILE`.
 
 ## Running
 
@@ -232,7 +239,7 @@ Response:
 
 ```http
 200 OK
-Content-Type: aaplication/json
+Content-Type: aplication/json
 
 {"token":"6f41b0ebf3bef99cad07c1041fac3339"}
 ```
