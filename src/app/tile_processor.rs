@@ -1,3 +1,5 @@
+use sled::Batch;
+
 use crate::app::tile_coord::TileCoord;
 use std::{
     collections::HashMap,
@@ -84,7 +86,7 @@ impl TileProcessor {
         }
     }
 
-    fn remove(self: &Self, coord: TileCoord, scales: impl AsRef<[u8]>) {
+    fn remove(self: &Self, batch: &mut Batch, coord: TileCoord, scales: impl AsRef<[u8]>) {
         for scale in scales.as_ref() {
             let path = cached_tile_path(&self.config.tile_cache_base_path, coord, *scale as f64);
 
@@ -97,11 +99,7 @@ impl TileProcessor {
 
         let key: Vec<u8> = coord.into();
 
-        if let Some(ref db) = self.db
-            && let Err(err) = db.remove(key)
-        {
-            eprintln!("failed to remove {} from DB: {err}", coord);
-        }
+        batch.remove(key)
     }
 
     pub(crate) fn handle_invalidation(&mut self, coord: TileCoord, invalidated_at: SystemTime) {
@@ -113,12 +111,14 @@ impl TileProcessor {
 
         let key: Vec<u8> = coord.into();
 
+        let mut batch = Batch::default();
+
         for item in db.scan_prefix(key) {
             match item {
                 Ok(entry) => {
                     let coord = entry.0.as_ref().into();
 
-                    self.remove(coord, entry.1);
+                    self.remove(&mut batch, coord, entry.1);
                 }
                 Err(err) => {
                     eprint!("error scanning {coord}: {err}");
@@ -142,8 +142,8 @@ impl TileProcessor {
 
             let key: Vec<u8> = coord.into();
 
-            let h = match db.get(key) {
-                Ok(Some(v)) => v,
+            let scales = match db.get(key) {
+                Ok(Some(scales)) => scales,
                 Ok(None) => continue,
                 Err(err) => {
                     eprintln!("failed to get {} from DB: {err}", coord);
@@ -152,7 +152,11 @@ impl TileProcessor {
                 }
             };
 
-            self.remove(coord, h);
+            self.remove(&mut batch, coord, scales);
+        }
+
+        if let Err(err) = db.apply_batch(batch) {
+            eprintln!("failed to apply DB remove batch for {}: {err}", coord);
         }
     }
 
