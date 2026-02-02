@@ -59,11 +59,10 @@ pub(crate) fn start() {
 
     let mut tile_processing_worker = None;
 
-    if let Some(tile_cache_root) = cli.tile_cache_root.clone() {
+    if let Some(tile_cache_base_path) = cli.tile_cache_base_path.clone() {
         let processing_config = TileProcessingConfig {
-            tile_cache_root,
-            index_zoom: cli.index_zoom,
-            max_zoom: cli.max_zoom,
+            tile_cache_base_path,
+            tile_index: cli.index,
             invalidate_min_zoom: cli.invalidate_min_zoom,
         };
 
@@ -89,7 +88,7 @@ pub(crate) fn start() {
 
     rt.block_on(start_server(
         render_worker_pool,
-        cli.tile_cache_root.clone(),
+        cli.tile_cache_base_path.clone(),
         tile_processing_worker,
         cli.serve_cached,
         cli.max_zoom,

@@ -19,29 +19,6 @@ impl TileCoord {
             y: self.y / 2,
         })
     }
-
-    pub(crate) fn ancestor_at_zoom(self, zoom: u8) -> Option<Self> {
-        if self.zoom <= zoom {
-            return None;
-        }
-
-        let shift = self.zoom - zoom;
-
-        Some(Self {
-            zoom,
-            x: self.x >> shift,
-            y: self.y >> shift,
-        })
-    }
-
-    pub(crate) fn is_ancestor_of(self, other: Self) -> bool {
-        if self.zoom > other.zoom {
-            return false;
-        }
-
-        let shift = other.zoom - self.zoom;
-        (other.x >> shift) == self.x && (other.y >> shift) == self.y
-    }
 }
 
 impl Display for TileCoord {
@@ -82,4 +59,166 @@ pub(crate) enum TileCoordParseError {
     ParseInt(#[from] std::num::ParseIntError),
     #[error(transparent)]
     ParseFloat(#[from] std::num::ParseFloatError),
+}
+
+impl From<&[u8]> for TileCoord {
+    fn from(value: &[u8]) -> Self {
+        let z = value.len();
+
+        assert!(z <= 32);
+
+        let (mut x, mut y) = (0u32, 0u32);
+
+        for &d in value {
+            assert!(d <= 3);
+
+            x = (x << 1) | u32::from(d & 1);
+
+            y = (y << 1) | u32::from((d >> 1) & 1);
+        }
+
+        Self {
+            zoom: z as u8,
+
+            x,
+
+            y,
+        }
+    }
+}
+
+impl From<TileCoord> for Vec<u8> {
+    fn from(t: TileCoord) -> Self {
+        let z = t.zoom as usize;
+
+        assert!(z <= 32);
+
+        assert!(z == 0 || t.x < (1u32 << z));
+
+        assert!(z == 0 || t.y < (1u32 << z));
+
+        let mut out = Vec::with_capacity(z);
+
+        for level in 0..z {
+            let bit = (z - 1 - level) as u32;
+
+            let bx = ((t.x >> bit) & 1) as u8;
+
+            let by = ((t.y >> bit) & 1) as u8;
+
+            out.push((by << 1) | bx);
+        }
+
+        out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_empty_is_z0() {
+        let t = TileCoord::from(&[] as &[u8]);
+
+        assert_eq!(t.zoom, 0);
+
+        assert_eq!(t.x, 0);
+
+        assert_eq!(t.y, 0);
+    }
+
+    #[test]
+    fn quadrants_z1() {
+        assert_eq!(
+            TileCoord::from([0u8].as_slice()),
+            TileCoord {
+                zoom: 1,
+                x: 0,
+                y: 0
+            }
+        );
+
+        assert_eq!(
+            TileCoord::from([1u8].as_slice()),
+            TileCoord {
+                zoom: 1,
+                x: 1,
+                y: 0
+            }
+        );
+
+        assert_eq!(
+            TileCoord::from([2u8].as_slice()),
+            TileCoord {
+                zoom: 1,
+                x: 0,
+                y: 1
+            }
+        );
+
+        assert_eq!(
+            TileCoord::from([3u8].as_slice()),
+            TileCoord {
+                zoom: 1,
+                x: 1,
+                y: 1
+            }
+        );
+    }
+
+    #[test]
+    fn key_example_5_10_20() {
+        let t = TileCoord {
+            zoom: 5,
+            x: 10,
+            y: 20,
+        };
+
+        let k: Vec<u8> = t.into();
+
+        assert_eq!(k, vec![2, 1, 2, 1, 0]);
+    }
+
+    #[test]
+    fn roundtrip_some_cases() {
+        for t in [
+            TileCoord {
+                zoom: 0,
+                x: 0,
+                y: 0,
+            },
+            TileCoord {
+                zoom: 1,
+                x: 0,
+                y: 0,
+            },
+            TileCoord {
+                zoom: 1,
+                x: 1,
+                y: 1,
+            },
+            TileCoord {
+                zoom: 5,
+                x: 10,
+                y: 20,
+            },
+            TileCoord {
+                zoom: 20,
+                x: (1u32 << 20) - 1,
+                y: (1u32 << 20) - 1,
+            },
+            TileCoord {
+                zoom: 20,
+                x: 123_456,
+                y: 654_321,
+            },
+        ] {
+            let k: Vec<u8> = t.into();
+
+            let decoded = TileCoord::from(k.as_slice());
+
+            assert_eq!(decoded, t);
+        }
+    }
 }

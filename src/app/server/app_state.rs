@@ -9,7 +9,7 @@ use std::{path::PathBuf, sync::Arc};
 pub(crate) struct AppState {
     pub(crate) render_worker_pool: Arc<RenderWorkerPool>,
     pub(crate) export_state: Arc<ExportState>,
-    pub(crate) tile_cache_root: Arc<Option<PathBuf>>,
+    pub(crate) tile_cache_base_path: Arc<Option<PathBuf>>,
     pub(crate) tile_worker: Option<TileProcessingWorker>,
     pub(crate) serve_cached: bool,
     pub(crate) max_zoom: u8,

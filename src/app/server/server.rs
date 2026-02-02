@@ -20,7 +20,7 @@ use tower::limit::ConcurrencyLimitLayer;
 
 pub async fn start_server(
     render_worker_pool: RenderWorkerPool,
-    tile_cache_root: Option<PathBuf>,
+    tile_cache_base_path: Option<PathBuf>,
     tile_worker: Option<TileProcessingWorker>,
     serve_cached: bool,
     max_zoom: u8,
@@ -32,7 +32,7 @@ pub async fn start_server(
     let app_state = AppState {
         render_worker_pool: Arc::new(render_worker_pool),
         export_state: Arc::new(ExportState::new()),
-        tile_cache_root: Arc::new(tile_cache_root),
+        tile_cache_base_path: Arc::new(tile_cache_base_path),
         tile_worker,
         serve_cached,
         max_zoom,

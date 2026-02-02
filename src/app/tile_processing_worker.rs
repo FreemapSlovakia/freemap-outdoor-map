@@ -40,11 +40,12 @@ impl TileProcessingWorker {
     pub(crate) fn new(config: TileProcessingConfig) -> Self {
         let (tx, mut rx) = mpsc::channel(TILE_PROCESSING_QUEUE);
 
+        // TODO propagate error
+        let mut processor = TileProcessor::new(config).expect("tile processor");
+
         thread::Builder::new()
             .name("tile-processing-worker".to_string())
             .spawn(move || {
-                let mut processor = TileProcessor::new(config);
-
                 while let Some(message) = rx.blocking_recv() {
                     let now = SystemTime::now();
 

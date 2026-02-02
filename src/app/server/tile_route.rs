@@ -1,5 +1,5 @@
 use crate::{
-    app::{server::app_state::AppState, tile_coord::TileCoord, tile_processor::tile_cache_path},
+    app::{server::app_state::AppState, tile_coord::TileCoord, tile_processor::cached_tile_path},
     render::{ImageFormat, RenderRequest},
 };
 use axum::{
@@ -74,8 +74,8 @@ pub(crate) async fn serve_tile(
 
     let tile_request = RenderRequest::new(bbox, coord.zoom, scale, ImageFormat::Jpeg);
 
-    let file_path = if let Some(ref tile_cache_root) = *state.tile_cache_root {
-        let file_path = tile_cache_path(tile_cache_root, coord, scale);
+    let file_path = if let Some(ref tile_cache_base_path) = *state.tile_cache_base_path {
+        let file_path = cached_tile_path(tile_cache_base_path, coord, scale);
 
         if state.serve_cached {
             match fs::read(&file_path).await {

@@ -86,10 +86,17 @@ fn process_tile_expiration_file(path: &Path, worker: &TileProcessingWorker) -> R
     let content = match read_with_retry(path) {
         Ok(content) => content,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(err) => return Err(err.to_string()),
+        Err(err) => {
+            return if err.kind() == std::io::ErrorKind::NotFound {
+                Ok(())
+            } else {
+                Err(err.to_string())
+            };
+        }
     };
 
     println!("Processing {}", path.display());
+
     let invalidated_at = SystemTime::now();
 
     for line in content.lines() {
