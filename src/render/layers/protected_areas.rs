@@ -1,5 +1,4 @@
 use crate::render::{
-    SvgRepo,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{
@@ -9,6 +8,7 @@ use crate::render::{
     },
     layer_render_error::LayerRenderResult,
     projectable::{TileProjectable, geometry_geometry},
+    svg_repo::SvgRepo,
 };
 use postgres::Client;
 

@@ -1,5 +1,4 @@
 use crate::render::{
-    SvgRepo,
     collision::Collision,
     ctx::Ctx,
     draw::{
@@ -11,7 +10,7 @@ use crate::render::{
     },
     layer_render_error::{LayerRenderError, LayerRenderResult},
     projectable::{TileProjectable, geometry_geometry},
-    svg_repo::Options,
+    svg_repo::{Options, SvgRepo},
 };
 use bitflags::bitflags;
 use colorsys::{Rgb, RgbRatio};

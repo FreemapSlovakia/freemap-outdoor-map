@@ -1,8 +1,8 @@
 use crate::render::{
-    SvgRepo,
     ctx::Ctx,
     layer_render_error::LayerRenderResult,
     projectable::{TileProjectable, geometry_point},
+    svg_repo::SvgRepo,
 };
 use postgres::Client;
 

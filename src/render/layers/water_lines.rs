@@ -1,10 +1,10 @@
 use crate::render::{
-    SvgRepo,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{markers_on_path::draw_markers_on_path, smooth_line::path_smooth_bezier_spline},
     layer_render_error::LayerRenderResult,
     projectable::{TileProjectable, geometry_line_string},
+    svg_repo::SvgRepo,
 };
 use postgres::Client;
 

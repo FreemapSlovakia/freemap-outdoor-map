@@ -1,11 +1,11 @@
 use super::landcover_z_order::build_landcover_z_order_case;
 use crate::render::{
-    SvgRepo,
     colors::{self, Color, ContextExt},
     ctx::Ctx,
     draw::path_geom::path_geometry,
     layer_render_error::LayerRenderResult,
     projectable::{TileProjectable, geometry_geometry},
+    svg_repo::SvgRepo,
     xyz::to_absolute_pixel_coords,
 };
 use cairo::{Extend, Matrix, SurfacePattern};
@@ -81,7 +81,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
             let pattern = SurfacePattern::create(tile);
 
-            let (x, y) = to_absolute_pixel_coords(min.x, min.y, ctx.zoom as u8);
+            let (x, y) = to_absolute_pixel_coords(min.x, min.y, ctx.zoom);
 
             let rect = tile.extents().expect("tile extents");
 

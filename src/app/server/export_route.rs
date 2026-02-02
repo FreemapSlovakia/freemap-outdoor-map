@@ -1,6 +1,7 @@
-use crate::app::app_state::AppState;
-use crate::app::render_worker_pool::RenderWorkerPool;
-use crate::render::{ImageFormat, RenderRequest, RouteTypes};
+use crate::{
+    app::server::app_state::AppState,
+    render::{ImageFormat, RenderRequest, RenderWorkerPool, RouteTypes},
+};
 use axum::{
     body::Body,
     extract::{Json, Query, State},
@@ -47,7 +48,7 @@ enum ExportStatus {
 
 #[derive(Deserialize)]
 pub(crate) struct ExportRequest {
-    zoom: u32,
+    zoom: u8,
     bbox: [f64; 4],
     format: Option<String>,
     scale: Option<f64>,
@@ -71,7 +72,7 @@ pub(crate) struct TokenQuery {
     token: String,
 }
 
-pub(crate) async fn export_post(
+pub(crate) async fn post(
     State(state): State<AppState>,
     Json(request): Json<ExportRequest>,
 ) -> Response<Body> {
@@ -98,7 +99,7 @@ pub(crate) async fn export_post(
     };
 
     let job = spawn_export_job(
-        state.worker_pool.clone(),
+        state.render_worker_pool.clone(),
         file_path.clone(),
         filename.clone(),
         content_type,
@@ -119,7 +120,7 @@ pub(crate) async fn export_post(
         .expect("token body")
 }
 
-pub(crate) async fn export_head(
+pub(crate) async fn head(
     State(state): State<AppState>,
     Query(query): Query<TokenQuery>,
 ) -> Response<Body> {
@@ -139,7 +140,7 @@ pub(crate) async fn export_head(
     }
 }
 
-pub(crate) async fn export_get(
+pub(crate) async fn get(
     State(state): State<AppState>,
     Query(query): Query<TokenQuery>,
 ) -> Response<Body> {
@@ -178,7 +179,7 @@ pub(crate) async fn export_get(
         .expect("download body")
 }
 
-pub(crate) async fn export_delete(
+pub(crate) async fn delete(
     State(state): State<AppState>,
     Query(query): Query<TokenQuery>,
 ) -> Response<Body> {

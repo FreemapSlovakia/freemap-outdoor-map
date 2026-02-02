@@ -1,0 +1,61 @@
+use crate::{
+    app::{
+        server::{
+            app_state::AppState,
+            export_route::{self, ExportState},
+            tile_route, wmts_route,
+        },
+        tile_processing_worker::TileProcessingWorker,
+    },
+    render::RenderWorkerPool,
+};
+use axum::{
+    Router,
+    routing::{get, post},
+    serve,
+};
+use geo::Geometry;
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use tower::limit::ConcurrencyLimitLayer;
+
+pub async fn start_server(
+    render_worker_pool: RenderWorkerPool,
+    tile_cache_root: Option<PathBuf>,
+    tile_worker: Option<TileProcessingWorker>,
+    serve_cached: bool,
+    max_zoom: u8,
+    limits_geometry: Option<Geometry>,
+    allowed_scales: Vec<f64>,
+    max_concurrent_connections: usize,
+    addr: SocketAddr,
+) {
+    let app_state = AppState {
+        render_worker_pool: Arc::new(render_worker_pool),
+        export_state: Arc::new(ExportState::new()),
+        tile_cache_root: Arc::new(tile_cache_root),
+        tile_worker,
+        serve_cached,
+        max_zoom,
+        limits_geometry: Arc::new(limits_geometry),
+        allowed_scales: Arc::new(allowed_scales),
+    };
+
+    let router = Router::new()
+        .route("/service", get(wmts_route::service_handler))
+        .route(
+            "/export",
+            post(export_route::post)
+                .head(export_route::head)
+                .get(export_route::get)
+                .delete(export_route::delete),
+        )
+        .route("/{zoom}/{x}/{y}", get(tile_route::get))
+        .with_state(app_state)
+        .layer(ConcurrencyLimitLayer::new(max_concurrent_connections));
+
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .expect("bind address");
+
+    serve(listener, router).await.expect("server");
+}

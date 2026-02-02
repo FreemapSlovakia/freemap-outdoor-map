@@ -1,11 +1,11 @@
 use crate::render::{
-    SvgRepo,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{line_pattern::draw_line_pattern, path_geom::path_line_string},
     layer_render_error::LayerRenderResult,
     layers::{hillshading, hillshading_datasets::HillshadingDatasets},
     projectable::{TileProjectable, geometry_line_string},
+    svg_repo::SvgRepo,
 };
 use postgres::Client;
 

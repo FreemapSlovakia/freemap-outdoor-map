@@ -42,7 +42,7 @@ pub struct Cli {
 
     /// Maximum supported zoom for serving tiles.
     #[arg(long, env = "MAPRENDER_MAX_ZOOM", default_value_t = 20)]
-    pub max_zoom: u32,
+    pub max_zoom: u8,
 
     /// Allowed tile scales (e.g. 1,2,3).
     #[arg(
@@ -62,8 +62,8 @@ pub struct Cli {
     pub mask_geojson: Option<PathBuf>,
 
     /// Base directory for cached tiles.
-    #[arg(long, env = "MAPRENDER_TILE_BASE_PATH")]
-    pub tile_base_path: Option<PathBuf>,
+    #[arg(long, env = "MAPRENDER_TILE_CACHE_ROOT")]
+    pub tile_cache_root: Option<PathBuf>,
 
     /// Serve cached tiles from the filesystem.
     #[arg(
@@ -80,9 +80,9 @@ pub struct Cli {
 
     /// Lowest zoom to invalidate for parent tiles.
     #[arg(long, env = "MAPRENDER_INVALIDATE_MIN_ZOOM", default_value_t = 0)]
-    pub invalidate_min_zoom: u32,
+    pub invalidate_min_zoom: u8,
 
     /// Zoom level used for .index files (e.g. 14).
     #[arg(long, env = "MAPRENDER_INDEX_ZOOM", default_value_t = 14)]
-    pub index_zoom: u32,
+    pub index_zoom: u8,
 }

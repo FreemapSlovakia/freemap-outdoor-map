@@ -1,6 +1,6 @@
 use crate::render::{
     image_format::ImageFormat,
-    layers::{self, hillshading_datasets::HillshadingDatasets},
+    layers::{self, HillshadingDatasets},
     render_request::RenderRequest,
     svg_repo::SvgRepo,
     xyz::bbox_size_in_pixels,

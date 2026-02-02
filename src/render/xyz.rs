@@ -1,22 +1,9 @@
-use super::size::Size;
+use crate::render::size::Size;
 use geo::Rect;
 
 const EARTH_RADIUS: f64 = 6_378_137.0; // Equatorial radius of the Earth in meters (WGS 84)
 
 const HALF_CIRCUMFERENCE: f64 = std::f64::consts::PI * EARTH_RADIUS;
-
-pub fn tile_bounds_to_epsg3857(x: u32, y: u32, z: u32, tile_size: u32) -> Rect<f64> {
-    let total_pixels = tile_size as f64 * (z as f64).exp2();
-    let pixel_size = (2.0 * HALF_CIRCUMFERENCE) / total_pixels;
-
-    let min_x = (x as f64 * tile_size as f64).mul_add(pixel_size, -HALF_CIRCUMFERENCE);
-    let max_y = (y as f64 * tile_size as f64).mul_add(-pixel_size, HALF_CIRCUMFERENCE);
-
-    let max_x = (tile_size as f64).mul_add(pixel_size, min_x);
-    let min_y = (tile_size as f64).mul_add(-pixel_size, max_y);
-
-    Rect::new((min_x, min_y), (max_x, max_y))
-}
 
 pub fn bbox_size_in_pixels(bbox: Rect<f64>, zoom: f64) -> Size<u32> {
     let resolution = 2.0 * HALF_CIRCUMFERENCE / (256.0 * zoom.exp2());

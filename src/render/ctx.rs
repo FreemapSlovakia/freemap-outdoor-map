@@ -14,7 +14,7 @@ impl SqlParams {
     {
         self.params.push(Box::new(value));
 
-        return self;
+        self
     }
 
     pub fn as_params(&self) -> Vec<&(dyn ToSql + Sync)> {
@@ -26,7 +26,7 @@ pub struct Ctx<'a> {
     pub context: &'a Context,
     pub bbox: Rect<f64>,
     pub size: Size<u32>,
-    pub zoom: u32,
+    pub zoom: u8,
     pub tile_projector: TileProjector,
     pub scale: f64,
 }

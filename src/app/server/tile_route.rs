@@ -1,20 +1,20 @@
 use crate::{
-    app::{app_state::AppState, index_paths::index_file_path},
-    render::{ImageFormat, RenderRequest, tile_bounds_to_epsg3857},
+    app::{server::app_state::AppState, tile_coord::TileCoord, tile_processor::tile_cache_path},
+    render::{ImageFormat, RenderRequest},
 };
 use axum::{
     body::Body,
     extract::{Path, State},
     http::{Response, StatusCode},
 };
-use fs2::FileExt;
+use geo::Rect;
 use geo::algorithm::intersects::Intersects;
-use std::{io::Write, path::PathBuf};
+use std::time::SystemTime;
 use tokio::fs;
 
-pub(crate) async fn tile_get(
+pub(crate) async fn get(
     State(state): State<AppState>,
-    Path((zoom, x, y_with_suffix)): Path<(u32, u32, String)>,
+    Path((zoom, x, y_with_suffix)): Path<(u8, u32, String)>,
 ) -> Response<Body> {
     let Some((y, scale, ext)) = parse_y_suffix(&y_with_suffix) else {
         return Response::builder()
@@ -23,18 +23,16 @@ pub(crate) async fn tile_get(
             .expect("body should be built");
     };
 
-    serve_tile(&state, zoom, x, y, scale, ext).await
+    serve_tile(&state, TileCoord { zoom, x, y }, scale, ext).await
 }
 
 pub(crate) async fn serve_tile(
     state: &AppState,
-    zoom: u32,
-    x: u32,
-    y: u32,
+    coord: TileCoord,
     scale: f64,
     ext: Option<&str>,
 ) -> Response<Body> {
-    if zoom > state.max_zoom {
+    if coord.zoom > state.max_zoom {
         return Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::empty())
@@ -61,7 +59,7 @@ pub(crate) async fn serve_tile(
             .expect("body should be built");
     }
 
-    let bbox = tile_bounds_to_epsg3857(x, y, zoom, 256);
+    let bbox = tile_bounds_to_epsg3857(coord.x, coord.y, coord.zoom, 256);
 
     if let Some(ref limits_geometry) = *state.limits_geometry {
         let tile_polygon = bbox.to_polygon();
@@ -74,10 +72,10 @@ pub(crate) async fn serve_tile(
         }
     }
 
-    let tile_request = RenderRequest::new(bbox, zoom, scale, ImageFormat::Jpeg);
+    let tile_request = RenderRequest::new(bbox, coord.zoom, scale, ImageFormat::Jpeg);
 
-    let file_path = if let Some(ref tile_base_path) = *state.tile_base_path {
-        let file_path = tile_cache_path(tile_base_path, zoom, x, y, scale);
+    let file_path = if let Some(ref tile_cache_root) = *state.tile_cache_root {
+        let file_path = tile_cache_path(tile_cache_root, coord, scale);
 
         if state.serve_cached {
             match fs::read(&file_path).await {
@@ -96,14 +94,14 @@ pub(crate) async fn serve_tile(
             }
         }
 
-        append_index_entry(tile_base_path, state.index_zoom, zoom, x, y, scale);
-
         Some(file_path)
     } else {
         None
     };
 
-    let rendered = match state.worker_pool.render(tile_request).await {
+    let render_started_at = SystemTime::now();
+
+    let rendered = match state.render_worker_pool.render(tile_request).await {
         Ok(rendered) => rendered,
         Err(err) => {
             eprintln!("render failed: {err}");
@@ -115,16 +113,13 @@ pub(crate) async fn serve_tile(
         }
     };
 
-    if let Some(file_path) = file_path {
-        if let Some(parent) = file_path.parent()
-            && let Err(err) = fs::create_dir_all(parent).await
-        {
-            eprintln!("create tile dir failed: {err}");
-        }
-
-        if let Err(err) = fs::write(&file_path, &rendered).await {
-            eprintln!("write tile failed: {err}");
-        }
+    if file_path.is_some()
+        && let Some(tile_worker) = state.tile_worker.as_ref()
+        && let Err(err) = tile_worker
+            .save_tile(rendered.clone(), coord, scale, render_started_at)
+            .await
+    {
+        eprintln!("enqueue tile save failed: {err}");
     }
 
     Response::builder()
@@ -132,14 +127,6 @@ pub(crate) async fn serve_tile(
         .header("Content-Type", "image/jpeg")
         .body(Body::from(rendered))
         .expect("body should be built")
-}
-
-fn tile_cache_path(base: &std::path::Path, zoom: u32, x: u32, y: u32, scale: f64) -> PathBuf {
-    let mut path = base.to_owned();
-    path.push(zoom.to_string());
-    path.push(x.to_string());
-    path.push(format!("{y}@{scale}.jpeg"));
-    path
 }
 
 fn parse_y_suffix(input: &str) -> Option<(u32, f64, Option<&str>)> {
@@ -178,47 +165,17 @@ fn parse_y_suffix(input: &str) -> Option<(u32, f64, Option<&str>)> {
     Some((y, scale, ext))
 }
 
-fn append_index_entry(
-    base: &std::path::Path,
-    index_zoom: u32,
-    zoom: u32,
-    x: u32,
-    y: u32,
-    scale: f64,
-) {
-    if zoom <= index_zoom {
-        return;
-    }
+pub fn tile_bounds_to_epsg3857(x: u32, y: u32, zoom: u8, tile_size: u32) -> Rect<f64> {
+    const HALF_CIRCUMFERENCE: f64 = std::f64::consts::PI * 6_378_137.0;
 
-    let shift = zoom - index_zoom;
+    let total_pixels = tile_size as f64 * (zoom as f64).exp2();
+    let pixel_size = (2.0 * HALF_CIRCUMFERENCE) / total_pixels;
 
-    let index_path = index_file_path(base, index_zoom, x >> shift, y >> shift);
+    let min_x = (x as f64 * tile_size as f64).mul_add(pixel_size, -HALF_CIRCUMFERENCE);
+    let max_y = (y as f64 * tile_size as f64).mul_add(-pixel_size, HALF_CIRCUMFERENCE);
 
-    if let Some(parent) = index_path.parent()
-        && let Err(err) = std::fs::create_dir_all(parent)
-    {
-        eprintln!("create index dir failed: {err}");
-        return;
-    }
+    let max_x = (tile_size as f64).mul_add(pixel_size, min_x);
+    let min_y = (tile_size as f64).mul_add(-pixel_size, max_y);
 
-    let mut file = match std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&index_path)
-    {
-        Ok(file) => file,
-        Err(err) => {
-            eprintln!("open index file failed: {err}");
-            return;
-        }
-    };
-
-    if let Err(err) = file.lock_exclusive() {
-        eprintln!("lock index file failed: {err}");
-        return;
-    }
-
-    if let Err(err) = file.write_all(format!("{zoom}/{x}/{y}@{scale}\n").as_bytes()) {
-        eprintln!("write index entry failed: {err}");
-    }
+    Rect::new((min_x, min_y), (max_x, max_y))
 }

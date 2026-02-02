@@ -1,6 +1,5 @@
 use super::feature_z_order::build_feature_z_order_case;
 use crate::render::{
-    SvgRepo,
     collision::Collision,
     colors::{self, Color},
     ctx::Ctx,
@@ -12,6 +11,7 @@ use crate::render::{
     projectable::{TileProjectable, geometry_point},
     regex_replacer::{Replacement, build_replacements, replace},
     svg_repo::Options,
+    svg_repo::SvgRepo,
 };
 use core::f64;
 use geo::{Point, Rect};
@@ -26,7 +26,7 @@ struct Extra<'a> {
     font_size: f64,
     weight: Weight,
     text_color: Color,
-    max_zoom: u32,
+    max_zoom: u8,
     stylesheet: Option<&'a str>,
     halo: bool,
 }
@@ -39,7 +39,7 @@ impl Default for Extra<'_> {
             font_size: 12.0,
             weight: Weight::Normal,
             text_color: colors::BLACK,
-            max_zoom: u32::MAX,
+            max_zoom: u8::MAX,
             stylesheet: None,
             halo: true,
         }
@@ -47,8 +47,8 @@ impl Default for Extra<'_> {
 }
 
 struct Def {
-    min_zoom: u32,
-    min_text_zoom: u32,
+    min_zoom: u8,
+    min_text_zoom: u8,
     with_ele: bool,
     natural: bool,
     extra: Extra<'static>,
@@ -58,7 +58,7 @@ struct Def {
 static POIS: LazyLock<HashMap<&'static str, Vec<Def>>> = LazyLock::new(|| {
     const Y: bool = true;
     const N: bool = false;
-    const NN: u32 = u32::MAX;
+    const NN: u8 = u8::MAX;
 
     let spring_replacements = build_replacements(&[
         (r"\b[Mm]inerálny\b", "min."),

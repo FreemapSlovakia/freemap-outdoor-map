@@ -1,4 +1,6 @@
-use crate::render::{RenderError, RenderRequest, SvgRepo, load_hillshading_datasets, render};
+use crate::render::{
+    self, RenderRequest, layers::load_hillshading_datasets, render::RenderError, svg_repo::SvgRepo,
+};
 use geo::Geometry;
 use postgres::NoTls;
 use r2d2_postgres::PostgresConnectionManager;
@@ -70,7 +72,7 @@ impl RenderWorkerPool {
                         };
 
                         let result = pool.get().map_err(ReError::from).and_then(|mut client| {
-                            render(
+                            render::render::render(
                                 &request,
                                 &mut client,
                                 &mut svg_repo,

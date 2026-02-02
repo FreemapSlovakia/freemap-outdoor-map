@@ -1,9 +1,9 @@
 use crate::render::{
-    SvgRepo,
     ctx::Ctx,
     draw::{markers_on_path::draw_markers_on_path, path_geom::path_line_string},
     layer_render_error::LayerRenderResult,
     projectable::{TileProjectable, geometry_line_string},
+    svg_repo::SvgRepo,
 };
 use postgres::Client;
 use std::cell::Cell;

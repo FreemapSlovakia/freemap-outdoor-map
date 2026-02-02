@@ -1,4 +1,6 @@
-use crate::app::{app_state::AppState, tiles::serve_tile};
+use crate::app::{
+    server::app_state::AppState, server::tile_route::serve_tile, tile_coord::TileCoord,
+};
 use axum::{
     body::Body,
     extract::{Query, State},
@@ -6,7 +8,7 @@ use axum::{
 };
 use std::collections::HashMap;
 
-const CAPABILITIES_XML: &str = include_str!("service_capabilities.xml");
+const CAPABILITIES_XML: &str = include_str!("wmts_capabilities.xml");
 
 pub(crate) async fn service_handler(
     State(state): State<AppState>,
@@ -35,7 +37,7 @@ pub(crate) async fn service_handler(
                 _ => return bad_request(),
             };
 
-            let zoom = match tile_matrix.and_then(|v| v.parse::<u32>().ok()) {
+            let zoom = match tile_matrix.and_then(|v| v.parse::<u8>().ok()) {
                 Some(value) => value,
                 None => return bad_request(),
             };
@@ -50,7 +52,7 @@ pub(crate) async fn service_handler(
                 None => return bad_request(),
             };
 
-            serve_tile(&state, zoom, x, y, scale, Some(ext)).await
+            serve_tile(&state, TileCoord { zoom, x, y }, scale, Some(ext)).await
         }
         Some("GetCapabilities") => Response::builder()
             .status(StatusCode::OK)

@@ -23,7 +23,7 @@ fn hatch(ctx: &Ctx, line_string: &LineString, spacing: f64, angle: f64) -> cairo
 
     let center = merc_bounds.center();
 
-    let (x, y) = to_absolute_pixel_coords(center.x, center.y, ctx.zoom as u8);
+    let (x, y) = to_absolute_pixel_coords(center.x, center.y, ctx.zoom);
 
     let len = bounds.width().hypot(bounds.height()) / 2.0 + 1.0;
 

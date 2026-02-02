@@ -1,11 +1,11 @@
-use crate::render::{image_format::ImageFormat, layers::routes::RouteTypes};
+use crate::render::{image_format::ImageFormat, layers::RouteTypes};
 use geo::Rect;
 use geojson::Feature;
 
 #[derive(Debug, Clone)]
 pub struct RenderRequest {
     pub bbox: Rect<f64>,
-    pub zoom: u32,
+    pub zoom: u8,
     pub scale: f64,
     pub format: ImageFormat,
     pub shading: bool,
@@ -15,7 +15,7 @@ pub struct RenderRequest {
 }
 
 impl RenderRequest {
-    pub const fn new(bbox: Rect<f64>, zoom: u32, scale: f64, format: ImageFormat) -> Self {
+    pub const fn new(bbox: Rect<f64>, zoom: u8, scale: f64, format: ImageFormat) -> Self {
         Self {
             bbox,
             zoom,
