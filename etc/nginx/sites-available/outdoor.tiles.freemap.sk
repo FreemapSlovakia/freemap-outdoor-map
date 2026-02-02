@@ -127,10 +127,6 @@ server {
                 proxy_cache_key $scheme$proxy_host$uri$is_args$args;
         }
 
-        location ~ \.index$ {
-                return 404;
-        }
-
         location ~ ^/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[123])x)?(?:\.(?:jpe?g|png))?$ {
                 add_header Cache-Control no-cache;
                 add_header Access-Control-Allow-Origin $http_origin always;
@@ -138,13 +134,7 @@ server {
 
                 alias /fm/data4/X-tiles/;
 
-                try_files $ {
-                        bas
-                }
-                @$ {
-                        scal
-                }
-                .jpeg =404;
+                try_files ${base}@${url_scale}x.jpeg =404;
                 error_page 404 = @fallback;
         }
 
@@ -152,13 +142,7 @@ server {
                 add_header Access-Control-Allow-Origin $http_origin always;
                 add_header Cache-Control no-cache;
                 add_header X-Tile-Source render;
-                proxy_pass http://localhost:4000/$ {
-                        bas
-                }
-                @$ {
-                        scal
-                }
-                x.jpeg;
+                proxy_pass http://localhost:4000/${base}@${url_scale}x.jpeg;
                 error_page 404 /40x.html;
         }
 
