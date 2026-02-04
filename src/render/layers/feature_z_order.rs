@@ -59,6 +59,7 @@ pub(crate) const FEATURE_Z_ORDER: &[&str] = &[
     "ice_skating",
     "running",
     "athletics",
+    "swimming",
     "waterfall",
     "dam",
     "weir",

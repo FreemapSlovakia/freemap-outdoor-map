@@ -300,6 +300,7 @@ static POIS: LazyLock<HashMap<&'static str, Vec<Def>>> = LazyLock::new(|| {
         (16, 17, N, N, "volleyball", Extra::default()),
         (16, 17, N, N, "running", Extra::default()),
         (16, 17, N, N, "athletics", Extra { icon: Some("running"), ..Extra::default() }),
+        (16, 17, N, N, "swimming", Extra { icon: Some("water_park"), ..Extra::default() }),
         (16, 17, N, N, "cycling", Extra::default()),
         (16, 17, N, N, "ice_skating", Extra::default()),
         (16, NN, Y, N, "guidepost_noname", Extra { icon: Some("guidepost_x"), ..Extra::default() }),
