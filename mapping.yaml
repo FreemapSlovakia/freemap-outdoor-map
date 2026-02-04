@@ -236,13 +236,16 @@ tables:
         mapping:
           natural:
             - bare_rock
+            - bay # TODO can also be a node
             - beach
             - blockfield
             - fell
+            - fjord # TODO can also be a node or way
             - glacier
             - grassland
             - heath
             - moor
+            - peninsula # TODO can also be a node
             - sand
             - scree
             - scrub
@@ -363,25 +366,32 @@ tables:
         type: enumerate
         args:
           values:
-            - locality
-            - plot
-            - isolated_dwelling
-            - square
-            - farm
-            - city_block
-            - quarter
-            - neighbourhood
             - allotments
+            - atoll
             - borough
-            - suburb
-            - hamlet
-            - village
-            - town
             - city
-            - county
-            - region
-            - state
+            - city_block
             - country
+            - county
+            - district
+            - farm
+            - hamlet
+            - island
+            - islet
+            - isolated_dwelling
+            - locality
+            - municipality
+            - neighbourhood
+            - plot
+            - province
+            - quarter
+            - region
+            - sea
+            - square
+            - state
+            - suburb
+            - town
+            - village
       - name: population
         type: integer
         key: population
@@ -487,11 +497,12 @@ tables:
         - trench
       natural:
         - cliff
-        - valley
-        - tree_row
-        - ridge # TODO
-        - gully
         - earth_bank
+        - gully
+        - ridge # TODO
+        - strait # TODO can be also node or area
+        - tree_row
+        - valley
       power:
         - line
         - minor_line
@@ -954,6 +965,7 @@ tables:
                 - arch
                 - birds_nest
                 - cave_entrance
+                - cape # can only be a node
                 - geyser
                 - hot_spring
                 - peak
