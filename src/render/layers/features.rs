@@ -503,6 +503,7 @@ pub fn render(
                 osm_features
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                (type <> 'saddle' OR NOT EXISTS (SELECT 1 FROM osm_features b WHERE type = 'mountain_pass' AND osm_features.osm_id = b.osm_id)) AND
                 (type <> 'tree' OR tags->'protected' NOT IN ('', 'no') OR tags->'denotation' = 'natural_monument') AND
                 (type NOT IN ('saddle', 'mountain_pass') OR name <> '')
                 {}
