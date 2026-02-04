@@ -10,7 +10,9 @@ use postgres::Client;
 pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let _span = tracy_client::span!("solar_power_plants::render");
 
-    let d = 4.0f64.max(1.33f64.powf(ctx.zoom as f64) / 20.0).round();
+    let zoom = ctx.zoom;
+
+    let d = 4.0f64.max(1.33f64.powf(zoom as f64) / 20.0).round();
 
     let sql = "
         SELECT
@@ -24,6 +26,8 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
     let context = ctx.context;
 
+    let tile_projector = &ctx.tile_projector;
+
     for row in rows {
         let Some(geom) = geometry_geometry(&row) else {
             continue;
@@ -31,7 +35,7 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
         context.push_group();
 
-        let projected = geom.project_to_tile(&ctx.tile_projector);
+        let projected = geom.project_to_tile(tile_projector);
 
         path_geometry(context, &projected);
 
@@ -48,8 +52,8 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         context.set_dash(&[], 0.0);
         context.set_line_width(1.0);
 
-        hatch_geometry(ctx, &geom, d, 0.0)?;
-        hatch_geometry(ctx, &geom, d, 90.0)?;
+        hatch_geometry(context, &geom, tile_projector, zoom, d, 0.0)?;
+        hatch_geometry(context, &geom, tile_projector, zoom, d, 90.0)?;
 
         context.stroke()?;
 

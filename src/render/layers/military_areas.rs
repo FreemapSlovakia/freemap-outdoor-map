@@ -21,40 +21,46 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
             AND area / POWER(4, 19 - $6) > 10
     ";
 
+    let zoom = ctx.zoom;
+
     let rows = &client.query(
         sql,
         &ctx.bbox_query_params(Some(10.0))
-            .push(ctx.zoom as i32)
+            .push(zoom as i32)
             .as_params(),
     )?;
 
-    ctx.context.push_group();
+    let context = ctx.context;
 
-    ctx.context.push_group();
+    context.push_group();
+
+    context.push_group();
+
+    let tile_projector = &ctx.tile_projector;
 
     let geometries: Vec<_> = rows
         .iter()
         .filter_map(geometry_geometry)
-        .map(|geom| (geom.project_to_tile(&ctx.tile_projector), geom))
+        .map(|geom| (geom.project_to_tile(tile_projector), geom))
         .collect();
 
-    let context = ctx.context;
+    let context = context;
 
     // hatching
     for (projected, unprojected) in &geometries {
-        ctx.context.push_group();
+        context.push_group();
 
         path_geometry(context, projected);
 
         context.clip();
 
-        ctx.context.set_source_color(colors::MILITARY);
-        ctx.context.set_dash(&[], 0.0);
-        ctx.context.set_line_width(1.5);
+        context.set_source_color(colors::MILITARY);
+        context.set_dash(&[], 0.0);
+        context.set_line_width(1.5);
 
-        hatch_geometry(ctx, unprojected, 10.0, -45.0)?;
+        hatch_geometry(context, unprojected, tile_projector, zoom, 10.0, -45.0)?;
 
-        ctx.context.stroke()?;
+        context.stroke()?;
 
         context.pop_group_to_source()?;
         context.paint()?;
@@ -66,16 +72,16 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     // border
 
     for (projected, _) in &geometries {
-        ctx.context.set_source_color(colors::MILITARY);
-        ctx.context.set_dash(&[25.0, 7.0], 0.0);
-        ctx.context.set_line_width(3.0);
+        context.set_source_color(colors::MILITARY);
+        context.set_dash(&[25.0, 7.0], 0.0);
+        context.set_line_width(3.0);
         path_geometry(context, projected);
-        ctx.context.stroke()?;
+        context.stroke()?;
     }
 
-    ctx.context.pop_group_to_source()?;
+    context.pop_group_to_source()?;
 
-    ctx.context.paint_with_alpha(0.8)?;
+    context.paint_with_alpha(0.8)?;
 
     Ok(())
 }

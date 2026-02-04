@@ -25,7 +25,13 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     for row in rows {
         let geom = geometry_line_string(&row).project_to_tile(&ctx.tile_projector);
 
-        draw_line_pattern(ctx, &geom, 0.8, svg_repo.get("embankment")?)?;
+        draw_line_pattern(
+            ctx.context,
+            ctx.size,
+            &geom,
+            0.8,
+            svg_repo.get("embankment")?,
+        )?;
     }
 
     Ok(())

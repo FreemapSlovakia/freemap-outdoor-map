@@ -28,11 +28,12 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
     let rows = &client.query(sql, &ctx.bbox_query_params(Some(10.0)).as_params())?;
 
+    let tile_projector = &ctx.tile_projector;
+
     let geometries: Vec<_> = rows
         .iter()
         .filter_map(|row| {
-            geometry_geometry(row)
-                .map(|geom| (geom.project_to_tile(&ctx.tile_projector), geom, row))
+            geometry_geometry(row).map(|geom| (geom.project_to_tile(tile_projector), geom, row))
         })
         .collect();
 
@@ -57,7 +58,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
                 context.set_dash(&[], 0.0);
                 context.set_line_width(0.7);
 
-                hatch_geometry(ctx, unprojected, 3.0, -45.0)?;
+                hatch_geometry(context, unprojected, tile_projector, zoom, 3.0, -45.0)?;
 
                 context.stroke()?;
 
@@ -119,7 +120,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             let sample = svg_repo.get("protected_area")?;
 
             walk_geometry_line_strings(projected, &mut |line_string| {
-                draw_line_pattern(ctx, line_string, 0.8, sample)
+                draw_line_pattern(ctx.context, ctx.size, line_string, 0.8, sample)
             })?;
         }
     }

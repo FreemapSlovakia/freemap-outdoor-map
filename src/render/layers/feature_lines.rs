@@ -53,7 +53,8 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             }
             "tree_row" => {
                 draw_line_pattern_scaled(
-                    ctx,
+                    ctx.context,
+                    ctx.size,
                     &geom,
                     0.8,
                     (2.0 + (zoom as f64 - 15.0).exp2()) / 4.5,

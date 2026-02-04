@@ -1,5 +1,5 @@
-use crate::render::ctx::Ctx;
-use cairo::{Matrix, RecordingSurface, Result, SurfacePattern};
+use crate::render::size::Size;
+use cairo::{Context, Matrix, RecordingSurface, Result, SurfacePattern};
 use geo::{Coord, LineString};
 
 fn get_perpendicular(dx: f64, dy: f64, length: f64, stroke_width: f64) -> (f64, f64) {
@@ -110,16 +110,18 @@ fn compute_corners(p0: Coord, p1: Coord, stroke_width: f64) -> (Coord, Coord, Co
 }
 
 pub fn draw_line_pattern(
-    ctx: &Ctx,
+    context: &Context,
+    size: Size<u32>,
     line_string: &LineString,
     miter_limit: f64,
     sample: &RecordingSurface,
 ) -> cairo::Result<()> {
-    draw_line_pattern_scaled(ctx, line_string, miter_limit, 1.0, sample)
+    draw_line_pattern_scaled(context, size, line_string, miter_limit, 1.0, sample)
 }
 
 pub fn draw_line_pattern_scaled(
-    ctx: &Ctx,
+    context: &Context,
+    size: Size<u32>,
     line_string: &LineString,
     miter_limit: f64,
     scale: f64,
@@ -143,8 +145,6 @@ pub fn draw_line_pattern_scaled(
 
     let stroke_width = height * scale;
 
-    let context = &ctx.context;
-
     let mut dist = 0.0;
 
     let is_closed = vertices.first() == vertices.last();
@@ -161,8 +161,8 @@ pub fn draw_line_pattern_scaled(
 
         let min_x = -width * 10.0;
         let min_y = -height * 10.0;
-        let max_x = width.mul_add(10.0, ctx.size.width as f64);
-        let max_y = height.mul_add(10.0, ctx.size.height as f64);
+        let max_x = width.mul_add(10.0, size.width as f64);
+        let max_y = height.mul_add(10.0, size.height as f64);
 
         if p1.x < min_x && p2.x < min_x
             || p1.y < min_y && p2.y < min_y
@@ -329,7 +329,7 @@ pub fn draw_line_pattern_scaled(
 
         let (x1, y1, x2, y2) = context.path_extents()?;
 
-        if !(x2 < 0.0 || x1 > ctx.size.width as f64 || y2 < 0.0 || y1 > ctx.size.width as f64) {
+        if !(x2 < 0.0 || x1 > size.width as f64 || y2 < 0.0 || y1 > size.width as f64) {
             // context.set_line_width(1.0);
             // context.set_dash(&[], 0.0);
             // context.set_source_rgb(0.0, 0.0, 0.0);

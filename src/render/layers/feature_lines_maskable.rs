@@ -64,19 +64,31 @@ pub fn render(
 
             match row.get("type") {
                 "earth_bank" => {
-                    draw_line_pattern(ctx, &geom, 0.8, svg_repo.get("earth_bank")?)?;
+                    draw_line_pattern(
+                        ctx.context,
+                        ctx.size,
+                        &geom,
+                        0.8,
+                        svg_repo.get("earth_bank")?,
+                    )?;
                 }
                 "dyke" => {
-                    draw_line_pattern(ctx, &geom, 0.8, svg_repo.get("dyke")?)?;
+                    draw_line_pattern(ctx.context, ctx.size, &geom, 0.8, svg_repo.get("dyke")?)?;
                 }
                 "embankment" => {
-                    draw_line_pattern(ctx, &geom, 0.8, svg_repo.get("embankment-half")?)?;
+                    draw_line_pattern(
+                        ctx.context,
+                        ctx.size,
+                        &geom,
+                        0.8,
+                        svg_repo.get("embankment-half")?,
+                    )?;
                 }
                 "gully" => {
-                    draw_line_pattern(ctx, &geom, 0.8, svg_repo.get("gully")?)?;
+                    draw_line_pattern(ctx.context, ctx.size, &geom, 0.8, svg_repo.get("gully")?)?;
                 }
                 "cliff" => {
-                    draw_line_pattern(ctx, &geom, 0.8, svg_repo.get("cliff")?)?;
+                    draw_line_pattern(ctx.context, ctx.size, &geom, 0.8, svg_repo.get("cliff")?)?;
 
                     context.set_source_color(colors::AREA_LABEL);
                     context.set_line_width(1.0);

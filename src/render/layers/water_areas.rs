@@ -10,7 +10,9 @@ use postgres::Client;
 pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let _span = tracy_client::span!("water_areas::render");
 
-    let table_suffix = match ctx.zoom {
+    let zoom = ctx.zoom;
+
+    let table_suffix = match zoom {
         ..=9 => "_gen0",
         10..=11 => "_gen1",
         12.. => "",
@@ -33,6 +35,8 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
     let context = ctx.context;
 
+    let tile_projector = &ctx.tile_projector;
+
     context.save()?;
 
     for row in rows {
@@ -40,7 +44,7 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
             continue;
         };
 
-        let projected = geom.project_to_tile(&ctx.tile_projector);
+        let projected = geom.project_to_tile(tile_projector);
 
         let tmp: bool = row.get("tmp");
 
@@ -58,7 +62,7 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
             context.set_dash(&[], 0.0);
             context.set_line_width(2.0);
 
-            hatch_geometry(ctx, &geom, 4.0, 0.0)?;
+            hatch_geometry(context, &geom, tile_projector, zoom, 4.0, 0.0)?;
 
             context.stroke()?;
 

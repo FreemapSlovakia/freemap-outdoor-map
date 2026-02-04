@@ -318,7 +318,8 @@ pub fn render_marking(
 
                     walk_geometry_line_strings(&geom, &mut |part| {
                         draw_line_pattern_scaled(
-                            ctx,
+                            ctx.context,
+                            ctx.size,
                             &offset_line_string(part, offset),
                             0.5,
                             wf / 2.0,
@@ -345,7 +346,8 @@ pub fn render_marking(
 
                     walk_geometry_line_strings::<_, LayerRenderError>(&geom, &mut |part| {
                         draw_line_pattern_scaled(
-                            ctx,
+                            ctx.context,
+                            ctx.size,
                             &offset_line_string(part, offset),
                             0.5,
                             wf / 2.0,
