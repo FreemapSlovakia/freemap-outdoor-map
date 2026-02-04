@@ -1,4 +1,5 @@
 pub(crate) const LANDCOVER_Z_ORDER: &[&str] = &[
+    "winter_sports",
     "pedestrian",
     "footway",
     "pitch",

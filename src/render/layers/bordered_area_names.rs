@@ -54,22 +54,41 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         )?;
     }
 
-    let sql = "SELECT type, name, protect_class, ST_Boundary(geometry) AS geometry
-        FROM osm_protected_areas
+    let sql = "
+        WITH merged AS (
+            SELECT
+                type, name, geometry, area
+                FROM
+                    osm_protected_areas
+                WHERE
+                    (type = 'national_park' OR (type = 'protected_area' AND protect_class = '2'))
+
+            UNION ALL
+
+            SELECT
+                type, name, geometry, area
+            FROM
+                osm_landcovers
+            WHERE
+                type = 'winter_sports'
+        )
+        SELECT
+            type, name, ST_Boundary(geometry) AS geometry, area
+        FROM
+            merged
         WHERE
             name <> '' AND
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-            (type = 'national_park' OR (type = 'protected_area' AND protect_class = '2'))
-        ORDER BY area DESC";
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            area DESC";
 
-    let text_options = TextOnLineOptions {
+    let mut text_options = TextOnLineOptions {
         flo: FontAndLayoutOptions {
             style: Style::Italic,
             ..FontAndLayoutOptions::default()
         },
         alpha: 0.66,
         halo_opacity: 0.75,
-        color: colors::PROTECTED,
         offset: -14.0,
         distribution: Distribution::Align {
             align: Align::Center,
@@ -84,6 +103,14 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
     for row in rows {
         let Some(geom) = geometry_geometry(&row) else {
             continue;
+        };
+
+        let typ_: &str = row.get("type");
+
+        text_options.color = match typ_ {
+            "national_park" | "protected_area" => colors::PROTECTED,
+            "winter_sports" => colors::WATER,
+            _ => colors::BLACK,
         };
 
         let geom = geom.project_to_tile(&ctx.tile_projector);

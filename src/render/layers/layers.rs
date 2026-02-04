@@ -213,7 +213,7 @@ pub fn render(
     }
 
     if zoom >= 12 {
-        layers::protected_area_names::render(ctx, client, collision)
+        layers::bordered_area_names::render(ctx, client, collision)
             .with_layer("protected_area_names")?;
     }
 

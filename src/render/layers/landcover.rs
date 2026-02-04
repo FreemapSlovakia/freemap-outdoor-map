@@ -2,7 +2,7 @@ use super::landcover_z_order::build_landcover_z_order_case;
 use crate::render::{
     colors::{self, Color, ContextExt},
     ctx::Ctx,
-    draw::path_geom::path_geometry,
+    draw::path_geom::{path_geometry, path_line_string_with_offset, walk_geometry_line_strings},
     layer_render_error::LayerRenderResult,
     projectable::{TileProjectable, geometry_geometry},
     svg_repo::SvgRepo,
@@ -15,12 +15,15 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     let _span = tracy_client::span!("landcover::render");
 
     let context = ctx.context;
+
     let min = ctx.bbox.min();
+
+    let zoom = ctx.zoom;
 
     let rows = {
         let a = "'pitch', 'playground', 'golf_course', 'track'";
 
-        let excl_types = match ctx.zoom {
+        let excl_types = match zoom {
             ..12 => &format!("type NOT IN ({a}) AND"),
             12..13 => {
                 &format!("type NOT IN ({a}, 'parking', 'bunker_silo', 'storage_tank', 'silo') AND")
@@ -28,7 +31,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             _ => "",
         };
 
-        let table_suffix = match ctx.zoom {
+        let table_suffix = match zoom {
             ..=9 => "_gen0",
             10..=11 => "_gen1",
             12.. => "",
@@ -81,7 +84,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
             let pattern = SurfacePattern::create(tile);
 
-            let (x, y) = to_absolute_pixel_coords(min.x, min.y, ctx.zoom);
+            let (x, y) = to_absolute_pixel_coords(min.x, min.y, zoom);
 
             let rect = tile.extents().expect("tile extents");
 
@@ -301,6 +304,36 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             }
             "wetland" => {
                 pattern_area("wetland")?;
+            }
+            "winter_sports" => {
+                let wb = if zoom > 10 {
+                    0.5f64.mul_add(zoom as f64 - 10.0, 2.0)
+                } else {
+                    2.0
+                };
+
+                context.push_group();
+
+                context.set_source_color(colors::WATER);
+                context.set_dash(&[], 0.0);
+                context.set_line_width(wb * 0.75);
+                context.set_line_join(cairo::LineJoin::Round);
+                context.set_line_cap(cairo::LineCap::Round);
+
+                path_geometry(context, &geom);
+                context.stroke()?;
+
+                context.set_line_width(wb);
+                context.set_source_color_a(colors::WATER, 0.5);
+                walk_geometry_line_strings(&geom, &mut |iter| {
+                    path_line_string_with_offset(context, iter, wb * 0.75);
+
+                    cairo::Result::Ok(())
+                })?;
+                context.stroke()?;
+
+                context.pop_group_to_source().expect("group in source");
+                context.paint_with_alpha(0.66)?;
             }
             "wood" => {
                 colour_area(colors::FOREST)?;

@@ -36,6 +36,8 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
     let rows = {
         let z_order_case = build_landcover_z_order_case("type");
 
+        // TODO include types (`type IN`), don't exclude (`type NOT IN`)
+        // TODO ... or maybe merge with bordered_area_names
         // nested sql is to remove duplicate entries imported by imposm because we use `mappings` in yaml
         let sql = format!(
             "
@@ -48,7 +50,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
                 FROM
                     osm_landcovers
                 WHERE
-                    type NOT IN ('zoo', 'theme_park') AND
+                    type NOT IN ('zoo', 'theme_park', 'winter_sports') AND
                     name <> '' AND
                     area >= $6 AND
                     geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)

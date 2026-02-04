@@ -253,33 +253,56 @@ tables:
       landuse:
         mapping:
           landuse:
-            - park
-            - forest
-            - residential
-            - retail
-            - commercial
-            - industrial
-            - railway
+            - agriculture
+            - allotments
+            - animal_keeping
+            - aquaculture
+            - basin
+            - brownfield
             - cemetery
-            - grass
-            - farmyard
+            - churchyard
+            - civic_admin
+            - commercial
+            - conservation
+            - construction
+            - depot
+            - education
             - farm
             - farmland
-            - orchard
-            - vineyard
-            - wood
-            - meadow
-            - village_green
-            - recreation_ground
-            - allotments
-            - quarry
-            - landfill
-            - brownfield
-            - greenfield
-            - depot
+            - farmyard
+            - flowerbed
+            - forest
             - garages
+            - grass
+            - greenery
+            - greenfield
+            - greenhouse_horticulture
+            - harbour
+            - industrial
+            - institutional
+            - landfill
+            - logging
+            - meadow
+            - military
             - military # TODO maybe as overlay layer
+            - orchard
+            - park
             - plant_nursery
+            - plantation
+            - quarry
+            - railway
+            - recreation_ground
+            - religious
+            - reservoir
+            - reservoir_watershed
+            - residential
+            - retail
+            - school
+            - shrubs
+            - village_green
+            - vineyard
+            - winter_sports
+            - wood
       highway:
         mapping:
           highway:
@@ -496,6 +519,7 @@ tables:
       man_made:
         - pipeline
 
+  # TODO merge to landcover
   protected_areas:
     columns:
       - name: osm_id
