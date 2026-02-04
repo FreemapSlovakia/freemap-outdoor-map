@@ -1,0 +1,1673 @@
+{
+  "$schema": "https://raw.githubusercontent.com/taginfo/taginfo-projects/refs/heads/master/taginfo-project-schema.json",
+  "data_format": 1,
+  "project": {
+    "name": "Freemap Slovakia Outdoor Map",
+    "contact_email": "martin.zdila@freemap.sk",
+    "contact_name": "Martin Ždila",
+    "description": "Freemap Slovakia Outdoor Raster XYZ Map",
+    "project_url": "https://www.freemap.sk/#layers=X",
+    "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-v3-react/refs/heads/main/src/images/freemap-logo-small.png"
+  },
+  "tags": [
+    {
+      "key": "access",
+      "object_types": ["node", "way", "area"],
+      "description": "[road_access_restrictions] Rendered from zoom 14."
+    },
+    {
+      "key": "addr:conscriptionnumber",
+      "object_types": ["node", "area"],
+      "description": "[housenumbers] Rendered from zoom 18. Label (housenumber) from zoom 18."
+    },
+    {
+      "key": "addr:housenumber",
+      "object_types": ["node", "area"],
+      "description": "[housenumbers] Rendered from zoom 18. Label (housenumber) from zoom 18."
+    },
+    {
+      "key": "addr:streetnumber",
+      "object_types": ["node", "area"],
+      "description": "[housenumbers] Rendered from zoom 18. Label (housenumber) from zoom 18."
+    },
+    {
+      "key": "admin_level",
+      "value": "2",
+      "object_types": ["relation"],
+      "description": "[borders] Rendered from zoom 8."
+    },
+    {
+      "key": "aerialway",
+      "object_types": ["way", "area"],
+      "description": "[aerialways] Rendered from zoom 12. Label (name) from zoom 16. Rendered only when name present."
+    },
+    {
+      "key": "aeroway",
+      "value": "aerodrome",
+      "object_types": ["node", "way", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/aerodrome.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 12. Label (name; ref from zoom 14) from zoom 12."
+    },
+    {
+      "key": "aeroway",
+      "value": "runway",
+      "object_types": ["way", "area"],
+      "description": "[aeroways] Rendered from zoom 11."
+    },
+    {
+      "key": "aeroway",
+      "value": "taxiway",
+      "object_types": ["way", "area"],
+      "description": "[aeroways] Rendered from zoom 11."
+    },
+    {
+      "key": "amenity",
+      "value": "bar",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/bar.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "bench",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/bench.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 17. No label."
+    },
+    {
+      "key": "amenity",
+      "value": "bus_station",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/bus_station.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "amenity",
+      "value": "cafe",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/cafe.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "cinema",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/cinema.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "college",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/college.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "community_centre",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/community_centre.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "drinking_water",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/drinking_water.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "amenity",
+      "value": "fast_food",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/fast_food.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "feeding_place",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/manger.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. No label."
+    },
+    {
+      "key": "amenity",
+      "value": "fire_station",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/fire_station.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "fountain",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/fountain.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17. [water_areas] Rendered from zoom 0. Label (name) from zoom 10. Rendered only when name present."
+    },
+    {
+      "key": "amenity",
+      "value": "fuel",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/fuel.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "game_feeding",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/manger.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. No label."
+    },
+    {
+      "key": "amenity",
+      "value": "hospital",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/hospital.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "amenity",
+      "value": "hunting_stand",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/hunting_stand.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "kindergarten",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/kindergarten.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "office",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/office.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "parking",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/parking.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 17. Label (name/ref) from zoom 19."
+    },
+    {
+      "key": "amenity",
+      "value": "pharmacy",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/pharmacy.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "police",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/police.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "post_box",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/post_box.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 18. Label (name/ref) from zoom 19."
+    },
+    {
+      "key": "amenity",
+      "value": "post_office",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/post_office.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "pub",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/pub.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "restaurant",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/restaurant.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "school",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/school.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "shelter",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/shelter.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "swimming_pool",
+      "object_types": ["area"],
+      "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10. Rendered only when name present."
+    },
+    {
+      "key": "amenity",
+      "value": "taxi",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/taxi.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "telephone",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/telephone.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 18. Label (name/ref) from zoom 19."
+    },
+    {
+      "key": "amenity",
+      "value": "theatre",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/theatre.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "toilets",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/toilets.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 17. No label."
+    },
+    {
+      "key": "amenity",
+      "value": "townhall",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/townhall.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. No label."
+    },
+    {
+      "key": "amenity",
+      "value": "university",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/university.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
+      "value": "waste_basket",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/waste_basket.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 19. No label."
+    },
+    {
+      "key": "amenity",
+      "value": "waste_disposal",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/waste_disposal.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 18. No label."
+    },
+    {
+      "key": "amenity",
+      "value": "water_point",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/drinking_water.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "amenity",
+      "value": "watering_place",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/watering_place.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. No label."
+    },
+    {
+      "key": "barrier",
+      "object_types": ["area"],
+      "description": "[barrierways] Rendered from zoom 16."
+    },
+    {
+      "key": "barrier",
+      "value": "gate",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/gate.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 18. No label."
+    },
+    {
+      "key": "barrier",
+      "value": "lift_gate",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/lift_gate.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 17. No label."
+    },
+    {
+      "key": "barrier",
+      "value": "swing_gate",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/lift_gate.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 17. No label."
+    },
+    {
+      "key": "bicycle",
+      "object_types": ["node", "area"],
+      "description": "[road_access_restrictions] Rendered from zoom 14."
+    },
+    {
+      "key": "boundary",
+      "value": "administrative",
+      "object_types": ["relation"],
+      "description": "[borders] Rendered from zoom 8."
+    },
+    {
+      "key": "boundary",
+      "value": "marker",
+      "object_types": ["node"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/boundary_stone.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 17. Label (name/ref) from zoom 18."
+    },
+    {
+      "key": "boundary",
+      "value": "protected_area",
+      "object_types": ["area", "relation"],
+      "description": "[protected_areas] Rendered from zoom 8. Label (name) from zoom 8. Rendered only when name present."
+    },
+    {
+      "key": "building",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/building.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17. [buildings] Rendered from zoom 13. Label (name) from zoom 17. Rendered only when name present."
+    },
+    {
+      "key": "building",
+      "value": "cathedral",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/church.svg",
+      "description": "[features] Rendered as icon when amenity=place_of_worship."
+    },
+    {
+      "key": "building",
+      "value": "chapel",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/chapel.svg",
+      "description": "[features] Rendered as icon when amenity=place_of_worship."
+    },
+    {
+      "key": "building",
+      "value": "church",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/church.svg",
+      "description": "[features] Rendered as icon when amenity=place_of_worship."
+    },
+    {
+      "key": "building",
+      "value": "mosque",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/mosque.svg",
+      "description": "[features] Rendered as icon when amenity=place_of_worship."
+    },
+    {
+      "key": "building",
+      "value": "ruins",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/ruins.svg",
+      "description": "[features] Rendered as icon."
+    },
+    {
+      "key": "building",
+      "value": "synagogue",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/synagogue.svg",
+      "description": "[features] Rendered as icon when amenity=place_of_worship."
+    },
+    {
+      "key": "colour",
+      "object_types": ["relation"],
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14. Supported colors: red, blue, green, yellow, black, white, orange, violet, purple"
+    },
+    {
+      "key": "network",
+      "object_types": ["relation"],
+      "description": "[routes] Rendered from zoom 9. Used for hiking/cycling/horse/ski routes to control which routes are rendered from what zoom and for hiking routes also style of the rendering."
+    },
+    {
+      "key": "denotation",
+      "value": "natural_monument",
+      "object_types": ["node"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/tree_protected.svg",
+      "description": "[features] Rendered as protected tree when natural=tree."
+    },
+    {
+      "key": "embankment",
+      "value": "yes",
+      "object_types": ["way"],
+      "description": "[embankments] Rendered from zoom 16."
+    },
+    {
+      "key": "natural",
+      "value": "cliff",
+      "object_types": ["way"],
+      "description": "[feature_lines_maskable] Rendered from zoom 16."
+    },
+    {
+      "key": "natural",
+      "value": "earth_bank",
+      "object_types": ["way"],
+      "description": "[feature_lines_maskable] Rendered from zoom 16."
+    },
+    {
+      "key": "natural",
+      "value": "dyke",
+      "object_types": ["way"],
+      "description": "[feature_lines_maskable] Rendered from zoom 16."
+    },
+    {
+      "key": "natural",
+      "value": "embankment",
+      "object_types": ["way"],
+      "description": "[feature_lines_maskable] Rendered from zoom 16."
+    },
+    {
+      "key": "natural",
+      "value": "gully",
+      "object_types": ["way"],
+      "description": "[feature_lines_maskable] Rendered from zoom 16."
+    },
+    {
+      "key": "fixme",
+      "object_types": ["node", "way"],
+      "description": "[fixmes] Rendered from zoom 14."
+    },
+    {
+      "key": "foot",
+      "object_types": ["way", "relation"],
+      "description": "[road_access_restrictions] Rendered from zoom 14."
+    },
+    {
+      "key": "ford",
+      "object_types": ["node"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/ford.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 17. No label."
+    },
+    {
+      "key": "generator:method",
+      "value": "wind_turbine",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/generator_wind.svg",
+      "description": "[features] Rendered as icon when power=generator."
+    },
+    {
+      "key": "generator:source",
+      "value": "wind",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/generator_wind.svg",
+      "description": "[features] Rendered as icon when power=generator."
+    },
+    {
+      "key": "highway",
+      "value": "bus_stop",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/bus_stop.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "historic",
+      "value": "archaeological_site",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/archaeological_site.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "historic",
+      "value": "boundary_stone",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/boundary_stone.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 17. Label (name/ref) from zoom 18."
+    },
+    {
+      "key": "historic",
+      "value": "bunker",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/bunker.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "historic",
+      "value": "castle",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/castle.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 14."
+    },
+    {
+      "key": "historic",
+      "value": "manor",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/manor.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "historic",
+      "value": "memorial",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/memorial.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "historic",
+      "value": "mine",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/disused_mine.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "disused",
+      "value": "yes",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/disused_mine.svg",
+      "description": "[features] Affect mine and adit icon."
+    },
+    {
+      "key": "historic",
+      "value": "monument",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/monument.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "historic",
+      "value": "ruins",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/ruins.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "historic",
+      "value": "tree_shrine",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/cross.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 17. Label (name/ref) from zoom 18."
+    },
+    {
+      "key": "historic",
+      "value": "wayside_cross",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/cross.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 17. Label (name/ref) from zoom 18."
+    },
+    {
+      "key": "historic",
+      "value": "wayside_shrine",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/wayside_shrine.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 17. Label (name/ref) from zoom 18."
+    },
+    {
+      "key": "information",
+      "value": "board",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/board.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "information",
+      "value": "guidepost",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/guidepost_xx.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 13. Label (name) from zoom 13."
+    },
+    {
+      "key": "information",
+      "value": "map",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/map.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "information",
+      "value": "office",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/office.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "information",
+      "value": "route_marker",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/guidepost_x.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. No label."
+    },
+    {
+      "key": "landuse",
+      "value": "basin",
+      "object_types": ["area"],
+      "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10. Rendered only when name present."
+    },
+    {
+      "key": "landuse",
+      "value": "forest",
+      "object_types": ["area"],
+      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12. Rendered only when name present."
+    },
+    {
+      "key": "landuse",
+      "value": "meadow",
+      "object_types": ["area"],
+      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12. Rendered only when name present."
+    },
+    {
+      "key": "landuse",
+      "value": "military",
+      "object_types": ["area"],
+      "description": "[military_areas] Rendered from zoom 10."
+    },
+    {
+      "key": "landuse",
+      "value": "reservoir",
+      "object_types": ["area"],
+      "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10. Rendered only when name present."
+    },
+    {
+      "key": "landuse",
+      "value": "wood",
+      "object_types": ["area"],
+      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12. Rendered only when name present."
+    },
+    {
+      "key": "leisure",
+      "value": "bird_hide",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/bird_hide.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "leisure",
+      "value": "firepit",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/firepit.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 17. No label."
+    },
+    {
+      "key": "leisure",
+      "value": "golf_course",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/golf_course.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "leisure",
+      "value": "horse_riding",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/horse_riding.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "leisure",
+      "value": "miniature_golf",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/miniature_golf.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "leisure",
+      "value": "nature_reserve",
+      "object_types": ["area", "relation"],
+      "description": "[protected_areas] Rendered from zoom 8. Label (name) from zoom 8. Rendered only when name present."
+    },
+    {
+      "key": "leisure",
+      "value": "outdoor_seating",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/outdoor_seating.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. No label."
+    },
+    {
+      "key": "leisure",
+      "value": "picnic_table",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/picnic_table.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. No label."
+    },
+    {
+      "key": "leisure",
+      "value": "playground",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/playground.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "leisure",
+      "value": "sauna",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/sauna.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "leisure",
+      "value": "swimming_pool",
+      "object_types": ["node", "area"],
+      "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10. Rendered only when name present."
+    },
+    {
+      "key": "leisure",
+      "value": "water_park",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/water_park.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "man_made",
+      "value": "adit",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/mine.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "man_made",
+      "value": "apiary",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/beehive.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 17. Label (name/ref) from zoom 18."
+    },
+    {
+      "key": "man_made",
+      "value": "beehive",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/beehive.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 17. Label (name/ref) from zoom 18."
+    },
+    {
+      "key": "man_made",
+      "value": "bridge",
+      "object_types": ["area"],
+      "description": "[bridge_areas] Rendered from zoom 15."
+    },
+    {
+      "key": "man_made",
+      "value": "chimney",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/chimney.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "man_made",
+      "value": "communications_tower",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/tower_communication.svg",
+      "description": "[features] Rendered as icon."
+    },
+    {
+      "key": "man_made",
+      "value": "cross",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/cross.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "man_made",
+      "value": "cutline",
+      "object_types": ["way"],
+      "description": "[cutlines] Rendered from zoom 13."
+    },
+    {
+      "key": "man_made",
+      "value": "forester's_lodge",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/forester's_lodge.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "man_made",
+      "value": "mast",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/mast_other.svg",
+      "description": "[features] Rendered as icon; tower:type selects communication/other variants."
+    },
+    {
+      "key": "man_made",
+      "value": "mine",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/mine.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "man_made",
+      "value": "mineshaft",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/mine.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "man_made",
+      "value": "pipeline",
+      "object_types": ["way"],
+      "description": "[pipelines] Rendered from zoom 12."
+    },
+    {
+      "key": "man_made",
+      "value": "pumping_station",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/water_works.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "man_made",
+      "value": "reservoir_covered",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/water_works.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "man_made",
+      "value": "tower",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/tower_other.svg",
+      "description": "[features] Rendered as icon; tower:type selects communication/observation/bell_tower/other variants."
+    },
+    {
+      "key": "man_made",
+      "value": "wastewater_plant",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/water_works.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "man_made",
+      "value": "water_tower",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/water_tower.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "man_made",
+      "value": "water_well",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/water_well.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "man_made",
+      "value": "water_works",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/water_works.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "military",
+      "value": "bunker",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/bunker.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "mountain_pass",
+      "value": "yes",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/saddle.svg",
+      "description": "[features] Rendered as icon."
+    },
+    {
+      "key": "natural",
+      "value": "arch",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/arch.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "natural",
+      "value": "blockfield",
+      "object_types": ["area"],
+      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12. Rendered only when name present."
+    },
+    {
+      "key": "natural",
+      "value": "cave_entrance",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/cave_entrance.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "natural",
+      "value": "fell",
+      "object_types": ["area"],
+      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12. Rendered only when name present."
+    },
+    {
+      "key": "natural",
+      "value": "grassland",
+      "object_types": ["area"],
+      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12. Rendered only when name present."
+    },
+    {
+      "key": "natural",
+      "value": "heath",
+      "object_types": ["area"],
+      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12. Rendered only when name present."
+    },
+    {
+      "key": "natural",
+      "value": "peak",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/peak.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 10. Label (name) from zoom 10. Rendered only when name present."
+    },
+    {
+      "key": "natural",
+      "value": "ridge",
+      "object_types": ["way"],
+      "description": "[valleys_ridges] Rendered from zoom 13. Label (name) from zoom 13. Rendered only when name present."
+    },
+    {
+      "key": "natural",
+      "value": "rock",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/rock.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "natural",
+      "value": "saddle",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/saddle.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 15. Rendered only when name present."
+    },
+    {
+      "key": "natural",
+      "value": "scree",
+      "object_types": ["area"],
+      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12. Rendered only when name present."
+    },
+    {
+      "key": "natural",
+      "value": "scrub",
+      "object_types": ["area"],
+      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12. Rendered only when name present."
+    },
+    {
+      "key": "natural",
+      "value": "shrub",
+      "object_types": ["node", "area"],
+      "description": "[trees] Rendered from zoom 16."
+    },
+    {
+      "key": "natural",
+      "value": "sinkhole",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/sinkhole.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "natural",
+      "value": "spring",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/spring.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "natural",
+      "value": "hot_spring",
+      "object_types": ["node", "area"],
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "natural",
+      "value": "geyser",
+      "object_types": ["node", "area"],
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "man_made",
+      "value": "spring_box",
+      "object_types": ["node", "area"],
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "natural",
+      "value": "stone",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/stone.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "natural",
+      "value": "tree",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/tree.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 15. [trees] Rendered from zoom 16."
+    },
+    {
+      "key": "natural",
+      "value": "tree_row",
+      "object_types": ["way"],
+      "description": "[feature_lines] Rendered from zoom 13."
+    },
+    {
+      "key": "natural",
+      "value": "valley",
+      "object_types": ["way"],
+      "description": "[valleys_ridges] Rendered from zoom 13. Label (name) from zoom 13. Rendered only when name present."
+    },
+    {
+      "key": "natural",
+      "value": "water",
+      "object_types": ["area"],
+      "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10. Rendered only when name present."
+    },
+    {
+      "key": "natural",
+      "value": "wetland",
+      "object_types": ["area"],
+      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12. Rendered only when name present."
+    },
+    {
+      "key": "natural",
+      "value": "wood",
+      "object_types": ["area"],
+      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12. Rendered only when name present."
+    },
+    {
+      "key": "osmc:symbol",
+      "object_types": ["relation"],
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14. Only waycolor is used: red, blue, green, yellow, black, white, orange, violet, purple"
+    },
+    {
+      "key": "place",
+      "object_types": ["node"],
+      "description": "[place] Rendered from zoom 8. Label (name) from zoom 8. Rendered only when name present. [locality] Rendered from zoom 15. Label (name) from zoom 15. Rendered only when name present."
+    },
+    {
+      "key": "power",
+      "value": "generator",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/generator_wind.svg",
+      "description": "[features] Rendered as icon when generator:source=wind or generator:method=wind_turbine. [solar_power_plants] Rendered from zoom 12."
+    },
+    {
+      "key": "power",
+      "value": "line",
+      "object_types": ["way"],
+      "description": "[power_lines] Rendered from zoom 13."
+    },
+    {
+      "key": "power",
+      "value": "minor_line",
+      "object_types": ["way"],
+      "description": "[power_lines] Rendered from zoom 13."
+    },
+    {
+      "key": "power",
+      "value": "tower",
+      "object_types": ["node", "area"],
+      "description": "[power_lines] Rendered from zoom 13."
+    },
+    {
+      "key": "protected",
+      "value": "yes",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/tree_protected.svg",
+      "description": "[features] Rendered as protected tree when natural=tree."
+    },
+    {
+      "key": "railway",
+      "value": "halt",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/station.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "railway",
+      "value": "rail",
+      "object_types": ["way"],
+      "description": "[roads] Rendered from zoom 8. Label (name) from zoom 15. Rendered only when name present."
+    },
+    {
+      "key": "railway",
+      "value": "station",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/station.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "route",
+      "value": "bicycle",
+      "object_types": ["relation"],
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14."
+    },
+    {
+      "key": "route",
+      "value": "foot",
+      "object_types": ["relation"],
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14."
+    },
+    {
+      "key": "route",
+      "value": "hiking",
+      "object_types": ["relation"],
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14."
+    },
+    {
+      "key": "route",
+      "value": "horse",
+      "object_types": ["relation"],
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14."
+    },
+    {
+      "key": "route",
+      "value": "mtb",
+      "object_types": ["relation"],
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14."
+    },
+    {
+      "key": "route",
+      "value": "piste",
+      "object_types": ["relation"],
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14."
+    },
+    {
+      "key": "route",
+      "value": "running",
+      "object_types": ["relation"],
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14."
+    },
+    {
+      "key": "route",
+      "value": "ski",
+      "object_types": ["relation"],
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14."
+    },
+    {
+      "key": "shelter_type",
+      "value": "basic_hut",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/basic_hut.svg",
+      "description": "[features] Rendered as icon when amenity=shelter."
+    },
+    {
+      "key": "shelter_type",
+      "value": "lean_to",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/lean_to.svg",
+      "description": "[features] Rendered as icon when amenity=shelter."
+    },
+    {
+      "key": "shelter_type",
+      "value": "picnic_shelter",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/picnic_shelter.svg",
+      "description": "[features] Rendered as icon when amenity=shelter."
+    },
+    {
+      "key": "shelter_type",
+      "value": "public_transport",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/public_transport.svg",
+      "description": "[features] Rendered as icon when amenity=shelter."
+    },
+    {
+      "key": "shelter_type",
+      "value": "weather_shelter",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/weather_shelter.svg",
+      "description": "[features] Rendered as icon when amenity=shelter."
+    },
+    {
+      "key": "shop",
+      "value": "bicycle",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/bicycle.svg",
+      "description": "[features] Rendered as icon."
+    },
+    {
+      "key": "shop",
+      "value": "confectionery",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/confectionery.svg",
+      "description": "[features] Rendered as icon."
+    },
+    {
+      "key": "shop",
+      "value": "convenience",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/convenience.svg",
+      "description": "[features] Rendered as icon."
+    },
+    {
+      "key": "shop",
+      "value": "farm",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/greengrocer.svg",
+      "description": "[features] Rendered as icon."
+    },
+    {
+      "key": "shop",
+      "value": "fuel",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/fuel.svg",
+      "description": "[features] Rendered as icon."
+    },
+    {
+      "key": "shop",
+      "value": "greengrocer",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/greengrocer.svg",
+      "description": "[features] Rendered as icon."
+    },
+    {
+      "key": "shop",
+      "value": "pastry",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/confectionery.svg",
+      "description": "[features] Rendered as icon."
+    },
+    {
+      "key": "shop",
+      "value": "supermarket",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/supermarket.svg",
+      "description": "[features] Rendered as icon."
+    },
+    {
+      "key": "sport",
+      "value": "athletics",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/running.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "sport",
+      "value": "basketball",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/basketball.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "sport",
+      "value": "climbing",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/climbing.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "sport",
+      "value": "cycling",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/cycling.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "sport",
+      "value": "equestrian",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/horse_riding.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "sport",
+      "value": "free_flying",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/free_flying.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "sport",
+      "value": "horse_racing",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/horse_riding.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "sport",
+      "value": "horse_riding",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/horse_riding.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "sport",
+      "value": "ice_skating",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/ice_skating.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "sport",
+      "value": "miniature_golf",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/miniature_golf.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "sport",
+      "value": "running",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/running.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "sport",
+      "value": "shooting",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/shooting.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "sport",
+      "value": "skiing",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/skiing.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "sport",
+      "value": "soccer",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/soccer.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "sport",
+      "value": "swimming",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/water_park.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "sport",
+      "value": "tennis",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/tennis.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "sport",
+      "value": "volleyball",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/volleyball.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "tourism",
+      "value": "alpine_hut",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/alpine_hut.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "tourism",
+      "value": "apartment",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/apartment.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "tourism",
+      "value": "artwork",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/artwork.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "tourism",
+      "value": "attraction",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/attraction.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "tourism",
+      "value": "camp_site",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/camp_site.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "tourism",
+      "value": "castle",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/castle.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 14."
+    },
+    {
+      "key": "tourism",
+      "value": "chalet",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/chalet.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "tourism",
+      "value": "guest_house",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/guest_house.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "tourism",
+      "value": "hostel",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/hostel.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "tourism",
+      "value": "hotel",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/hotel.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "tourism",
+      "value": "memorial",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/memorial.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "tourism",
+      "value": "monument",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/monument.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "tourism",
+      "value": "motel",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/motel.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "tourism",
+      "value": "museum",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/museum.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "tourism",
+      "value": "picnic_site",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/picnic_site.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17."
+    },
+    {
+      "key": "tourism",
+      "value": "theme_park",
+      "object_types": ["node", "area"],
+      "description": "[special_parks] Rendered from zoom 13. Label (name) from zoom 13. Rendered only when name present."
+    },
+    {
+      "key": "tourism",
+      "value": "viewpoint",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/viewpoint.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "tourism",
+      "value": "wilderness_hut",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/wilderness_hut.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "tourism",
+      "value": "zoo",
+      "object_types": ["node", "area"],
+      "description": "[special_parks] Rendered from zoom 13. Label (name) from zoom 13. Rendered only when name present."
+    },
+    {
+      "key": "tower:type",
+      "value": "bell_tower",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/tower_bell_tower.svg",
+      "description": "[features] Rendered as bell tower."
+    },
+    {
+      "key": "tower:type",
+      "value": "communication",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/tower_communication.svg",
+      "description": "[features] Rendered as communication tower/mast."
+    },
+    {
+      "key": "tower:type",
+      "value": "observation",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/tower_observation.svg",
+      "description": "[features] Rendered as observation tower."
+    },
+    {
+      "key": "vehicle",
+      "object_types": ["way"],
+      "description": "[road_access_restrictions] Rendered from zoom 14."
+    },
+    {
+      "key": "waterway",
+      "value": "canal",
+      "object_types": ["way"],
+      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12. Rendered only when name present."
+    },
+    {
+      "key": "waterway",
+      "value": "dam",
+      "object_types": ["node", "way", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/dam.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 15. Label (name) from zoom 16. [feature_lines] Rendered from zoom 13."
+    },
+    {
+      "key": "waterway",
+      "value": "ditch",
+      "object_types": ["way"],
+      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12. Rendered only when name present."
+    },
+    {
+      "key": "waterway",
+      "value": "drain",
+      "object_types": ["way"],
+      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12. Rendered only when name present."
+    },
+    {
+      "key": "waterway",
+      "value": "river",
+      "object_types": ["way"],
+      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12. Rendered only when name present."
+    },
+    {
+      "key": "waterway",
+      "value": "riverbank",
+      "object_types": ["area"],
+      "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10. Rendered only when name present."
+    },
+    {
+      "key": "waterway",
+      "value": "stream",
+      "object_types": ["way"],
+      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12. Rendered only when name present."
+    },
+    {
+      "key": "waterway",
+      "value": "waterfall",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/waterfall.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+    },
+    {
+      "key": "waterway",
+      "value": "weir",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/weir.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name) from zoom 17. [feature_lines] Rendered from zoom 13."
+    },
+    {
+      "key": "intermittent",
+      "object_types": ["area"],
+      "description": "[features] Visually indicated on water areas."
+    },
+    {
+      "key": "seasonal",
+      "object_types": ["area"],
+      "description": "[features] Visually indicated on water areas."
+    },
+    {
+      "key": "intermittent",
+      "object_types": ["node", "area"],
+      "description": "[features] Visually indicated on spring icons."
+    },
+    {
+      "key": "seasonal",
+      "object_types": ["node", "area"],
+      "description": "[features] Visually indicated on spring icons."
+    },
+    {
+      "key": "intermittent",
+      "object_types": ["way"],
+      "description": "[water_lines] Makes wayerway lines dashed."
+    },
+    {
+      "key": "seasonal",
+      "object_types": ["way"],
+      "description": "[water_lines] Makes wayerway lines dashed."
+    },
+    {
+      "key": "water_characteristic",
+      "object_types": ["node", "area"],
+      "description": "[features] Differentiates icon for mineral springs."
+    },
+    {
+      "key": "drinking_water",
+      "object_types": ["node", "area"],
+      "description": "[features] Differentiates icon for springs and wells. Supports values yes/no."
+    },
+    {
+      "key": "refitted",
+      "object_types": ["node", "area"],
+      "description": "[features] Differentiates icon for springs."
+    },
+    {
+      "key": "tunnel",
+      "value": "yes",
+      "description": "[water_lines] Visually indicated on wayerways."
+    },
+    {
+      "key": "bridge",
+      "value": "yes",
+      "description": "[roads] Visually indicated on roads and railways."
+    },
+    {
+      "key": "tunnel",
+      "value": "yes",
+      "description": "[roads] Visually indicated on roads and railways."
+    },
+    {
+      "key": "tower:type",
+      "description": "[features] Affects tower icon."
+    },
+    {
+      "key": "ele",
+      "description": "[features] Adds elevation into label with smaller font size."
+    }
+  ]
+}
