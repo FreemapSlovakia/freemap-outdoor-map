@@ -44,8 +44,6 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         .map(|geom| (geom.project_to_tile(tile_projector), geom))
         .collect();
 
-    let context = context;
-
     // hatching
     for (projected, unprojected) in &geometries {
         context.push_group();
