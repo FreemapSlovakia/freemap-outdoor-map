@@ -72,7 +72,7 @@ pub fn render(
 
     ctx.context.push_group();
 
-    layers::landcover::render(ctx, client, svg_repo).with_layer("landuse")?;
+    layers::landcover::render(ctx, client, svg_repo).with_layer("landcover")?;
 
     if zoom >= 13 {
         layers::cutlines::render(ctx, client).with_layer("cutlines")?;

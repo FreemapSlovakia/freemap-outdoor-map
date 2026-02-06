@@ -48,20 +48,20 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
                     THEN tags->'wetland'
                     ELSE type
                 END AS type,
-                ST_Intersection(geometry), ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), 100)) AS geometry,
+                geometry,
                 osm_id,
                 {z_order_case} AS z_order
             FROM
                 osm_landcovers{table_suffix}
             WHERE
                 {excl_types}
-                geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
             ORDER BY
                 z_order DESC NULLS LAST,
                 osm_id
         ");
 
-        client.query(query, &ctx.bbox_query_params(None).as_params())
+        client.query(query, &ctx.bbox_query_params(Some(4.0)).as_params())
     })?;
 
     context.save()?;

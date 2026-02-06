@@ -23,10 +23,10 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
     context.save()?;
 
+    context.set_source_rgb(0.5, 0.5, 0.5);
+
     for row in rows {
         let geom = row.geometry()?.project_to_tile(&ctx.tile_projector);
-
-        context.set_source_rgb(0.5, 0.5, 0.5);
 
         path_geometry(context, &geom);
 
