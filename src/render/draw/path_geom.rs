@@ -145,6 +145,8 @@ pub fn path_line_string_with_offset(context: &Context, line_string: &LineString,
         polyline.add_vertex(PlineVertex::new(p.x, p.y, 0.0));
     }
 
+    let polyline = polyline.remove_repeat_pos(1e-2).unwrap_or(polyline);
+
     for pc in polyline.parallel_offset(offset) {
         let mut first = true;
         let mut p1 = (0.0, 0.0);

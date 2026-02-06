@@ -12,6 +12,8 @@ pub fn offset_line_string(line_string: &LineString, offset: f64) -> LineString {
         polyline.add_vertex(PlineVertex::new(p.x, p.y, 0.0));
     }
 
+    let polyline = polyline.remove_repeat_pos(1e-2).unwrap_or(polyline);
+
     for pc in polyline.parallel_offset(offset) {
         if let Some(polyline) = pc.arcs_to_approx_lines(3.0) {
             for vertex in polyline.vertex_data {
