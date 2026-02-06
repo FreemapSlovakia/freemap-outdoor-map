@@ -17,7 +17,11 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
                 (
-                    type = 'tree' AND (NOT (tags ? 'protected') OR tags->'protected' = 'no') AND (NOT (tags ? 'denotation') OR tags->'denotation' <> 'natural_monument')
+                    (
+                        type = 'tree' AND
+                        (NOT (tags ? 'protected') OR tags->'protected' = 'no') AND
+                        (NOT (tags ? 'denotation') OR tags->'denotation' <> 'natural_monument')
+                    )
                     OR type = 'shrub'
                 )
             ORDER BY

@@ -19,8 +19,8 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
             12.. => "",
         };
 
-        let sql = format!(
-            "
+        #[cfg_attr(any(), rustfmt::skip)]
+        let sql = format!("
             SELECT
                 type,
                 geometry, COALESCE(intermittent OR seasonal, false) AS tmp
@@ -28,8 +28,7 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
                 osm_waterareas{table_suffix}
             WHERE
                 geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
-            "
-        );
+        ");
 
         client.query(&sql, &ctx.bbox_query_params(None).as_params())
     })?;

@@ -62,10 +62,10 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
                 WITH merged AS (
                     SELECT
                         type, name, geometry, area
-                        FROM
-                            osm_protected_areas
-                        WHERE
-                            (type = 'national_park' OR (type = 'protected_area' AND protect_class = '2'))
+                    FROM
+                        osm_protected_areas
+                    WHERE
+                        (type = 'national_park' OR (type = 'protected_area' AND protect_class = '2'))
 
                     UNION ALL
 

@@ -27,16 +27,18 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
             14.. => "land_z14_plus",
         };
 
-        let sql = format!(
-            "
+        #[cfg_attr(any(), rustfmt::skip)]
+        let sql = format!("
             SELECT
-                ST_Intersection(ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5), ST_Buffer(geometry, $6)) AS geometry
+                ST_Intersection(
+                    ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5),
+                    ST_Buffer(geometry, $6)
+                ) AS geometry
             FROM
                 {table}
             WHERE
                 geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
-            ",
-        );
+        ");
 
         client.query(
             &sql,

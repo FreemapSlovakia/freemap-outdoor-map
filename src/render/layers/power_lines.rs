@@ -17,8 +17,8 @@ pub fn render_lines(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
             "type IN ('line', 'minor_line')"
         };
 
-        let sql = format!(
-            "
+        #[cfg_attr(any(), rustfmt::skip)]
+        let sql = format!("
             SELECT
                 geometry,
                 type
@@ -27,8 +27,7 @@ pub fn render_lines(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
             WHERE
                 {by_zoom} AND
                  geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
-            ",
-        );
+        ");
 
         client.query(&sql, &ctx.bbox_query_params(None).as_params())
     })?;
@@ -66,12 +65,22 @@ pub fn render_towers_poles(ctx: &Ctx, client: &mut Client) -> LayerRenderResult 
     let _span = tracy_client::span!("power_lines::render_towers_poles");
 
     let rows = ctx.legend_features("power_lines", || {
-        let sql = format!(
-            "SELECT geometry, type
-            FROM osm_features
-            WHERE type IN ('power_tower'{}) AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)",
-            if ctx.zoom < 15 { "" } else { ", 'pylon', 'pole'" }
-        );
+        let by_zoom = if ctx.zoom < 15 {
+            ""
+        } else {
+            ", 'pylon', 'pole'"
+        };
+
+        #[cfg_attr(any(), rustfmt::skip)]
+        let sql = format!("
+            SELECT
+                geometry, type
+            FROM
+                osm_features
+            WHERE
+                type IN ('power_tower'{by_zoom}) AND
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ");
 
         client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
     })?;

@@ -31,8 +31,8 @@ pub fn render(
             _ => return Ok(Vec::new()),
         };
 
-        let sql = format!(
-            "
+        #[cfg_attr(any(), rustfmt::skip)]
+        let sql = format!("
             SELECT
                 name,
                 type,
@@ -46,8 +46,8 @@ pub fn render(
             ORDER BY
                 z_order DESC,
                 population DESC,
-                osm_id",
-        );
+                osm_id
+        ");
 
         client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
     })?;

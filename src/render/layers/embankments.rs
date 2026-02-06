@@ -1,9 +1,6 @@
 use crate::render::{
-    ctx::Ctx,
-    draw::line_pattern::draw_line_pattern,
-    layer_render_error::LayerRenderResult,
-    projectable::TileProjectable,
-    svg_repo::SvgRepo,
+    ctx::Ctx, draw::line_pattern::draw_line_pattern, layer_render_error::LayerRenderResult,
+    projectable::TileProjectable, svg_repo::SvgRepo,
 };
 use postgres::Client;
 

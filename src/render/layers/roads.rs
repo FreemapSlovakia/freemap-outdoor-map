@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::render::{
     colors::{self, Color, ContextExt},
     ctx::{Ctx, FeatureError},
@@ -22,8 +24,6 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             12.. => "osm_roads",
         };
 
-        let ex;
-
         // TODO for zoom < 12 we select too much
 
         let select_member = if zoom <= 12 {
@@ -32,24 +32,21 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             ""
         };
 
-        let join_members = if zoom <= 12 {
-            ex = format!(
-                "
+        #[cfg_attr(any(), rustfmt::skip)]
+        let join_members: Cow<_> = if zoom <= 12 {
+            format!("
                 LEFT JOIN
                     osm_route_members
                 ON
                     osm_route_members.type = 1 AND
                     osm_route_members.member = -{table}.osm_id
-                "
-            );
-
-            &ex
+            ").into()
         } else {
-            ""
+            "".into()
         };
 
-        let query = format!(
-            "
+        #[cfg_attr(any(), rustfmt::skip)]
+        let query = format!("
             SELECT
                 {table}.geometry,
                 {table}.type,
@@ -72,8 +69,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
                 z_order,
                 CASE WHEN {table}.type = 'rail' AND service IN ('', 'main') THEN 2 ELSE 1 END,
                 {table}.osm_id
-            ",
-        );
+        ");
 
         client.query(&query, &ctx.bbox_query_params(Some(128.0)).as_params())
     })?;

@@ -63,28 +63,27 @@ pub fn render(ctx: &Ctx, client: &mut Client, country: Option<&str>) -> LayerRen
                 "cont_dmr_split".into()
             };
 
-            format!(
-                "
-                    WITH contours AS (
-                        SELECT
-                            ST_SimplifyVW(wkb_geometry, $6) AS geometry,
-                            height_m,
-                            ({width_case})::double precision AS width
-                        FROM
-                            {table}
-                        WHERE
-                            wkb_geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-                    )
+            #[cfg_attr(any(), rustfmt::skip)]
+            format!("
+                WITH contours AS (
                     SELECT
-                        geometry,
+                        ST_SimplifyVW(wkb_geometry, $6) AS geometry,
                         height_m,
-                        width
+                        ({width_case})::double precision AS width
                     FROM
-                        contours
+                        {table}
                     WHERE
-                        width > 0
-                ",
-            )
+                        wkb_geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+                )
+                SELECT
+                    geometry,
+                    height_m,
+                    width
+                FROM
+                    contours
+                WHERE
+                    width > 0
+            ")
         };
 
         client.query(

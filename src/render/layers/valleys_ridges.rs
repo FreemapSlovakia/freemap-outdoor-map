@@ -88,8 +88,8 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let rows = ctx.legend_features("valleys_ridges", || {
         let dir = if ctx.zoom > 14 { "ASC" } else { "DESC" };
 
-        let sql = format!(
-            "
+        #[cfg_attr(any(), rustfmt::skip)]
+        let sql = format!("
             SELECT
                 geometry,
                 name,
@@ -102,8 +102,7 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
             ORDER BY
                 ST_Length(geometry) {dir}
-            ",
-        );
+        ");
 
         client.query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params())
     })?;
@@ -117,7 +116,9 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
             FROM
                 osm_feature_lines
             WHERE
-                type = 'ridge' AND name <> '' AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+                type = 'ridge' AND
+                name <> '' AND
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
             ORDER BY
                 ST_Length(geometry) DESC
         ";

@@ -12,13 +12,13 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
     let rows = ctx.legend_features("pipelines", || {
         let by_zoom = if ctx.zoom < 15 {
-            "'overground', 'overhead', ''"
+            ""
         } else {
-            "'overground', 'overhead', '', 'underground', 'underwater'"
+            ", 'underground', 'underwater'"
         };
 
-        let sql = format!(
-            "
+        #[cfg_attr(any(), rustfmt::skip)]
+        let sql = format!("
             SELECT
                 geometry,
                 location IN('underground', 'underwater') AS below
@@ -26,9 +26,8 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
                 osm_pipelines
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                location IN ({by_zoom})
-            ",
-        );
+                location IN ('overground', 'overhead', ''{by_zoom})
+        ");
 
         client.query(&sql, &ctx.bbox_query_params(Some(8.0)).as_params())
     })?;

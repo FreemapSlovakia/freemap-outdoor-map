@@ -42,7 +42,9 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         let query = &format!("
             SELECT
                 CASE
-                    WHEN type = 'wetland' AND tags->'wetland' IN ('bog', 'reedbed', 'marsh', 'swamp', 'wet_meadow', 'mangrove', 'fen')
+                    WHEN
+                        type = 'wetland' AND
+                        tags->'wetland' IN ('bog', 'reedbed', 'marsh', 'swamp', 'wet_meadow', 'mangrove', 'fen')
                     THEN tags->'wetland'
                     ELSE type
                 END AS type,

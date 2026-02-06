@@ -1,7 +1,5 @@
 use crate::render::{
-    ctx::Ctx,
-    draw::path_geom::path_line_string,
-    layer_render_error::LayerRenderResult,
+    ctx::Ctx, draw::path_geom::path_line_string, layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
 use postgres::Client;

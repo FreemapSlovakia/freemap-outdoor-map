@@ -468,10 +468,37 @@ let mut selects = vec![];
     let z14_sql;
 
     if zoom >= 14 {
-        let omit_sql;
 
-        z14_sql = format!(
-            "SELECT
+    let w= {
+            let mut omit_types = vec!["'peak'"];
+
+            // TODO add more types; maybe derive from POIS
+
+            if zoom < 15 {
+                omit_types.push("'bus_stop', 'mast', 'tree', 'tower', 'hunting_stand', 'shelter', 'saddle', 'mountain_pass'");
+            }
+
+            if zoom < 16 {
+                omit_types.push("'rock', 'stone', 'sinkhole', 'building', 'picnic_table', 'board', 'map', 'artwork'");
+            }
+
+            if zoom < 17 {
+                omit_types.push("'lift_gate', 'swing_gate', 'gate', 'fire_pit', 'bench', 'ford', 'parking'");
+            }
+
+            if zoom < 18 {
+                omit_types.push("'gate'");
+            }
+
+            if zoom < 19 {
+                omit_types.push("'waste_basket'");
+            }
+
+            format!("AND type NOT IN ({})", omit_types.join(", "))
+        };
+
+        z14_sql = format!("
+            SELECT
                 osm_id,
                 geometry,
                 COALESCE(NULLIF(name, ''), tags->'ref', '') AS n,
@@ -485,13 +512,31 @@ let mut selects = vec![];
                     'water_characteristic', tags->'water_characteristic'
                 ]) AS h,
                 CASE
-                    WHEN type = 'guidepost' AND name = '' THEN 'guidepost_noname'
-                    WHEN type = 'tree' AND tags->'protected' <> 'no' THEN 'tree_protected'
-                    WHEN type = 'communications_tower' THEN 'tower_communication'
-                    WHEN type = 'shelter' AND tags->'shelter_type' IN ('shopping_cart', 'lean_to', 'public_transport', 'picnic_shelter', 'basic_hut', 'weather_shelter') THEN tags->'shelter_type'
-                    WHEN type IN ('mine', 'adit', 'mineshaft') AND tags->'disused' <> 'no' THEN 'disused_mine'
-                    WHEN type IN ('hot_spring', 'geyser', 'spring_box') THEN 'spring'
-                    WHEN type IN ('tower', 'mast') THEN
+                    WHEN
+                        type = 'guidepost' AND
+                        name = ''
+                    THEN 'guidepost_noname'
+                    WHEN
+                        type = 'tree' AND
+                        tags->'protected' <> 'no'
+                    THEN 'tree_protected'
+                    WHEN type = 'communications_tower'
+                    THEN 'tower_communication'
+                    WHEN
+                        type = 'shelter' AND
+                        tags->'shelter_type' IN (
+                            'shopping_cart', 'lean_to', 'public_transport', 'picnic_shelter',
+                            'basic_hut', 'weather_shelter'
+                        )
+                    THEN tags->'shelter_type'
+                    WHEN
+                        type IN ('mine', 'adit', 'mineshaft') AND
+                        tags->'disused' <> 'no'
+                    THEN 'disused_mine'
+                    WHEN type IN ('hot_spring', 'geyser', 'spring_box')
+                    THEN 'spring'
+                    WHEN type IN ('tower', 'mast')
+                    THEN
                         type || '_' || CASE tags->'tower:type'
                             WHEN 'communication' THEN 'communication'
                             WHEN 'observation' THEN 'observation'
@@ -504,46 +549,32 @@ let mut selects = vec![];
                 osm_features
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                (type <> 'saddle' OR NOT EXISTS (SELECT 1 FROM osm_features b WHERE type = 'mountain_pass' AND osm_features.osm_id = b.osm_id)) AND
-                (type <> 'tree' OR tags->'protected' NOT IN ('', 'no') OR tags->'denotation' = 'natural_monument') AND
-                (type NOT IN ('saddle', 'mountain_pass') OR name <> '')
-                {}
-            ",
-            {
-                let mut omit_types = vec!["'peak'"];
-
-                // TODO add more types; maybe derive from POIS
-
-                if zoom < 15 {
-                    omit_types.push("'bus_stop', 'mast', 'tree', 'tower', 'hunting_stand', 'shelter', 'saddle', 'mountain_pass'");
-                }
-
-                if zoom < 16 {
-                    omit_types.push("'rock', 'stone', 'sinkhole', 'building', 'picnic_table', 'board', 'map', 'artwork'");
-                }
-
-                if zoom < 17 {
-                    omit_types.push("'lift_gate', 'swing_gate', 'gate', 'fire_pit', 'bench', 'ford', 'parking'");
-                }
-
-                if zoom < 18 {
-                    omit_types.push("'gate'");
-                }
-
-                if zoom < 19 {
-                    omit_types.push("'waste_basket'");
-                }
-
-                omit_sql = format!("AND type NOT IN ({})", omit_types.join(", "));
-
-                &omit_sql
-            }
-        );
+                (
+                    type <> 'saddle' OR
+                    NOT EXISTS (
+                        SELECT 1
+                        FROM osm_features b
+                        WHERE
+                            type = 'mountain_pass' AND
+                            osm_features.osm_id = b.osm_id
+                    )
+                ) AND
+                (
+                    type <> 'tree' OR
+                    tags->'protected' NOT IN ('', 'no') OR
+                    tags->'denotation' = 'natural_monument'
+                ) AND
+                (
+                    type NOT IN ('saddle', 'mountain_pass') OR
+                    name <> ''
+                )
+                {w}
+        ");
 
         selects.push(&z14_sql);
 
-        selects.push(
-            "SELECT
+        selects.push("
+            SELECT
                 osm_id,
                 geometry,
                 name AS n,
@@ -554,13 +585,12 @@ let mut selects = vec![];
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
                 building IN ('chapel', 'church', 'temple', 'mosque', 'cathedral', 'synagogue')
-            ",
-        );
+        ");
     }
 
     if zoom >= 15 {
-        selects.push(
-            "SELECT
+        selects.push("
+            SELECT
                 osm_id,
                 ST_PointOnSurface(geometry) AS geometry,
                 name AS n,
@@ -571,11 +601,10 @@ let mut selects = vec![];
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
                 (source = 'wind' OR method = 'wind_turbine')
-            ",
-        );
+        ");
 
-        selects.push(
-            "SELECT
+        selects.push("
+            SELECT
                 osm_id,
                 geometry,
                 name AS n,
@@ -585,12 +614,13 @@ let mut selects = vec![];
                 osm_shops
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                type IN ('convenience', 'fuel', 'confectionery', 'pastry', 'bicycle', 'supermarket', 'greengrocer', 'farm')
-            ",
-        );
+                type IN (
+                    'convenience', 'fuel', 'confectionery', 'pastry', 'bicycle', 'supermarket', 'greengrocer', 'farm'
+                )
+        ");
 
-        selects.push(
-            "SELECT
+        selects.push("
+            SELECT
                 osm_id,
                 ST_LineInterpolatePoint(geometry, 0.5) AS geometry,
                 name AS n,
@@ -601,15 +631,13 @@ let mut selects = vec![];
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
                 type IN ('dam', 'weir', 'ford')
-            ",
-        );
+        ");
     }
 
 
         let z_order_case = build_feature_z_order_case("type");
 
-        let sql = format!(
-            r"
+        let sql = format!(r"
             SELECT
                 *
             FROM

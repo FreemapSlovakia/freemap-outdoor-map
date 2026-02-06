@@ -27,19 +27,18 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             _ => "osm_waterways",
         };
 
-        let sql = format!(
-            "
-                SELECT
-                    {geom_query},
-                    type,
-                    seasonal OR intermittent AS tmp,
-                    tunnel
-                FROM
-                    {table}
-                WHERE
-                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            ",
-        );
+        #[cfg_attr(any(), rustfmt::skip)]
+        let sql = format!("
+            SELECT
+                {geom_query},
+                type,
+                seasonal OR intermittent AS tmp,
+                tunnel
+            FROM
+                {table}
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ");
 
         client.query(&sql, &ctx.bbox_query_params(Some(8.0)).as_params())
     })?;

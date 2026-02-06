@@ -57,14 +57,17 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
             )
             SELECT
                 name,
-                type IN ('forest', 'wood', 'scrub', 'heath', 'grassland', 'scree', 'blockfield', 'meadow', 'fell', 'wetland') AS natural,
+                type IN (
+                    'forest', 'wood', 'scrub', 'heath', 'grassland', 'scree',
+                    'blockfield', 'meadow', 'fell', 'wetland'
+                ) AS natural,
                 ST_PointOnSurface(geometry) AS geometry
             FROM
                 main
             ORDER BY
                 {z_order_case} DESC,
                 osm_id
-            ",
+        "
         );
 
         client.query(

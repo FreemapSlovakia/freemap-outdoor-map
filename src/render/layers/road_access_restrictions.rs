@@ -25,15 +25,29 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         let sql = "
             SELECT
                 CASE
-                    WHEN bicycle NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-                        OR bicycle = '' AND vehicle NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-                        OR bicycle = '' AND vehicle = '' AND access NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-                    THEN 1 ELSE 0 END AS no_bicycle,
-                CASE
-                    WHEN foot NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-                        OR foot = '' AND access NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                    WHEN
+                        bicycle NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                        OR (
+                            bicycle = '' AND
+                            vehicle NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                        )
+                        OR (
+                            bicycle = '' AND
+                            vehicle = '' AND
+                            access NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                        )
                     THEN 1
-                ELSE 0
+                    ELSE 0
+                END AS no_bicycle,
+                CASE
+                    WHEN
+                        foot NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                        OR (
+                            foot = '' AND
+                            access NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                        )
+                    THEN 1
+                    ELSE 0
                 END AS no_foot,
                 geometry
             FROM

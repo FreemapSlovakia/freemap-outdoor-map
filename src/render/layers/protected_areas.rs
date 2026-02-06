@@ -19,21 +19,24 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
     let rows = ctx.legend_features("protected_areas", || {
         let extra_where = if zoom < 12 {
-            " AND NOT (type = 'nature_reserve' OR type = 'protected_area' AND protect_class <> '2')"
+            " AND NOT (
+                type = 'nature_reserve' OR
+                type = 'protected_area' AND protect_class <> '2'
+            )"
         } else {
             ""
         };
 
-        let sql = &format!(
-            "SELECT
+        #[cfg_attr(any(), rustfmt::skip)]
+        let sql = &format!("
+            SELECT
                 type, protect_class, geometry
             FROM
                 osm_protected_areas
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
                 {extra_where}
-            ",
-        );
+        ");
 
         client.query(sql, &ctx.bbox_query_params(Some(10.0)).as_params())
     })?;
@@ -84,26 +87,29 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         context.restore()?;
     }
 
+    let w = if zoom < 12 {
+        " AND NOT (type = 'nature_reserve' OR type = 'protected_area' AND protect_class <> '2')"
+    } else {
+        ""
+    };
+
     // NOTE we do ST_Intersection to prevent memory error for very long borders on bigger zooms
 
-    let sql = &format!(
-        "
+    #[cfg_attr(any(), rustfmt::skip)]
+    let sql = &format!("
         SELECT
             type,
             protect_class,
-            ST_Intersection(geometry, ST_Expand(ST_MakeEnvelope($6, $7, $8, $9, 3857), 50000)) AS geometry
+            ST_Intersection(
+                geometry,
+                ST_Expand(ST_MakeEnvelope($6, $7, $8, $9, 3857), 50000)
+            ) AS geometry
         FROM
             osm_protected_areas
         WHERE
             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            {}
-        ",
-        if zoom < 12 {
-            " AND NOT (type = 'nature_reserve' OR type = 'protected_area' AND protect_class <> '2')"
-        } else {
-            ""
-        }
-    );
+            {w}
+        ");
 
     let snap = (26f64 - ctx.zoom as f64).exp2();
 

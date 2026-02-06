@@ -124,7 +124,14 @@ impl SvgRepo {
                     {
                         el.attributes.insert(
                             "style".into(),
-                            "stroke:#fff;stroke-width:3;stroke-opacity:0.5;stroke-linejoin:round;paint-order:stroke".into(),
+                            concat!(
+                                "stroke:#fff;",
+                                "stroke-width:3;",
+                                "stroke-opacity:0.5;",
+                                "stroke-linejoin:round;",
+                                "paint-order:stroke"
+                            )
+                            .into(),
                         );
                     }
                 } else if element_count > 0 {
@@ -142,8 +149,14 @@ impl SvgRepo {
                     u.attributes.insert("href".into(), "#main".into());
                     u.attributes.insert(
                         "style".into(),
-                        "stroke:#fff;stroke-width:3;opacity:0.5;stroke-linejoin:round;paint-order:stroke"
-                            .into(),
+                        concat!(
+                            "stroke:#fff;",
+                            "stroke-width:3;",
+                            "opacity:0.5;",
+                            "stroke-linejoin:round;",
+                            "paint-order:stroke"
+                        )
+                        .into(),
                     );
 
                     let mut g = Element::new("g");
