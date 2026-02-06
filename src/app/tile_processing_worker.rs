@@ -3,6 +3,7 @@ use crate::app::{
     tile_processor::{TileProcessingConfig, TileProcessor},
 };
 use std::{
+    sync::{Arc, Mutex},
     thread,
     time::{Duration, SystemTime},
 };
@@ -20,7 +21,12 @@ pub(crate) enum TileProcessingSendError {
 
 #[derive(Clone)]
 pub(crate) struct TileProcessingWorker {
-    tx: mpsc::Sender<TileProcessingMessage>,
+    inner: Arc<TileProcessingInner>,
+}
+
+struct TileProcessingInner {
+    tx: Mutex<Option<mpsc::Sender<TileProcessingMessage>>>,
+    handle: Mutex<Option<thread::JoinHandle<()>>>,
 }
 
 enum TileProcessingMessage {
@@ -43,7 +49,7 @@ impl TileProcessingWorker {
         // TODO propagate error
         let mut processor = TileProcessor::new(config).expect("tile processor");
 
-        thread::Builder::new()
+        let handle = thread::Builder::new()
             .name("tile-processing-worker".to_string())
             .spawn(move || {
                 while let Some(message) = rx.blocking_recv() {
@@ -74,7 +80,12 @@ impl TileProcessingWorker {
             })
             .expect("spawn tile processing worker");
 
-        Self { tx }
+        Self {
+            inner: Arc::new(TileProcessingInner {
+                tx: Mutex::new(Some(tx)),
+                handle: Mutex::new(Some(handle)),
+            }),
+        }
     }
 
     pub(crate) async fn save_tile(
@@ -84,15 +95,19 @@ impl TileProcessingWorker {
         scale: f64,
         render_started_at: SystemTime,
     ) -> Result<(), TileProcessingSendError> {
-        self.tx
-            .send(TileProcessingMessage::SaveTile {
-                data,
-                coord,
-                scale,
-                render_started_at,
-            })
-            .await
-            .map_err(|_| TileProcessingSendError::QueueClosed)
+        let tx = {
+            let guard = self.inner.tx.lock().unwrap();
+            guard.clone().ok_or(TileProcessingSendError::QueueClosed)?
+        };
+
+        tx.send(TileProcessingMessage::SaveTile {
+            data,
+            coord,
+            scale,
+            render_started_at,
+        })
+        .await
+        .map_err(|_| TileProcessingSendError::QueueClosed)
     }
 
     pub(crate) fn invalidate_blocking(
@@ -100,11 +115,24 @@ impl TileProcessingWorker {
         coord: TileCoord,
         invalidated_at: SystemTime,
     ) -> Result<(), TileProcessingSendError> {
-        self.tx
-            .blocking_send(TileProcessingMessage::Invalidate {
-                coord,
-                invalidated_at,
-            })
-            .map_err(|_| TileProcessingSendError::QueueClosed)
+        let tx = {
+            let guard = self.inner.tx.lock().unwrap();
+            guard.clone().ok_or(TileProcessingSendError::QueueClosed)?
+        };
+
+        tx.blocking_send(TileProcessingMessage::Invalidate {
+            coord,
+            invalidated_at,
+        })
+        .map_err(|_| TileProcessingSendError::QueueClosed)
+    }
+
+    pub(crate) fn shutdown(&self) {
+        let tx = self.inner.tx.lock().unwrap().take();
+        drop(tx);
+
+        if let Some(handle) = self.inner.handle.lock().unwrap().take() {
+            let _ = handle.join();
+        }
     }
 }

@@ -23,20 +23,56 @@ pub(crate) fn process_existing_expiration_files(watch_base: &Path, worker: &Tile
     }
 }
 
-pub(crate) fn start_watcher(watch_base: &Path, worker: TileProcessingWorker) {
-    let watch_base = watch_base.to_owned();
-
-    thread::Builder::new()
-        .name("expired-tiles-watcher".to_string())
-        .spawn(move || run_watcher(watch_base.as_path(), worker))
-        .expect("spawn expired tiles watcher");
+pub(crate) struct TileInvalidationWatcher {
+    stop_tx: mpsc::Sender<WatcherMessage>,
+    handle: Option<thread::JoinHandle<()>>,
 }
 
-fn run_watcher(watch_base: &Path, worker: TileProcessingWorker) {
+impl TileInvalidationWatcher {
+    pub(crate) fn shutdown(mut self) {
+        let _ = self.stop_tx.send(WatcherMessage::Stop);
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+pub(crate) fn start_watcher(
+    watch_base: &Path,
+    worker: TileProcessingWorker,
+) -> TileInvalidationWatcher {
+    let watch_base = watch_base.to_owned();
     let (tx, rx) = mpsc::channel();
 
+    let stop_tx = tx.clone();
+
+    let handle = thread::Builder::new()
+        .name("expired-tiles-watcher".to_string())
+        .spawn({
+            let tx = tx.clone();
+            move || run_watcher(watch_base.as_path(), worker, tx, rx)
+        })
+        .expect("spawn expired tiles watcher");
+
+    TileInvalidationWatcher {
+        stop_tx,
+        handle: Some(handle),
+    }
+}
+
+enum WatcherMessage {
+    Event(Result<notify::Event, notify::Error>),
+    Stop,
+}
+
+fn run_watcher(
+    watch_base: &Path,
+    worker: TileProcessingWorker,
+    tx: mpsc::Sender<WatcherMessage>,
+    rx: mpsc::Receiver<WatcherMessage>,
+) {
     let mut watcher = match notify::recommended_watcher(move |res| {
-        let _ = tx.send(res);
+        let _ = tx.send(WatcherMessage::Event(res));
     }) {
         Ok(watcher) => watcher,
         Err(err) => {
@@ -54,7 +90,12 @@ fn run_watcher(watch_base: &Path, worker: TileProcessingWorker) {
         return;
     }
 
-    for res in rx {
+    while let Ok(res) = rx.recv() {
+        let res = match res {
+            WatcherMessage::Event(res) => res,
+            WatcherMessage::Stop => break,
+        };
+
         let event = match res {
             Ok(event) => event,
             Err(err) => {
@@ -85,7 +126,6 @@ fn run_watcher(watch_base: &Path, worker: TileProcessingWorker) {
 fn process_tile_expiration_file(path: &Path, worker: &TileProcessingWorker) -> Result<(), String> {
     let content = match read_with_retry(path) {
         Ok(content) => content,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(err) => {
             return if err.kind() == std::io::ErrorKind::NotFound {
                 Ok(())
