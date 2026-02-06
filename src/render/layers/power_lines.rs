@@ -3,32 +3,35 @@ use crate::render::{
     ctx::Ctx,
     draw::path_geom::path_line_string,
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_line_string, geometry_point},
+    projectable::TileProjectable,
 };
 use postgres::Client;
 
 pub fn render_lines(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let _span = tracy_client::span!("power_lines::render_lines");
 
-    let sql = &format!(
-        "
-        SELECT
-            geometry,
-            type
-        FROM
-            osm_feature_lines
-        WHERE
-            {} AND
-             geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
-        ",
-        if ctx.zoom < 14 {
+    let rows = ctx.legend_features("power_lines", || {
+        let by_zoom = if ctx.zoom < 14 {
             "type = 'line'"
         } else {
             "type IN ('line', 'minor_line')"
-        }
-    );
+        };
 
-    let rows = client.query(sql, &ctx.bbox_query_params(None).as_params())?;
+        let sql = format!(
+            "
+            SELECT
+                geometry,
+                type
+            FROM
+                osm_feature_lines
+            WHERE
+                {by_zoom} AND
+                 geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
+            ",
+        );
+
+        client.query(&sql, &ctx.bbox_query_params(None).as_params())
+    })?;
 
     let context = ctx.context;
 
@@ -36,7 +39,7 @@ pub fn render_lines(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
     for row in rows {
         context.set_source_color_a(
-            if row.get::<_, &str>("type") == "line" {
+            if row.get_string("type")? == "line" {
                 colors::POWER_LINE
             } else {
                 colors::POWER_LINE_MINOR
@@ -47,10 +50,9 @@ pub fn render_lines(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         context.set_dash(&[], 0.0);
         context.set_line_width(1.0);
 
-        path_line_string(
-            context,
-            &geometry_line_string(&row).project_to_tile(&ctx.tile_projector),
-        );
+        let geom = row.line_string()?.project_to_tile(&ctx.tile_projector);
+
+        path_line_string(context, &geom);
 
         context.stroke()?;
     }
@@ -63,27 +65,29 @@ pub fn render_lines(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 pub fn render_towers_poles(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let _span = tracy_client::span!("power_lines::render_towers_poles");
 
-    let sql = format!(
-        "SELECT geometry, type
-        FROM osm_features
-        WHERE type IN ('power_tower'{}) AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)",
-        if ctx.zoom < 15 { "" } else { ", 'pylon', 'pole'" }
-    );
+    let rows = ctx.legend_features("power_lines", || {
+        let sql = format!(
+            "SELECT geometry, type
+            FROM osm_features
+            WHERE type IN ('power_tower'{}) AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)",
+            if ctx.zoom < 15 { "" } else { ", 'pylon', 'pole'" }
+        );
 
-    let rows = client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())?;
+        client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
+    })?;
 
     let context = ctx.context;
 
     context.save()?;
 
     for row in rows {
-        context.set_source_color(if row.get::<_, &str>("type") == "pole" {
+        context.set_source_color(if row.get_string("type")? == "pole" {
             colors::POWER_LINE_MINOR
         } else {
             colors::POWER_LINE
         });
 
-        let p = geometry_point(&row).project_to_tile(&ctx.tile_projector);
+        let p = row.point()?.project_to_tile(&ctx.tile_projector);
 
         context.rectangle(
             ctx.hint(p.x() - 1.5),

@@ -5,32 +5,34 @@ use crate::render::{
     ctx::Ctx,
     draw::path_geom::path_line_string,
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_line_string},
+    projectable::TileProjectable,
 };
 
 pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let _span = tracy_client::span!("barrierways::render");
 
-    let sql = "
-        SELECT
-            geometry,
-            type
-        FROM
-            osm_barrierways
-        WHERE
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ORDER BY
-            osm_id
-    ";
+    let rows = ctx.legend_features("barrierways", || {
+        let sql = "
+            SELECT
+                geometry,
+                type
+            FROM
+                osm_barrierways
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            ORDER BY
+                osm_id
+        ";
 
-    let rows = client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())?;
+        client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())
+    })?;
 
     for row in rows {
         let context = ctx.context;
 
         context.save()?;
 
-        match row.get("type") {
+        match row.get_string("type")? {
             "city_wall" => {
                 context.set_dash(&[], 0.0);
                 context.set_source_color(colors::BUILDING);
@@ -50,10 +52,9 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
             }
         }
 
-        path_line_string(
-            context,
-            &geometry_line_string(&row).project_to_tile(&ctx.tile_projector),
-        );
+        let geom = row.line_string()?.project_to_tile(&ctx.tile_projector);
+
+        path_line_string(context, &geom);
 
         context.stroke()?;
 

@@ -1,7 +1,5 @@
 use crate::render::{
-    ctx::Ctx,
-    layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_point},
+    ctx::Ctx, layer_render_error::LayerRenderResult, projectable::TileProjectable,
     svg_repo::SvgRepo,
 };
 use postgres::Client;
@@ -9,30 +7,32 @@ use postgres::Client;
 pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRenderResult {
     let _span = tracy_client::span!("trees::render");
 
-    let sql = "
-        SELECT
-            type,
-            geometry
-        FROM
-            osm_features
-        WHERE
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-            (
-                type = 'tree' AND (NOT (tags ? 'protected') OR tags->'protected' = 'no') AND (NOT (tags ? 'denotation') OR tags->'denotation' <> 'natural_monument')
-                OR type = 'shrub'
-            )
-        ORDER BY
-            type,
-            st_x(geometry),
-            osm_id
-    ";
+    let rows = ctx.legend_features("trees", || {
+        let sql = "
+            SELECT
+                type,
+                geometry
+            FROM
+                osm_features
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                (
+                    type = 'tree' AND (NOT (tags ? 'protected') OR tags->'protected' = 'no') AND (NOT (tags ? 'denotation') OR tags->'denotation' <> 'natural_monument')
+                    OR type = 'shrub'
+                )
+            ORDER BY
+                type,
+                st_x(geometry),
+                osm_id
+        ";
 
-    let rows = client.query(sql, &ctx.bbox_query_params(Some(32.0)).as_params())?;
+        client.query(sql, &ctx.bbox_query_params(Some(32.0)).as_params())
+    })?;
 
     for row in rows {
-        let typ: &str = row.get("type");
+        let typ = row.get_string("type")?;
 
-        let point = geometry_point(&row).project_to_tile(&ctx.tile_projector);
+        let point = row.point()?.project_to_tile(&ctx.tile_projector);
 
         let scale =
             (2.0 + (ctx.zoom as f64 - 15.0).exp2()) * (if typ == "shrub" { 0.1 } else { 0.2 });

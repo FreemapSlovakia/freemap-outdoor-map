@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::render::{
     colors::{self, ContextExt},
     ctx::Ctx,
@@ -9,7 +11,7 @@ use crate::render::{
         },
     },
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_line_string},
+    projectable::TileProjectable,
 };
 use postgres::Client;
 
@@ -53,51 +55,50 @@ pub fn render(ctx: &Ctx, client: &mut Client, country: Option<&str>) -> LayerRen
         }
     };
 
-    let sql = {
-        let table;
-
-        format!(
-            "
-                WITH contours AS (
-                    SELECT
-                        ST_SimplifyVW(wkb_geometry, $6) AS geometry,
-                        height_m,
-                        ({width_case})::double precision AS width
-                    FROM
-                        {}
-                    WHERE
-                        wkb_geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-                )
-                SELECT
-                    geometry,
-                    height_m,
-                    width
-                FROM
-                    contours
-                WHERE
-                    width > 0
-            ",
-            if let Some(country) = country {
-                table = format!("contour_{country}_split");
-
-                &table
+    let rows = ctx.legend_features("contours", || {
+        let sql = {
+            let table: Cow<_> = if let Some(country) = country {
+                format!("contour_{country}_split").into()
             } else {
-                "cont_dmr_split"
-            }
-        )
-    };
+                "cont_dmr_split".into()
+            };
 
-    let rows = client.query(
-        &sql,
-        &ctx.bbox_query_params(Some(8.0))
-            .push(simplify_factor)
-            .as_params(),
-    )?;
+            format!(
+                "
+                    WITH contours AS (
+                        SELECT
+                            ST_SimplifyVW(wkb_geometry, $6) AS geometry,
+                            height_m,
+                            ({width_case})::double precision AS width
+                        FROM
+                            {table}
+                        WHERE
+                            wkb_geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+                    )
+                    SELECT
+                        geometry,
+                        height_m,
+                        width
+                    FROM
+                        contours
+                    WHERE
+                        width > 0
+                ",
+            )
+        };
+
+        client.query(
+            &sql,
+            &ctx.bbox_query_params(Some(8.0))
+                .push(simplify_factor)
+                .as_params(),
+        )
+    })?;
 
     for row in rows {
-        let height: i16 = row.get("height_m");
+        let height = row.get_i16("height_m")?;
 
-        let width: f64 = row.get("width");
+        let width = row.get_f64("width")?;
 
         let labels = match zoom {
             13..=14 => height % 100 == 0,
@@ -105,7 +106,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, country: Option<&str>) -> LayerRen
             _ => false,
         };
 
-        let geom = geometry_line_string(&row).project_to_tile(&ctx.tile_projector);
+        let geom = row.line_string()?.project_to_tile(&ctx.tile_projector);
 
         context.set_dash(&[], 0.0);
 

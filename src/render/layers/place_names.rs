@@ -6,7 +6,7 @@ use crate::render::{
         text::{TextOptions, draw_text},
     },
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_point},
+    projectable::TileProjectable,
 };
 use pangocairo::pango::Weight;
 use postgres::Client;
@@ -20,37 +20,40 @@ pub fn render(
 
     let zoom = ctx.zoom;
 
-    let sql = &format!(
-        "
-        SELECT
-            name,
-            type,
-            geometry
-        FROM
-            osm_places
-        WHERE
-            {} AND
-             name <> '' AND
-             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ORDER BY
-            z_order DESC,
-            population DESC,
-            osm_id",
-        match zoom {
+    let scale = 2.5 * 1.2f64.powf(zoom as f64);
+
+    let rows = ctx.legend_features("place_names", || {
+        let by_zoom = match zoom {
             8 => "type = 'city'",
             9..=10 => "(type = 'city' OR type = 'town')",
             11 => "(type = 'city' OR type = 'town' OR type = 'village')",
             12.. => "type <> 'locality'",
-            _ => return Ok(()),
-        }
-    );
+            _ => return Ok(Vec::new()),
+        };
 
-    let scale = 2.5 * 1.2f64.powf(zoom as f64);
+        let sql = format!(
+            "
+            SELECT
+                name,
+                type,
+                geometry
+            FROM
+                osm_places
+            WHERE
+                {by_zoom} AND
+                 name <> '' AND
+                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            ORDER BY
+                z_order DESC,
+                population DESC,
+                osm_id",
+        );
 
-    let rows = client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())?;
+        client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
+    })?;
 
     for row in rows {
-        let (size, uppercase, halo_width) = match (zoom, row.get("type")) {
+        let (size, uppercase, halo_width) = match (zoom, row.get_string("type")?) {
             (6.., "city") => (1.2, true, 2.0),
             (9.., "town") => (0.8, true, 2.0),
             (11.., "village") => (0.55, true, 1.5),
@@ -64,8 +67,8 @@ pub fn render(
         draw_text(
             ctx.context,
             collision.as_deref_mut(),
-            &geometry_point(&row).project_to_tile(&ctx.tile_projector),
-            row.get("name"),
+            &row.point()?.project_to_tile(&ctx.tile_projector),
+            row.get_string("name")?,
             &TextOptions {
                 flo: FontAndLayoutOptions {
                     size: size * scale,

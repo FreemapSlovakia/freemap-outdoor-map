@@ -3,24 +3,26 @@ use crate::render::{
     ctx::Ctx,
     draw::path_geom::path_geometry,
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_geometry},
+    projectable::TileProjectable,
 };
 use postgres::Client;
 
 pub fn render(ctx: &Ctx, client: &mut Client, mask: bool) -> LayerRenderResult {
     let _span = tracy_client::span!("bridge_areas::render");
 
-    let query = "
-        SELECT
-            geometry
-        FROM
-            osm_landcovers
-        WHERE
-            geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857) AND
-            type = 'bridge'
-    ";
+    let rows = ctx.legend_features("osm_landcovers_bridge", || {
+        let query = "
+            SELECT
+                geometry
+            FROM
+                osm_landcovers
+            WHERE
+                geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857) AND
+                type = 'bridge'
+        ";
 
-    let rows = client.query(query, &ctx.bbox_query_params(None).as_params())?;
+        client.query(query, &ctx.bbox_query_params(None).as_params())
+    })?;
 
     let context = ctx.context;
 
@@ -31,11 +33,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, mask: bool) -> LayerRenderResult {
     }
 
     for row in rows {
-        let Some(geometry) =
-            geometry_geometry(&row).map(|geom| geom.project_to_tile(&ctx.tile_projector))
-        else {
-            continue;
-        };
+        let geometry = row.geometry()?.project_to_tile(&ctx.tile_projector);
 
         if mask {
             context.rectangle(0.0, 0.0, ctx.size.width as f64, ctx.size.height as f64);

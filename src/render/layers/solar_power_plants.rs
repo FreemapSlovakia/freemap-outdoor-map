@@ -3,7 +3,7 @@ use crate::render::{
     ctx::Ctx,
     draw::{hatch::hatch_geometry, path_geom::path_geometry},
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_geometry},
+    projectable::TileProjectable,
 };
 use postgres::Client;
 
@@ -12,26 +12,26 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
     let zoom = ctx.zoom;
 
-    let d = 4.0f64.max(1.33f64.powf(zoom as f64) / 20.0).round();
+    let rows = ctx.legend_features("solat_poser_plants", || {
+        let sql = "
+            SELECT
+                geometry FROM osm_power_generators
+            WHERE
+                source = 'solar' AND geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
+            ORDER BY osm_id
+        ";
 
-    let sql = "
-        SELECT
-            geometry FROM osm_power_generators
-        WHERE
-            source = 'solar' AND geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
-        ORDER BY osm_id
-    ";
-
-    let rows = client.query(sql, &ctx.bbox_query_params(None).as_params())?;
+        client.query(sql, &ctx.bbox_query_params(None).as_params())
+    })?;
 
     let context = ctx.context;
 
     let tile_projector = &ctx.tile_projector;
 
+    let d = 4.0f64.max(1.33f64.powf(zoom as f64) / 20.0).round();
+
     for row in rows {
-        let Some(geom) = geometry_geometry(&row) else {
-            continue;
-        };
+        let geom = row.geometry()?;
 
         context.push_group();
 

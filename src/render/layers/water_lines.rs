@@ -3,7 +3,7 @@ use crate::render::{
     ctx::Ctx,
     draw::{markers_on_path::draw_markers_on_path, smooth_line::path_smooth_bezier_spline},
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_line_string},
+    projectable::TileProjectable,
     svg_repo::SvgRepo,
 };
 use postgres::Client;
@@ -13,32 +13,36 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
     let zoom = ctx.zoom;
 
-    let sql = &format!(
-        "
-            SELECT
-                {},
-                type,
-                seasonal OR intermittent AS tmp,
-                tunnel
-            FROM
-                {}
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ",
-        match zoom {
+    let rows = ctx.legend_features("water_lines", || {
+        let geom_query = match zoom {
             12 => "ST_Segmentize(ST_Simplify(geometry, 24), 200) AS geometry",
             13 => "ST_Segmentize(ST_Simplify(geometry, 12), 200) AS geometry",
             14 => "ST_Segmentize(ST_Simplify(geometry, 6), 200) AS geometry",
             _ => "geometry",
-        },
-        match zoom {
+        };
+
+        let table = match zoom {
             ..=9 => "osm_waterways_gen0",
             10..=11 => "osm_waterways_gen1",
             _ => "osm_waterways",
-        }
-    );
+        };
 
-    let rows = &client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())?;
+        let sql = format!(
+            "
+                SELECT
+                    {geom_query},
+                    type,
+                    seasonal OR intermittent AS tmp,
+                    tunnel
+                FROM
+                    {table}
+                WHERE
+                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            ",
+        );
+
+        client.query(&sql, &ctx.bbox_query_params(Some(8.0)).as_params())
+    })?;
 
     // TODO lazy
     let arrow = svg_repo.get("waterway-arrow")?;
@@ -56,12 +60,15 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     for pass in 0..=1 {
         let glow = pass == 0;
 
-        for row in rows {
-            let geom = geometry_line_string(row).project_to_tile(&ctx.tile_projector);
+        for row in &rows {
+            let geom = row.line_string()?.project_to_tile(&ctx.tile_projector);
 
-            let typ: &str = row.get("type");
+            let typ = row.get_string("type")?;
 
-            context.set_dash(if row.get("tmp") { &[6.0, 3.0] } else { &[] }, 0.0);
+            let tmp = row.get_bool("tmp")?;
+            let tunnel = row.get_bool("tunnel")?;
+
+            context.set_dash(if tmp { &[6.0, 3.0] } else { &[] }, 0.0);
 
             let (width, smooth) = match (typ, zoom) {
                 ("river", ..=8) => (1.5f64.powf(zoom as f64 - 8.0), 0.0),
@@ -76,12 +83,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
                 if zoom >= 12 {
                     context.set_source_color(colors::WATER);
 
-                    context.set_source_rgba(
-                        1.0,
-                        1.0,
-                        1.0,
-                        if row.get("tunnel") { 0.8 } else { 0.5 },
-                    );
+                    context.set_source_rgba(1.0, 1.0, 1.0, if tunnel { 0.8 } else { 0.5 });
 
                     context.set_line_width(if typ == "river" {
                         3.4
@@ -96,8 +98,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
                     context.stroke()?;
                 }
             } else {
-                context
-                    .set_source_color_a(colors::WATER, if row.get("tunnel") { 0.33 } else { 1.0 });
+                context.set_source_color_a(colors::WATER, if tunnel { 0.33 } else { 1.0 });
 
                 context.set_line_width(width);
 

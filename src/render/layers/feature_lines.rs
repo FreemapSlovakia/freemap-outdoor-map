@@ -3,7 +3,7 @@ use crate::render::{
     ctx::Ctx,
     draw::{line_pattern::draw_line_pattern_scaled, path_geom::path_line_string},
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_line_string},
+    projectable::TileProjectable,
     svg_repo::SvgRepo,
 };
 use postgres::Client;
@@ -11,29 +11,31 @@ use postgres::Client;
 pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRenderResult {
     let _span = tracy_client::span!("feature_lines::render");
 
-    let sql = "
-        SELECT
-            geometry,
-            type
-        FROM
-            osm_feature_lines
-        WHERE
-            type IN ('weir', 'dam', 'tree_row') AND
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-    ";
+    let rows = ctx.legend_features("feature_lines", || {
+        let sql = "
+            SELECT
+                geometry,
+                type
+            FROM
+                osm_feature_lines
+            WHERE
+                type IN ('weir', 'dam', 'tree_row') AND
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ";
 
-    let rows = client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())?;
+        client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())
+    })?;
 
     let context = ctx.context;
 
     for row in rows {
-        let geom = geometry_line_string(&row).project_to_tile(&ctx.tile_projector);
+        let geom = row.line_string()?.project_to_tile(&ctx.tile_projector);
 
         context.save()?;
 
         let zoom = ctx.zoom;
 
-        match row.get("type") {
+        match row.get_string("type")? {
             "weir" => {
                 if zoom >= 16 {
                     context.set_dash(&[9.0, 3.0], 0.0);

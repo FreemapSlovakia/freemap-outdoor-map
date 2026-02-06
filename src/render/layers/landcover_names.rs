@@ -8,7 +8,7 @@ use crate::render::{
         text::{TextOptions, draw_text},
     },
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_point},
+    projectable::TileProjectable,
     regex_replacer::{Replacement, replace},
 };
 use pangocairo::pango::Style;
@@ -33,7 +33,7 @@ static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
 pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
     let _span = tracy_client::span!("landcover_names::render");
 
-    let rows = {
+    let rows = ctx.legend_features("landcover_names", || {
         let z_order_case = build_landcover_z_order_case("type");
 
         // TODO include types (`type IN`), don't exclude (`type NOT IN`)
@@ -72,8 +72,8 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
             &ctx.bbox_query_params(Some(512.0))
                 .push(2_400_000.0f32 / (2.0f32 * (ctx.zoom as f32 - 10.0)).exp2())
                 .as_params(),
-        )?
-    };
+        )
+    })?;
 
     let mut text_options = TextOptions {
         flo: FontAndLayoutOptions {
@@ -85,7 +85,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
     };
 
     for row in rows {
-        let natural: bool = row.get("natural");
+        let natural = row.get_bool("natural")?;
 
         text_options.flo.style = if natural {
             Style::Italic
@@ -102,8 +102,8 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         draw_text(
             ctx.context,
             Some(collision),
-            &geometry_point(&row).project_to_tile(&ctx.tile_projector),
-            &replace(row.get("name"), &REPLACEMENTS),
+            &row.point()?.project_to_tile(&ctx.tile_projector),
+            &replace(row.get_string("name")?, &REPLACEMENTS),
             &text_options,
         )?;
     }

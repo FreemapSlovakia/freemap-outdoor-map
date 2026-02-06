@@ -8,7 +8,7 @@ use crate::render::{
     },
     layer_render_error::LayerRenderResult,
     layers::borders,
-    projectable::{TileProjectable, geometry_line_string},
+    projectable::TileProjectable,
 };
 use postgres::Client;
 use std::f64;
@@ -57,25 +57,27 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         ..Default::default()
     };
 
-    let sql = r#"
-        SELECT
-            name,
-            "name:en",
-            geometry
-        FROM
-            country_names_smooth
-        WHERE
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-    "#;
+    let rows = ctx.legend_features("country_names", || {
+        let sql = r#"
+            SELECT
+                name,
+                "name:en",
+                geometry
+            FROM
+                country_names_smooth
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        "#;
 
-    let rows = client.query(sql, &ctx.bbox_query_params(Some(128.0)).as_params())?;
+        client.query(sql, &ctx.bbox_query_params(Some(128.0)).as_params())
+    })?;
 
     for row in rows {
-        let name: &str = row.get("name");
+        let name = row.get_string("name")?;
 
-        let name_en: &str = row.get("name:en");
+        let name_en = row.get_string("name:en")?;
 
-        let geom = geometry_line_string(&row).project_to_tile(&ctx.tile_projector);
+        let geom = row.line_string()?.project_to_tile(&ctx.tile_projector);
 
         // context.save();
         // path_line_string(context, &geom);

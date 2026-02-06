@@ -9,7 +9,7 @@ use crate::render::{
         text_on_line::{Align, Distribution, Repeat, TextOnLineOptions, draw_text_on_line},
     },
     layer_render_error::{LayerRenderError, LayerRenderResult},
-    projectable::{TileProjectable, geometry_geometry},
+    projectable::TileProjectable,
     svg_repo::{Options, SvgRepo},
 };
 use bitflags::bitflags;
@@ -270,27 +270,25 @@ pub fn render_marking(
 
     let zoom = ctx.zoom;
 
-    let query = match zoom {
-        9 => get_routes_query(route_types, Some(vec!["iwn", "icn"]), "_gen0"),
-        10 => get_routes_query(route_types, Some(vec!["iwn", "nwn", "icn", "ncn"]), "_gen1"),
-        11 => get_routes_query(
-            route_types,
-            Some(vec!["iwn", "nwn", "rwn", "icn", "ncn", "rcn"]),
-            "_gen1",
-        ),
-        12..=13 => get_routes_query(route_types, None, ""),
-        14.. => get_routes_query(route_types, None, ""),
-        _ => return Ok(()),
-    };
-
-    let rows = client.query(&query, &ctx.bbox_query_params(Some(512.0)).as_params())?;
-
-    for row in rows {
-        let Some(geom) = geometry_geometry(&row) else {
-            continue;
+    let rows = ctx.legend_features("routes", || {
+        let sql = match zoom {
+            9 => get_routes_query(route_types, Some(vec!["iwn", "icn"]), "_gen0"),
+            10 => get_routes_query(route_types, Some(vec!["iwn", "nwn", "icn", "ncn"]), "_gen1"),
+            11 => get_routes_query(
+                route_types,
+                Some(vec!["iwn", "nwn", "rwn", "icn", "ncn", "rcn"]),
+                "_gen1",
+            ),
+            12..=13 => get_routes_query(route_types, None, ""),
+            14.. => get_routes_query(route_types, None, ""),
+            _ => return Ok(Vec::new()),
         };
 
-        let geom = geom.project_to_tile(&ctx.tile_projector);
+        client.query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params())
+    })?;
+
+    for row in rows {
+        let geom = row.geometry()?.project_to_tile(&ctx.tile_projector);
 
         let (zo, wf) = match zoom {
             ..=11 => (1.0, 1.5),
@@ -302,7 +300,7 @@ pub fn render_marking(
 
         for color in COLORS.iter() {
             if route_types.contains(RouteTypes::HORSE) {
-                let off = row.get::<_, i32>(&format!("r_{}", color.0)[..]);
+                let off = row.get_i32(&format!("r_{}", color.0))?;
 
                 if off > 0 {
                     let offset = ((off as f64 - 1.0) * wf).mul_add(df, zo) + 0.5;
@@ -330,7 +328,7 @@ pub fn render_marking(
             }
 
             if route_types.contains(RouteTypes::SKI) {
-                let off = row.get::<_, i32>(&format!("s_{}", color.0)[..]);
+                let off = row.get_i32(&format!("s_{}", color.0))?;
 
                 if off > 0 {
                     let offset = -((off as f64 - 1.0) * wf).mul_add(2.0, zo) - 1.0;
@@ -362,7 +360,7 @@ pub fn render_marking(
             let context = ctx.context;
 
             if route_types.contains(RouteTypes::BICYCLE) {
-                let off = row.get::<_, i32>(&format!("b_{}", color.0)[..]);
+                let off = row.get_i32(&format!("b_{}", color.0))?;
 
                 if off > 0 {
                     let offset = -((off as f64 - 1.0) * wf).mul_add(2.0, zo) - 1.0;
@@ -391,7 +389,7 @@ pub fn render_marking(
 
             if route_types.contains(RouteTypes::HIKING) {
                 {
-                    let off = row.get::<_, i32>(&format!("h_{}", color.0)[..]);
+                    let off = row.get_i32(&format!("h_{}", color.0))?;
 
                     if off > 0 {
                         let offset = ((off as f64 - 1.0) * wf).mul_add(df, zo) + 0.5;
@@ -418,7 +416,7 @@ pub fn render_marking(
                 }
 
                 {
-                    let off = row.get::<_, i32>(&format!("h_{}_loc", color.0)[..]);
+                    let off = row.get_i32(&format!("h_{}_loc", color.0))?;
 
                     if off > 0 {
                         let offset = ((off as f64 - 1.0) * wf).mul_add(df, zo) + 0.5;
@@ -458,24 +456,22 @@ pub fn render_labels(
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("routes::render_labels");
 
-    let query = get_routes_query(route_types, None, "");
+    let rows = ctx.legend_features("routes", || {
+        let query = get_routes_query(route_types, None, "");
 
-    let rows = client.query(&query, &ctx.bbox_query_params(Some(2048.0)).as_params())?;
+        client.query(&query, &ctx.bbox_query_params(Some(2048.0)).as_params())
+    })?;
 
     for row in rows {
-        let Some(geom) = geometry_geometry(&row) else {
-            continue;
-        };
+        let geom = row.geometry()?.project_to_tile(&ctx.tile_projector);
 
-        let geom = geom.project_to_tile(&ctx.tile_projector);
+        let refs1 = row.get_string("refs1")?;
+        let off1 = row.get_i32("off1")?;
+
+        let refs2 = row.get_string("refs2")?;
+        let off2 = row.get_i32("off2")?;
 
         walk_geometry_line_strings(&geom, &mut |geom| {
-            let refs1: &str = row.get("refs1");
-            let off1: i32 = row.get("off1");
-
-            let refs2: &str = row.get("refs2");
-            let off2: i32 = row.get("off2");
-
             let mut options = TextOnLineOptions {
                 flo: FontAndLayoutOptions {
                     size: 11.0,

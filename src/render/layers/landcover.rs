@@ -4,7 +4,7 @@ use crate::render::{
     ctx::Ctx,
     draw::path_geom::{path_geometry, path_line_string_with_offset, walk_geometry_line_strings},
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_geometry},
+    projectable::TileProjectable,
     svg_repo::SvgRepo,
     xyz::to_absolute_pixel_coords,
 };
@@ -20,7 +20,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
     let zoom = ctx.zoom;
 
-    let rows = {
+    let rows = ctx.legend_features("landcover", || {
         let a = "'pitch', 'playground', 'golf_course', 'track'";
 
         let excl_types = match zoom {
@@ -46,7 +46,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
                     THEN tags->'wetland'
                     ELSE type
                 END AS type,
-                ST_Intersection(ST_MakeValid(geometry), ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), 100)) AS geometry,
+                ST_Intersection(geometry), ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), 100)) AS geometry,
                 osm_id,
                 {z_order_case} AS z_order
             FROM
@@ -59,17 +59,13 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
                 osm_id
         ");
 
-        client.query(query, &ctx.bbox_query_params(None).as_params())?
-    };
+        client.query(query, &ctx.bbox_query_params(None).as_params())
+    })?;
 
     context.save()?;
 
     for row in rows {
-        let Some(geom) =
-            geometry_geometry(&row).map(|geom| geom.project_to_tile(&ctx.tile_projector))
-        else {
-            continue;
-        };
+        let geom = row.geometry()?.project_to_tile(&ctx.tile_projector);
 
         let colour_area = |color: Color| -> cairo::Result<()> {
             context.set_source_color(color);
@@ -103,7 +99,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             Ok(())
         };
 
-        let typ: &str = row.get("type");
+        let typ = row.get_string("type")?;
 
         match typ {
             "allotments" => {

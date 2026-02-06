@@ -7,7 +7,7 @@ use crate::render::{
         text::{TextOptions, draw_text},
     },
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_point},
+    projectable::TileProjectable,
     regex_replacer::{Replacement, replace},
 };
 use pangocairo::pango::Style;
@@ -31,23 +31,27 @@ pub static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
 pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
     let _span = tracy_client::span!("national_park_names::render");
 
-    let sql = "
-        SELECT
-            type,
-            name,
-            protect_class,
-            ST_PointOnSurface(geometry) AS geometry
-        FROM
-            osm_protected_areas
-        WHERE
-            name <> '' AND
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-            (type = 'national_park' OR (type = 'protected_area' AND protect_class = '2'))
-        ORDER BY
-            name LIKE ('Ochranné pásmo %'),
-            area DESC,
-            osm_id
-    ";
+    let rows = ctx.legend_features("national_park_names", || {
+        let sql = "
+            SELECT
+                type,
+                name,
+                protect_class,
+                ST_PointOnSurface(geometry) AS geometry
+            FROM
+                osm_protected_areas
+            WHERE
+                name <> '' AND
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                (type = 'national_park' OR (type = 'protected_area' AND protect_class = '2'))
+            ORDER BY
+                name LIKE ('Ochranné pásmo %'),
+                area DESC,
+                osm_id
+        ";
+
+        client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())
+    })?;
 
     let text_options = TextOptions {
         flo: FontAndLayoutOptions {
@@ -59,14 +63,12 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         ..TextOptions::default()
     };
 
-    let rows = client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())?;
-
     for row in rows {
         draw_text(
             ctx.context,
             Some(collision),
-            &geometry_point(&row).project_to_tile(&ctx.tile_projector),
-            &replace(row.get("name"), &REPLACEMENTS),
+            &row.point()?.project_to_tile(&ctx.tile_projector),
+            &replace(row.get_string("name")?, &REPLACEMENTS),
             &text_options,
         )?;
     }

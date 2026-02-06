@@ -4,7 +4,7 @@ use crate::render::{
     draw::{line_pattern::draw_line_pattern, path_geom::path_line_string},
     layer_render_error::LayerRenderResult,
     layers::{hillshading, hillshading_datasets::HillshadingDatasets},
-    projectable::{TileProjectable, geometry_line_string},
+    projectable::TileProjectable,
     svg_repo::SvgRepo,
 };
 use postgres::Client;
@@ -18,20 +18,22 @@ pub fn render(
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("feature_lines_maskable::render");
 
-    let sql = "
-        SELECT
-            geometry,
-            type
-        FROM
-            osm_feature_lines
-        WHERE
-            type NOT IN ('cutline', 'valley', 'ridge') AND
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ORDER BY
-            osm_id
-    ";
+    let rows = ctx.legend_features("feature_lines_maskable", || {
+        let sql = "
+            SELECT
+                geometry,
+                type
+            FROM
+                osm_feature_lines
+            WHERE
+                type NOT IN ('cutline', 'valley', 'ridge') AND
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            ORDER BY
+                osm_id
+        ";
 
-    let rows = client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())?;
+        client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())
+    })?;
 
     if rows.is_empty() {
         return Ok(());
@@ -60,9 +62,9 @@ pub fn render(
 
     let mut draw = || -> LayerRenderResult {
         for row in &rows {
-            let geom = geometry_line_string(row).project_to_tile(&ctx.tile_projector);
+            let geom = row.line_string()?.project_to_tile(&ctx.tile_projector);
 
-            match row.get("type") {
+            match row.get_string("type")? {
                 "earth_bank" => {
                     draw_line_pattern(
                         ctx.context,

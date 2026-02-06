@@ -1,34 +1,36 @@
 use crate::render::{
     colors::{self, ContextExt},
-    ctx::Ctx,
+    ctx::{Ctx, FeatureError},
     draw::{hatch::hatch_geometry, path_geom::path_geometry},
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_geometry},
+    projectable::TileProjectable,
 };
 use postgres::Client;
 
 pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let _span = tracy_client::span!("military_areas::render");
 
-    let sql = "
-        SELECT
-            geometry
-        FROM
-            osm_landcovers
-        WHERE
-            type = 'military'
-            AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            AND area / POWER(4, 19 - $6) > 10
-    ";
-
     let zoom = ctx.zoom;
 
-    let rows = &client.query(
-        sql,
-        &ctx.bbox_query_params(Some(10.0))
-            .push(zoom as i32)
-            .as_params(),
-    )?;
+    let rows = ctx.legend_features("military_areas", || {
+        let sql = "
+            SELECT
+                geometry
+            FROM
+                osm_landcovers
+            WHERE
+                type = 'military'
+                AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+                AND area / POWER(4, 19 - $6) > 10
+        ";
+
+        client.query(
+            sql,
+            &ctx.bbox_query_params(Some(10.0))
+                .push(zoom as i32)
+                .as_params(),
+        )
+    })?;
 
     let context = ctx.context;
 
@@ -40,9 +42,11 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
     let geometries: Vec<_> = rows
         .iter()
-        .filter_map(geometry_geometry)
-        .map(|geom| (geom.project_to_tile(tile_projector), geom))
-        .collect();
+        .map(|row| {
+            let geom = row.geometry()?;
+            Ok((geom.project_to_tile(tile_projector), geom))
+        })
+        .collect::<Result<Vec<_>, FeatureError>>()?;
 
     let context = context;
 

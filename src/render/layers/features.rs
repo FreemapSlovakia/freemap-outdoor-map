@@ -8,7 +8,7 @@ use crate::render::{
         text::{TextOptions, draw_text, draw_text_with_attrs},
     },
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_point},
+    projectable::TileProjectable,
     regex_replacer::{Replacement, build_replacements, replace},
     svg_repo::Options,
     svg_repo::SvgRepo,
@@ -406,7 +406,8 @@ pub fn render(
 
     let zoom = ctx.zoom;
 
-    let mut selects = vec![];
+    let rows = ctx.legend_features("features", || {
+let mut selects = vec![];
 
     selects.push(
         "SELECT
@@ -604,7 +605,7 @@ pub fn render(
         );
     }
 
-    let rows = {
+
         let z_order_case = build_feature_z_order_case("type");
 
         let sql = format!(
@@ -629,8 +630,8 @@ pub fn render(
 
         let _span = tracy_client::span!("features::query");
 
-        client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())?
-    };
+        client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
+    })?;
 
     let mut to_label = Vec::<(Point, f64, String, Option<String>, usize, &Def)>::new();
 
@@ -640,9 +641,9 @@ pub fn render(
         let _span = tracy_client::span!("features::paint_svgs");
 
         for row in rows {
-            let typ: &str = row.get("type");
+            let typ = row.get_string("type")?;
 
-            let h: HashMap<String, Option<String>> = row.get("h");
+            let h = row.get_hstore("h")?;
 
             let Some(def) = POIS.get(typ).and_then(|defs| {
                 defs.iter()
@@ -651,7 +652,7 @@ pub fn render(
                 continue;
             };
 
-            let point = geometry_point(&row).project_to_tile(&ctx.tile_projector);
+            let point = row.point()?.project_to_tile(&ctx.tile_projector);
 
             let key = def.extra.icon.unwrap_or(typ);
 
@@ -751,7 +752,7 @@ pub fn render(
                 let bbox_idx = collision.add(bbox);
 
                 if def.min_text_zoom <= zoom {
-                    let name: &str = row.get("n");
+                    let name = row.get_string("n")?;
 
                     if !name.is_empty() {
                         let name = replace(name, &def.extra.replacements);

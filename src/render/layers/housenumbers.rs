@@ -7,28 +7,32 @@ use crate::render::{
         text::{TextOptions, draw_text},
     },
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_point},
+    projectable::TileProjectable,
 };
 use postgres::Client;
 
 pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
     let _span = tracy_client::span!("housenumbers::render");
 
-    let sql = r#"
-        SELECT
-            COALESCE(
-                NULLIF("addr:streetnumber", ''),
-                NULLIF("addr:housenumber", ''),
-                NULLIF("addr:conscriptionnumber", '')
-            ) AS housenumber,
-            geometry
-        FROM
-            osm_housenumbers
-        WHERE
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ORDER BY
-            osm_id
-    "#;
+    let rows = ctx.legend_features("housenumbers", || {
+        let sql = r#"
+            SELECT
+                COALESCE(
+                    NULLIF("addr:streetnumber", ''),
+                    NULLIF("addr:housenumber", ''),
+                    NULLIF("addr:conscriptionnumber", '')
+                ) AS housenumber,
+                geometry
+            FROM
+                osm_housenumbers
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            ORDER BY
+                osm_id
+        "#;
+
+        client.query(sql, &ctx.bbox_query_params(Some(128.0)).as_params())
+    })?;
 
     let text_options = TextOptions {
         flo: FontAndLayoutOptions {
@@ -41,14 +45,12 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         ..TextOptions::default()
     };
 
-    let rows = client.query(sql, &ctx.bbox_query_params(Some(128.0)).as_params())?;
-
     for row in rows {
         draw_text(
             ctx.context,
             Some(collision),
-            &geometry_point(&row).project_to_tile(&ctx.tile_projector),
-            row.get("housenumber"),
+            &row.point()?.project_to_tile(&ctx.tile_projector),
+            row.get_string("housenumber")?,
             &text_options,
         )?;
     }

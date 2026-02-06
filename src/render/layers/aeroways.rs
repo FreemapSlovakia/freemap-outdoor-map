@@ -3,7 +3,7 @@ use crate::render::{
     ctx::Ctx,
     draw::path_geom::path_line_string,
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_line_string},
+    projectable::TileProjectable,
 };
 use postgres::Client;
 
@@ -17,29 +17,30 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         _ => panic!("unsupported zoom"),
     };
 
-    let sql = "
-        SELECT
-            geometry,
-            type
-        FROM
-            osm_aeroways
-        WHERE
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ORDER BY
-            osm_id
-    ";
+    let rows = ctx.legend_features("aeroways", || {
+        let sql = "
+            SELECT
+                geometry,
+                type
+            FROM
+                osm_aeroways
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            ORDER BY
+                osm_id
+        ";
 
-    let rows = client.query(sql, &ctx.bbox_query_params(Some(12.0)).as_params())?;
+        client.query(sql, &ctx.bbox_query_params(Some(12.0)).as_params())
+    })?;
 
     let context = ctx.context;
 
     context.save()?;
 
     for row in rows {
-        path_line_string(
-            context,
-            &geometry_line_string(&row).project_to_tile(&ctx.tile_projector),
-        );
+        let geom = row.line_string()?.project_to_tile(&ctx.tile_projector);
+
+        path_line_string(context, &geom);
 
         context.set_source_color(colors::AEROWAY);
         context.set_dash(&[], 0.0);

@@ -1,9 +1,9 @@
 use crate::render::{
     colors::{self, Color, ContextExt},
-    ctx::Ctx,
+    ctx::{Ctx, FeatureError},
     draw::{markers_on_path::draw_markers_on_path, path_geom::path_line_string},
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_line_string},
+    projectable::TileProjectable,
     svg_repo::SvgRepo,
 };
 use postgres::Client;
@@ -15,49 +15,24 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
     let zoom = ctx.zoom;
 
-    // TODO no roads on zoom 7 and lower
+    let rows = ctx.legend_features("roads", || {
+        let table = match zoom {
+            ..=9 => "osm_roads_gen0",
+            10..=11 => "osm_roads_gen1",
+            12.. => "osm_roads",
+        };
 
-    let table = match zoom {
-        ..=9 => "osm_roads_gen0",
-        10..=11 => "osm_roads_gen1",
-        12.. => "osm_roads",
-    };
+        let ex;
 
-    let ex;
+        // TODO for zoom < 12 we select too much
 
-    // TODO for zoom < 12 we select too much
-
-    let query = format!(
-        "
-        SELECT
-            {table}.geometry,
-            {table}.type,
-            tracktype,
-            class,
-            service,
-            bridge,
-            tunnel,
-            oneway,
-            bicycle,
-            foot,
-            power(0.666, greatest(0, trail_visibility - 1))::DOUBLE PRECISION AS trail_visibility
-            {}
-        FROM
-            {table}
-            {}
-        WHERE
-            {table}.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ORDER BY
-            z_order,
-            CASE WHEN {table}.type = 'rail' AND service IN ('', 'main') THEN 2 ELSE 1 END,
-            {table}.osm_id
-        ",
-        if zoom <= 12 {
+        let select_member = if zoom <= 12 {
             ",osm_route_members.member IS NOT NULL AS is_in_route"
         } else {
             ""
-        },
-        if zoom <= 12 {
+        };
+
+        let join_members = if zoom <= 12 {
             ex = format!(
                 "
                 LEFT JOIN
@@ -71,8 +46,37 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             &ex
         } else {
             ""
-        },
-    );
+        };
+
+        let query = format!(
+            "
+            SELECT
+                {table}.geometry,
+                {table}.type,
+                tracktype,
+                class,
+                service,
+                bridge,
+                tunnel,
+                oneway,
+                bicycle,
+                foot,
+                power(0.666, greatest(0, trail_visibility - 1))::DOUBLE PRECISION AS trail_visibility
+                {select_member}
+            FROM
+                {table}
+                {join_members}
+            WHERE
+                {table}.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            ORDER BY
+                z_order,
+                CASE WHEN {table}.type = 'rail' AND service IN ('', 'main') THEN 2 ELSE 1 END,
+                {table}.osm_id
+            ",
+        );
+
+        client.query(&query, &ctx.bbox_query_params(Some(128.0)).as_params())
+    })?;
 
     let apply_highway_defaults = |width: f64| {
         context.set_dash(&[], 0.0);
@@ -94,8 +98,6 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
     let highway_width_coef = || 1.5f64.powf(8.6f64.max(zoom as f64) - 8.0);
 
-    let rows = client.query(&query, &ctx.bbox_query_params(Some(128.0)).as_params())?;
-
     let ke = || match zoom {
         12 => 0.66,
         13 => 0.75,
@@ -112,18 +114,15 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
     let rows: Vec<_> = rows
         .iter()
-        .map(|row| {
-            (
-                row,
-                geometry_line_string(row).project_to_tile(&ctx.tile_projector),
-            )
-        })
-        .collect();
+        .map(|row| Ok((row, row.line_string()?.project_to_tile(&ctx.tile_projector))))
+        .collect::<Result<Vec<_>, FeatureError>>()?;
 
     for (row, geom) in &rows {
-        let typ: &str = row.get("type");
-
-        let class: &str = row.get("class");
+        let typ = row.get_string("type")?;
+        let class = row.get_string("class")?;
+        let bicycle = row.get_string("bicycle")?;
+        let tracktype = row.get_string("tracktype")?;
+        let service = row.get_string("service")?;
 
         let draw = || -> cairo::Result<()> {
             path_line_string(context, geom);
@@ -132,6 +131,13 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
             Ok(())
         };
+
+        let is_in_route = if zoom <= 12 {
+            row.get_bool("is_in_route")?
+        } else {
+            false
+        };
+        let trail_visibility = row.get_f64("trail_visibility")?;
 
         match (zoom, class, typ) {
             (..=11, _, _) => (),
@@ -149,22 +155,16 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
                 apply_glow_defaults(1.0);
                 draw()?;
             }
-            (12.., "highway", "path")
-                if row.get::<_, &str>("bicycle") != "designated"
-                    && (zoom > 12 || row.get("is_in_route")) =>
-            {
-                apply_glow_defaults_a(1.0, row.get("trail_visibility"));
+            (12.., "highway", "path") if bicycle != "designated" && (zoom > 12 || is_in_route) => {
+                apply_glow_defaults_a(1.0, trail_visibility);
                 draw()?;
             }
             (12.., "highway", _)
-                if typ == "track"
-                    && (zoom > 12
-                        || row.get("is_in_route")
-                        || row.get::<_, &str>("tracktype") == "grade1")
-                    || typ == "service" && row.get::<_, &str>("service") != "parking_aisle"
+                if typ == "track" && (zoom > 12 || is_in_route || tracktype == "grade1")
+                    || typ == "service" && service != "parking_aisle"
                     || ["escape", "corridor", "bus_guideway"].contains(&typ) =>
             {
-                apply_glow_defaults_a(ke() * 1.2, row.get("trail_visibility"));
+                apply_glow_defaults_a(ke() * 1.2, trail_visibility);
                 draw()?;
             }
             (14.., _, "raceway") | (14.., "leisure", "track") => {
@@ -173,7 +173,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             }
             (13.., "highway", "bridleway") => {
                 apply_glow_defaults(1.2);
-                context.set_source_color_a(colors::BRIDLEWAY2, row.get("trail_visibility"));
+                context.set_source_color_a(colors::BRIDLEWAY2, trail_visibility);
                 draw()?;
             }
             (_, "highway", "motorway" | "trunk") => {
@@ -207,11 +207,12 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     }
 
     for (row, geom) in &rows {
-        let typ: &str = row.get("type");
-
-        let class: &str = row.get("class");
-
-        let service: &str = row.get("service");
+        let typ = row.get_string("type")?;
+        let class = row.get_string("class")?;
+        let service = row.get_string("service")?;
+        let bicycle = row.get_string("bicycle")?;
+        let foot = row.get_string("foot")?;
+        let tracktype = row.get_string("tracktype")?;
 
         let draw = || -> cairo::Result<()> {
             path_line_string(context, geom);
@@ -221,8 +222,11 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             Ok(())
         };
 
+        let bridge = row.get_i16("bridge")?;
+        let tunnel = row.get_i16("tunnel")?;
+
         let draw_bridges_tunnels = |width: f64| -> cairo::Result<()> {
-            if row.get::<_, i16>("bridge") > 0 {
+            if bridge > 0 {
                 context.save()?;
                 context.set_dash(&[], 0.0);
                 context.set_source_rgb(0.0, 0.0, 0.0);
@@ -246,7 +250,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
                 context.restore()?;
             }
 
-            if row.get::<_, i16>("tunnel") > 0 {
+            if tunnel > 0 {
                 context.set_dash(&[], 0.0);
                 context.set_line_width(width + 1.0);
 
@@ -326,6 +330,13 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
             Ok(())
         };
+
+        let is_in_route = if zoom <= 12 {
+            row.get_bool("is_in_route")?
+        } else {
+            false
+        };
+        let trail_visibility = row.get_f64("trail_visibility")?;
 
         match (zoom, class, typ) {
             (14.., _, "pier") => {
@@ -489,60 +500,57 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
                 draw_bridges_tunnels(width + 1.0)?;
             }
             (12.., "highway", "path")
-                if row.get::<_, &str>("bicycle") == "designated"
-                    && row.get::<_, &str>("foot") == "designated"
-                    && (zoom > 12 || row.get("is_in_route")) =>
+                if bicycle == "designated"
+                    && foot == "designated"
+                    && (zoom > 12 || is_in_route) =>
             {
                 let width = ke();
 
                 apply_highway_defaults(width);
                 context.set_dash(&[4.0, 2.0], 0.0);
-                context.set_source_color_a(colors::CYCLEWAY, row.get("trail_visibility"));
+                context.set_source_color_a(colors::CYCLEWAY, trail_visibility);
                 draw()?;
 
                 draw_bridges_tunnels(width + 1.0)?;
             }
             (12.., "highway", _)
                 if (typ == "cycleway"
-                    || typ == "path"
-                        && row.get::<_, &str>("bicycle") == "designated"
-                        && row.get::<_, &str>("foot") != "designated")
-                    && (zoom > 12 || row.get("is_in_route")) =>
+                    || typ == "path" && bicycle == "designated" && foot != "designated")
+                    && (zoom > 12 || is_in_route) =>
             {
                 let width = ke();
 
                 apply_highway_defaults(width);
                 context.set_dash(&[6.0, 3.0], 0.0);
-                context.set_source_color_a(colors::CYCLEWAY, row.get("trail_visibility"));
+                context.set_source_color_a(colors::CYCLEWAY, trail_visibility);
                 draw()?;
 
                 draw_bridges_tunnels(width + 1.0)?;
             }
             (12.., "highway", "path")
-                if (row.get::<_, &str>("bicycle") != "designated"
-                    || row.get::<_, &str>("foot") == "designated")
-                    && (zoom > 12 || row.get("is_in_route")) =>
+                if (bicycle != "designated" || foot == "designated")
+                    && (zoom > 12 || is_in_route) =>
             {
                 let width = ke();
 
                 apply_highway_defaults(width);
                 context.set_dash(&[3.0, 3.0], 0.0);
-                context.set_source_color_a(colors::TRACK, row.get("trail_visibility"));
+                context.set_source_color_a(colors::TRACK, trail_visibility);
                 draw()?;
 
                 draw_bridges_tunnels(width + 1.0)?;
             }
-            (12.., "highway", "bridleway") if zoom > 12 || row.get("is_in_route") => {
+            (12.., "highway", "bridleway") if zoom > 12 || is_in_route => {
                 let width = ke();
 
                 apply_highway_defaults(width);
                 context.set_dash(&[6.0, 3.0], 0.0);
-                context.set_source_color_a(colors::BRIDLEWAY, row.get("trail_visibility"));
+                context.set_source_color_a(colors::BRIDLEWAY, trail_visibility);
                 draw()?;
 
                 draw_bridges_tunnels(width + 1.0)?;
             }
-            (12.., "highway", "via_ferrata") if zoom > 12 || row.get("is_in_route") => {
+            (12.., "highway", "via_ferrata") if zoom > 12 || is_in_route => {
                 let width = ke();
 
                 apply_highway_defaults(width);
@@ -551,17 +559,13 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
                 draw_bridges_tunnels(width + 1.0)?;
             }
-            (12.., "highway", "track")
-                if (zoom > 12
-                    || row.get("is_in_route")
-                    || row.get::<_, &str>("tracktype") == "grade1") =>
-            {
+            (12.., "highway", "track") if (zoom > 12 || is_in_route || tracktype == "grade1") => {
                 let width = ke() * 1.2;
 
                 apply_highway_defaults(width);
 
                 context.set_dash(
-                    match row.get::<_, &str>("tracktype") {
+                    match tracktype {
                         "grade1" => &[],
                         "grade2" => &[8.0, 2.0],
                         "grade3" => &[6.0, 4.0],
@@ -572,7 +576,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
                     0.0,
                 );
 
-                context.set_source_color_a(colors::TRACK, row.get("trail_visibility"));
+                context.set_source_color_a(colors::TRACK, trail_visibility);
 
                 draw()?;
 
@@ -582,7 +586,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             _ => (),
         };
 
-        let oneway = row.get::<_, i16>("oneway");
+        let oneway = row.get_i16("oneway")?;
 
         if zoom >= 14 && oneway != 0 {
             path_line_string(context, geom);
