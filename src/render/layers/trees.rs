@@ -36,7 +36,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     for row in rows {
         let typ = row.get_string("type")?;
 
-        let point = row.point()?.project_to_tile(&ctx.tile_projector);
+        let point = row.get_point()?.project_to_tile(&ctx.tile_projector);
 
         let scale =
             (2.0 + (ctx.zoom as f64 - 15.0).exp2()) * (if typ == "shrub" { 0.1 } else { 0.2 });

@@ -76,7 +76,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
     };
 
     for row in rows {
-        let geom = row.geometry()?.project_to_tile(&ctx.tile_projector);
+        let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
 
         let typ = row.get_string("type")?;
 

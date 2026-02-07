@@ -2,8 +2,9 @@ use std::borrow::Cow;
 
 use crate::render::{
     colors::{self, Color, ContextExt},
-    ctx::{Ctx, FeatureError},
+    ctx::Ctx,
     draw::{markers_on_path::draw_markers_on_path, path_geom::path_line_string},
+    FeatureError,
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
     svg_repo::SvgRepo,
@@ -110,7 +111,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
     let rows: Vec<_> = rows
         .iter()
-        .map(|row| Ok((row, row.line_string()?.project_to_tile(&ctx.tile_projector))))
+        .map(|row| Ok((row, row.get_line_string()?.project_to_tile(&ctx.tile_projector))))
         .collect::<Result<Vec<_>, FeatureError>>()?;
 
     for (row, geom) in &rows {

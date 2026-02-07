@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::render::{ctx::LegendValue, image_format::ImageFormat, layers::RouteTypes};
+use crate::render::{LegendValue, image_format::ImageFormat, layers::RouteTypes};
 use geo::Rect;
 use geojson::Feature;
 

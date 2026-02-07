@@ -29,7 +29,7 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     context.save()?;
 
     for row in rows {
-        let geom = row.line_string()?.project_to_tile(&ctx.tile_projector);
+        let geom = row.get_line_string()?.project_to_tile(&ctx.tile_projector);
 
         path_line_string(context, &geom);
 

@@ -45,7 +45,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     };
 
     for row in rows {
-        paint(&row.point()?.project_to_tile(&ctx.tile_projector).0)?;
+        paint(&row.get_point()?.project_to_tile(&ctx.tile_projector).0)?;
     }
 
     let rows = ctx.legend_features("fixmes", || {
@@ -63,7 +63,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     })?;
 
     for row in rows.into_iter() {
-        let line_string = row.line_string()?.project_to_tile(&ctx.tile_projector);
+        let line_string = row.get_line_string()?.project_to_tile(&ctx.tile_projector);
 
         path_line_string(context, &line_string);
 

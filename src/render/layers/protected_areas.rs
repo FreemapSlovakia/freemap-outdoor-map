@@ -1,11 +1,12 @@
 use crate::render::{
     colors::{self, ContextExt},
-    ctx::{Ctx, FeatureError},
+    ctx::Ctx,
     draw::{
         hatch::hatch_geometry,
         line_pattern::draw_line_pattern,
         path_geom::{path_geometry, path_line_string_with_offset, walk_geometry_line_strings},
     },
+    FeatureError,
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
     svg_repo::SvgRepo,
@@ -47,8 +48,8 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         .iter()
         .map(|row| {
             Ok((
-                row.geometry()?.project_to_tile(tile_projector),
-                row.geometry()?,
+                row.get_geometry()?.project_to_tile(tile_projector),
+                row.get_geometry()?,
                 row,
             ))
         })
@@ -128,7 +129,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     let geometries: Vec<_> = rows
         .iter()
         .map(|row| {
-            let geom = row.geometry()?;
+            let geom = row.get_geometry()?;
             Ok((geom.project_to_tile(&ctx.tile_projector), geom, row))
         })
         .collect::<Result<Vec<_>, FeatureError>>()?;

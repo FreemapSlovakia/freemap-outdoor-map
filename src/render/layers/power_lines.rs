@@ -49,7 +49,7 @@ pub fn render_lines(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         context.set_dash(&[], 0.0);
         context.set_line_width(1.0);
 
-        let geom = row.line_string()?.project_to_tile(&ctx.tile_projector);
+        let geom = row.get_line_string()?.project_to_tile(&ctx.tile_projector);
 
         path_line_string(context, &geom);
 
@@ -96,7 +96,7 @@ pub fn render_towers_poles(ctx: &Ctx, client: &mut Client) -> LayerRenderResult 
             colors::POWER_LINE
         });
 
-        let p = row.point()?.project_to_tile(&ctx.tile_projector);
+        let p = row.get_point()?.project_to_tile(&ctx.tile_projector);
 
         context.rectangle(
             ctx.hint(p.x() - 1.5),

@@ -105,7 +105,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, country: Option<&str>) -> LayerRen
             _ => false,
         };
 
-        let geom = row.line_string()?.project_to_tile(&ctx.tile_projector);
+        let geom = row.get_line_string()?.project_to_tile(&ctx.tile_projector);
 
         context.set_dash(&[], 0.0);
 

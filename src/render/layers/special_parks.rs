@@ -34,7 +34,7 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let wb = 14.0 - (150.0 / (ctx.zoom as f64));
 
     for row in rows {
-        let geometry = row.geometry()?.project_to_tile(&ctx.tile_projector);
+        let geometry = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
 
         context.set_source_color(colors::SPECIAL_PARK);
         context.set_dash(&[], 0.0);

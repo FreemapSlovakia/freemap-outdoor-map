@@ -49,7 +49,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         draw_text(
             ctx.context,
             Some(collision),
-            &row.point()?.project_to_tile(&ctx.tile_projector),
+            &row.get_point()?.project_to_tile(&ctx.tile_projector),
             row.get_string("housenumber")?,
             &text_options,
         )?;

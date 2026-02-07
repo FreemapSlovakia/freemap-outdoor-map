@@ -33,7 +33,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, mask: bool) -> LayerRenderResult {
     }
 
     for row in rows {
-        let geometry = row.geometry()?.project_to_tile(&ctx.tile_projector);
+        let geometry = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
 
         if mask {
             context.rectangle(0.0, 0.0, ctx.size.width as f64, ctx.size.height as f64);

@@ -1,7 +1,8 @@
 use crate::render::{
     colors::{self, ContextExt},
-    ctx::{Ctx, FeatureError},
+    ctx::Ctx,
     draw::{hatch::hatch_geometry, path_geom::path_geometry},
+    FeatureError,
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
@@ -43,7 +44,7 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let geometries: Vec<_> = rows
         .iter()
         .map(|row| {
-            let geom = row.geometry()?;
+            let geom = row.get_geometry()?;
             Ok((geom.project_to_tile(tile_projector), geom))
         })
         .collect::<Result<Vec<_>, FeatureError>>()?;

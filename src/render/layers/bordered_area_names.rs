@@ -50,7 +50,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         draw_text(
             ctx.context,
             Some(collision),
-            &row.point()?.project_to_tile(&ctx.tile_projector),
+            &row.get_point()?.project_to_tile(&ctx.tile_projector),
             row.get_string("name")?,
             &text_options,
         )?;
@@ -114,7 +114,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
 
         let name = row.get_string("name")?;
 
-        let geom = row.geometry()?.project_to_tile(&ctx.tile_projector);
+        let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
 
         walk_geometry_line_strings(&geom, &mut |geom| {
             let _drawn = draw_text_on_line(

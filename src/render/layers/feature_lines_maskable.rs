@@ -62,7 +62,7 @@ pub fn render(
 
     let mut draw = || -> LayerRenderResult {
         for row in &rows {
-            let geom = row.line_string()?.project_to_tile(&ctx.tile_projector);
+            let geom = row.get_line_string()?.project_to_tile(&ctx.tile_projector);
 
             match row.get_string("type")? {
                 "earth_bank" => {

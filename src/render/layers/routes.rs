@@ -302,7 +302,7 @@ pub fn render_marking(
     })?;
 
     for row in rows {
-        let geom = row.geometry()?.project_to_tile(&ctx.tile_projector);
+        let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
 
         let (zo, wf) = match zoom {
             ..=11 => (1.0, 1.5),
@@ -477,7 +477,7 @@ pub fn render_labels(
     })?;
 
     for row in rows {
-        let geom = row.geometry()?.project_to_tile(&ctx.tile_projector);
+        let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
 
         let refs1 = row.get_string("refs1")?;
         let off1 = row.get_i32("off1")?;

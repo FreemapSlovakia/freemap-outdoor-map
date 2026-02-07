@@ -31,7 +31,7 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let d = 4.0f64.max(1.33f64.powf(zoom as f64) / 20.0).round();
 
     for row in rows {
-        let geom = row.geometry()?;
+        let geom = row.get_geometry()?;
 
         context.push_group();
 

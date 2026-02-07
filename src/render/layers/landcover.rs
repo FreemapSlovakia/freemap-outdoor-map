@@ -67,7 +67,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     context.save()?;
 
     for row in rows {
-        let geom = row.geometry()?.project_to_tile(&ctx.tile_projector);
+        let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
 
         let colour_area = |color: Color| -> cairo::Result<()> {
             context.set_source_color(color);

@@ -55,7 +55,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
     };
 
     for row in rows {
-        let geom = row.geometry()?;
+        let geom = row.get_geometry()?;
 
         let geom = geom.project_to_tile(&ctx.tile_projector);
 

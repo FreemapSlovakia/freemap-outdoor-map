@@ -40,7 +40,7 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     context.save()?;
 
     for row in rows {
-        let geom = row.geometry()?;
+        let geom = row.get_geometry()?;
 
         let projected = geom.project_to_tile(tile_projector);
 

@@ -1,4 +1,4 @@
-use crate::render::{ctx::FeatureError, projectable::GeomError, svg_repo::SvgRepoError};
+use crate::render::{FeatureError, GeomError, svg_repo::SvgRepoError};
 use std::fmt;
 use thiserror::Error;
 

@@ -28,7 +28,7 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let context = ctx.context;
 
     for row in rows {
-        let geometry = row.geometry()?.project_to_tile(&ctx.tile_projector);
+        let geometry = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
 
         ctx.context.set_dash(&[], 0.0);
         ctx.context.set_source_color(colors::ADMIN_BORDER);

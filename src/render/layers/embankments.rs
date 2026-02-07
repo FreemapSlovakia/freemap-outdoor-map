@@ -22,7 +22,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     })?;
 
     for row in rows {
-        let geom = row.line_string()?.project_to_tile(&ctx.tile_projector);
+        let geom = row.get_line_string()?.project_to_tile(&ctx.tile_projector);
 
         draw_line_pattern(
             ctx.context,

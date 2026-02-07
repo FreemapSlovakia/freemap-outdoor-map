@@ -1,11 +1,12 @@
 use crate::render::{
     collision::Collision,
     colors,
-    ctx::{Ctx, Feature},
+    ctx::Ctx,
     draw::{
         create_pango_layout::FontAndLayoutOptions,
         text_on_line::{Align, Distribution, Repeat, TextOnLineOptions, draw_text_on_line},
     },
+    Feature,
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
     regex_replacer::{Replacement, replace},
@@ -42,7 +43,7 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         for row in rows {
             let name = replace(row.get_string("name")?, &REPLACEMENTS);
 
-            let geom = row.line_string()?.project_to_tile(&ctx.tile_projector);
+            let geom = row.get_line_string()?.project_to_tile(&ctx.tile_projector);
 
             let offset_factor = row.get_f64("offset_factor")?;
 

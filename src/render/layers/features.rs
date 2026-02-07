@@ -470,32 +470,20 @@ pub fn render(
         if zoom >= 14 {
 
         let w = {
-                let mut omit_types = vec!["'peak'"];
+            let mut omit_types = vec!["'peak'".to_string()];
 
-                // TODO add more types; maybe derive from POIS
+            for (typ, defs) in POIS.iter() {
+                let visible = defs
+                    .iter()
+                    .any(|def| def.min_zoom <= zoom && def.extra.max_zoom >= zoom);
 
-                if zoom < 15 {
-                    omit_types.push("'bus_stop', 'mast', 'tree', 'tower', 'hunting_stand', 'shelter', 'saddle', 'mountain_pass'");
+                if !visible {
+                    omit_types.push(format!("'{typ}'"));
                 }
+            }
 
-                if zoom < 16 {
-                    omit_types.push("'rock', 'stone', 'sinkhole', 'building', 'picnic_table', 'board', 'map', 'artwork'");
-                }
-
-                if zoom < 17 {
-                    omit_types.push("'lift_gate', 'swing_gate', 'gate', 'fire_pit', 'bench', 'ford', 'parking'");
-                }
-
-                if zoom < 18 {
-                    omit_types.push("'gate'");
-                }
-
-                if zoom < 19 {
-                    omit_types.push("'waste_basket'");
-                }
-
-                format!("AND type NOT IN ({})", omit_types.join(", "))
-            };
+            format!("AND type NOT IN ({})", omit_types.join(", "))
+        };
 
             z14_sql = format!("
                 SELECT
@@ -679,9 +667,7 @@ pub fn render(
                 continue;
             };
 
-            let point = row.point()?.project_to_tile(&ctx.tile_projector);
-
-            println!("AAAAAAAA {typ} {point:?}");
+            let point = row.get_point()?.project_to_tile(&ctx.tile_projector);
 
             let key = def.extra.icon.unwrap_or(typ);
 
@@ -800,8 +786,6 @@ pub fn render(
                 let _span = tracy_client::span!("features::paint_svg");
 
                 context.set_source_surface(surface, corner_x - x, corner_y - y)?;
-
-                println!("GGGGGGGg {} {}", corner_x - x, corner_y - y);
 
                 context.paint_with_alpha(
                     if typ != "cave_entrance"

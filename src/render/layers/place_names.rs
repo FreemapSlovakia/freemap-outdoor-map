@@ -67,7 +67,7 @@ pub fn render(
         draw_text(
             ctx.context,
             collision.as_deref_mut(),
-            &row.point()?.project_to_tile(&ctx.tile_projector),
+            &row.get_point()?.project_to_tile(&ctx.tile_projector),
             row.get_string("name")?,
             &TextOptions {
                 flo: FontAndLayoutOptions {
