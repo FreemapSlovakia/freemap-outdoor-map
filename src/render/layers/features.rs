@@ -407,233 +407,232 @@ pub fn render(
     let zoom = ctx.zoom;
 
     let rows = ctx.legend_features("features", || {
-let mut selects = vec![];
+        let mut selects = vec![];
 
-    selects.push(
-        "SELECT
-            osm_id,
-            geometry,
-            name AS n,
-            hstore(ARRAY['ele', tags->'ele', 'isolation', tags->'isolation']) AS h,
-            CASE WHEN isolation > 4500 THEN 'peak1'
-                WHEN isolation BETWEEN 3000 AND 4500 THEN 'peak2'
-                WHEN isolation BETWEEN 1500 AND 3000 THEN 'peak3'
-                ELSE 'peak'
-            END AS type
-        FROM
-            osm_features
-        NATURAL LEFT JOIN
-            isolations
-        WHERE
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-            type = 'peak' AND name <> ''
-        ",
-    );
-
-    if zoom >= 13 {
         selects.push(
             "SELECT
                 osm_id,
                 geometry,
                 name AS n,
-                hstore('ele', tags->'ele') AS h,
-                CASE WHEN type = 'guidepost' AND name = '' THEN 'guidepost_noname' ELSE type END
-            FROM
-                osm_features
-            WHERE
-                type = 'guidepost' AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            ",
-        );
-    }
-
-    if (12..=13).contains(&zoom) {
-        selects.push(
-            "SELECT
-                osm_id,
-                geometry,
-                name AS n,
-                hstore('ele', tags->'ele') AS h,
-                type
-            FROM
-                osm_features
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                type = 'aerodrome' AND
-                tags ? 'icao'
-            ",
-        );
-    }
-
-    let z14_sql;
-
-    if zoom >= 14 {
-
-    let w= {
-            let mut omit_types = vec!["'peak'"];
-
-            // TODO add more types; maybe derive from POIS
-
-            if zoom < 15 {
-                omit_types.push("'bus_stop', 'mast', 'tree', 'tower', 'hunting_stand', 'shelter', 'saddle', 'mountain_pass'");
-            }
-
-            if zoom < 16 {
-                omit_types.push("'rock', 'stone', 'sinkhole', 'building', 'picnic_table', 'board', 'map', 'artwork'");
-            }
-
-            if zoom < 17 {
-                omit_types.push("'lift_gate', 'swing_gate', 'gate', 'fire_pit', 'bench', 'ford', 'parking'");
-            }
-
-            if zoom < 18 {
-                omit_types.push("'gate'");
-            }
-
-            if zoom < 19 {
-                omit_types.push("'waste_basket'");
-            }
-
-            format!("AND type NOT IN ({})", omit_types.join(", "))
-        };
-
-        z14_sql = format!("
-            SELECT
-                osm_id,
-                geometry,
-                COALESCE(NULLIF(name, ''), tags->'ref', '') AS n,
-                hstore(ARRAY[
-                    'ele', tags->'ele',
-                    'access', tags->'access',
-                    'hot', (type = 'hot_spring')::text,
-                    'drinkable', tags->'drinking_water',
-                    'refitted', tags->'refitted',
-                    'intermittent', COALESCE(tags->'intermittent', tags->'seasonal'),
-                    'water_characteristic', tags->'water_characteristic'
-                ]) AS h,
-                CASE
-                    WHEN
-                        type = 'guidepost' AND
-                        name = ''
-                    THEN 'guidepost_noname'
-                    WHEN
-                        type = 'tree' AND
-                        tags->'protected' <> 'no'
-                    THEN 'tree_protected'
-                    WHEN type = 'communications_tower'
-                    THEN 'tower_communication'
-                    WHEN
-                        type = 'shelter' AND
-                        tags->'shelter_type' IN (
-                            'shopping_cart', 'lean_to', 'public_transport', 'picnic_shelter',
-                            'basic_hut', 'weather_shelter'
-                        )
-                    THEN tags->'shelter_type'
-                    WHEN
-                        type IN ('mine', 'adit', 'mineshaft') AND
-                        tags->'disused' <> 'no'
-                    THEN 'disused_mine'
-                    WHEN type IN ('hot_spring', 'geyser', 'spring_box')
-                    THEN 'spring'
-                    WHEN type IN ('tower', 'mast')
-                    THEN
-                        type || '_' || CASE tags->'tower:type'
-                            WHEN 'communication' THEN 'communication'
-                            WHEN 'observation' THEN 'observation'
-                            WHEN 'bell_tower' THEN 'bell_tower'
-                            ELSE 'other'
-                        END
-                    ELSE type
+                hstore(ARRAY['ele', tags->'ele', 'isolation', tags->'isolation']) AS h,
+                CASE WHEN isolation > 4500 THEN 'peak1'
+                    WHEN isolation BETWEEN 3000 AND 4500 THEN 'peak2'
+                    WHEN isolation BETWEEN 1500 AND 3000 THEN 'peak3'
+                    ELSE 'peak'
                 END AS type
             FROM
                 osm_features
+            NATURAL LEFT JOIN
+                isolations
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                (
-                    type <> 'saddle' OR
-                    NOT EXISTS (
-                        SELECT 1
-                        FROM osm_features b
-                        WHERE
-                            type = 'mountain_pass' AND
-                            osm_features.osm_id = b.osm_id
+                type = 'peak' AND name <> ''
+            ",
+        );
+
+        if zoom >= 13 {
+            selects.push(
+                "SELECT
+                    osm_id,
+                    geometry,
+                    name AS n,
+                    hstore('ele', tags->'ele') AS h,
+                    CASE WHEN type = 'guidepost' AND name = '' THEN 'guidepost_noname' ELSE type END
+                FROM
+                    osm_features
+                WHERE
+                    type = 'guidepost' AND
+                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+                ",
+            );
+        }
+
+        if (12..=13).contains(&zoom) {
+            selects.push(
+                "SELECT
+                    osm_id,
+                    geometry,
+                    name AS n,
+                    hstore('ele', tags->'ele') AS h,
+                    type
+                FROM
+                    osm_features
+                WHERE
+                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                    type = 'aerodrome' AND
+                    tags ? 'icao'
+                ",
+            );
+        }
+
+        let z14_sql;
+
+        if zoom >= 14 {
+
+        let w = {
+                let mut omit_types = vec!["'peak'"];
+
+                // TODO add more types; maybe derive from POIS
+
+                if zoom < 15 {
+                    omit_types.push("'bus_stop', 'mast', 'tree', 'tower', 'hunting_stand', 'shelter', 'saddle', 'mountain_pass'");
+                }
+
+                if zoom < 16 {
+                    omit_types.push("'rock', 'stone', 'sinkhole', 'building', 'picnic_table', 'board', 'map', 'artwork'");
+                }
+
+                if zoom < 17 {
+                    omit_types.push("'lift_gate', 'swing_gate', 'gate', 'fire_pit', 'bench', 'ford', 'parking'");
+                }
+
+                if zoom < 18 {
+                    omit_types.push("'gate'");
+                }
+
+                if zoom < 19 {
+                    omit_types.push("'waste_basket'");
+                }
+
+                format!("AND type NOT IN ({})", omit_types.join(", "))
+            };
+
+            z14_sql = format!("
+                SELECT
+                    osm_id,
+                    geometry,
+                    COALESCE(NULLIF(name, ''), tags->'ref', '') AS n,
+                    hstore(ARRAY[
+                        'ele', tags->'ele',
+                        'access', tags->'access',
+                        'hot', (type = 'hot_spring')::text,
+                        'drinkable', tags->'drinking_water',
+                        'refitted', tags->'refitted',
+                        'intermittent', COALESCE(tags->'intermittent', tags->'seasonal'),
+                        'water_characteristic', tags->'water_characteristic'
+                    ]) AS h,
+                    CASE
+                        WHEN
+                            type = 'guidepost' AND
+                            name = ''
+                        THEN 'guidepost_noname'
+                        WHEN
+                            type = 'tree' AND
+                            tags->'protected' <> 'no'
+                        THEN 'tree_protected'
+                        WHEN type = 'communications_tower'
+                        THEN 'tower_communication'
+                        WHEN
+                            type = 'shelter' AND
+                            tags->'shelter_type' IN (
+                                'shopping_cart', 'lean_to', 'public_transport', 'picnic_shelter',
+                                'basic_hut', 'weather_shelter'
+                            )
+                        THEN tags->'shelter_type'
+                        WHEN
+                            type IN ('mine', 'adit', 'mineshaft') AND
+                            tags->'disused' <> 'no'
+                        THEN 'disused_mine'
+                        WHEN type IN ('hot_spring', 'geyser', 'spring_box')
+                        THEN 'spring'
+                        WHEN type IN ('tower', 'mast')
+                        THEN
+                            type || '_' || CASE tags->'tower:type'
+                                WHEN 'communication' THEN 'communication'
+                                WHEN 'observation' THEN 'observation'
+                                WHEN 'bell_tower' THEN 'bell_tower'
+                                ELSE 'other'
+                            END
+                        ELSE type
+                    END AS type
+                FROM
+                    osm_features
+                WHERE
+                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                    (
+                        type <> 'saddle' OR
+                        NOT EXISTS (
+                            SELECT 1
+                            FROM osm_features b
+                            WHERE
+                                type = 'mountain_pass' AND
+                                osm_features.osm_id = b.osm_id
+                        )
+                    ) AND
+                    (
+                        type <> 'tree' OR
+                        tags->'protected' NOT IN ('', 'no') OR
+                        tags->'denotation' = 'natural_monument'
+                    ) AND
+                    (
+                        type NOT IN ('saddle', 'mountain_pass') OR
+                        name <> ''
                     )
-                ) AND
-                (
-                    type <> 'tree' OR
-                    tags->'protected' NOT IN ('', 'no') OR
-                    tags->'denotation' = 'natural_monument'
-                ) AND
-                (
-                    type NOT IN ('saddle', 'mountain_pass') OR
-                    name <> ''
-                )
-                {w}
-        ");
+                    {w}
+            ");
 
-        selects.push(&z14_sql);
+            selects.push(&z14_sql);
 
-        selects.push("
-            SELECT
-                osm_id,
-                geometry,
-                name AS n,
-                hstore('') as h,
-                building AS type
-            FROM
-                osm_place_of_worships
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                building IN ('chapel', 'church', 'temple', 'mosque', 'cathedral', 'synagogue')
-        ");
-    }
+            selects.push("
+                SELECT
+                    osm_id,
+                    geometry,
+                    name AS n,
+                    hstore('') as h,
+                    building AS type
+                FROM
+                    osm_place_of_worships
+                WHERE
+                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                    building IN ('chapel', 'church', 'temple', 'mosque', 'cathedral', 'synagogue')
+            ");
+        }
 
-    if zoom >= 15 {
-        selects.push("
-            SELECT
-                osm_id,
-                ST_PointOnSurface(geometry) AS geometry,
-                name AS n,
-                hstore('') AS h,
-                'generator_wind' AS type
-            FROM
-                osm_power_generators
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                (source = 'wind' OR method = 'wind_turbine')
-        ");
+        if zoom >= 15 {
+            selects.push("
+                SELECT
+                    osm_id,
+                    ST_PointOnSurface(geometry) AS geometry,
+                    name AS n,
+                    hstore('') AS h,
+                    'generator_wind' AS type
+                FROM
+                    osm_power_generators
+                WHERE
+                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                    (source = 'wind' OR method = 'wind_turbine')
+            ");
 
-        selects.push("
-            SELECT
-                osm_id,
-                geometry,
-                name AS n,
-                hstore('') AS h,
-                type
-            FROM
-                osm_shops
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                type IN (
-                    'convenience', 'fuel', 'confectionery', 'pastry', 'bicycle', 'supermarket', 'greengrocer', 'farm'
-                )
-        ");
+            selects.push("
+                SELECT
+                    osm_id,
+                    geometry,
+                    name AS n,
+                    hstore('') AS h,
+                    type
+                FROM
+                    osm_shops
+                WHERE
+                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                    type IN (
+                        'convenience', 'fuel', 'confectionery', 'pastry', 'bicycle', 'supermarket', 'greengrocer', 'farm'
+                    )
+            ");
 
-        selects.push("
-            SELECT
-                osm_id,
-                ST_LineInterpolatePoint(geometry, 0.5) AS geometry,
-                name AS n,
-                hstore('') AS h,
-                type
-            FROM
-                osm_feature_lines
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                type IN ('dam', 'weir', 'ford')
-        ");
-    }
-
+            selects.push("
+                SELECT
+                    osm_id,
+                    ST_LineInterpolatePoint(geometry, 0.5) AS geometry,
+                    name AS n,
+                    hstore('') AS h,
+                    type
+                FROM
+                    osm_feature_lines
+                WHERE
+                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                    type IN ('dam', 'weir', 'ford')
+            ");
+        }
 
         let z_order_case = build_feature_z_order_case("type");
 
@@ -681,6 +680,8 @@ let mut selects = vec![];
             };
 
             let point = row.point()?.project_to_tile(&ctx.tile_projector);
+
+            println!("AAAAAAAA {typ} {point:?}");
 
             let key = def.extra.icon.unwrap_or(typ);
 
@@ -799,6 +800,8 @@ let mut selects = vec![];
                 let _span = tracy_client::span!("features::paint_svg");
 
                 context.set_source_surface(surface, corner_x - x, corner_y - y)?;
+
+                println!("GGGGGGGg {} {}", corner_x - x, corner_y - y);
 
                 context.paint_with_alpha(
                     if typ != "cave_entrance"

@@ -66,6 +66,7 @@ pub fn render(
         zoom,
         tile_projector: TileProjector::new(bbox, size),
         scale,
+        legend: request.legend.as_ref(),
     };
 
     layers::sea::render(ctx, client).with_layer("sea")?;
@@ -258,7 +259,7 @@ pub fn render(
         layers::place_names::render(ctx, client, &mut None).with_layer("place_names")?;
     }
 
-    if matches!(request.format, ImageFormat::Jpeg | ImageFormat::Png) {
+    if ctx.legend.is_none() && matches!(request.format, ImageFormat::Jpeg | ImageFormat::Png) {
         layers::blur_edges::render(ctx, mask_geometry).with_layer("blur_edges")?;
     }
 

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::render::{
     projectable::{
         GeomError, TileProjector, geometry_geometry, geometry_line_string, geometry_point,
@@ -9,6 +7,7 @@ use crate::render::{
 use cairo::Context;
 use geo::{Geometry, LineString, Point, Rect};
 use postgres::{Row, types::ToSql};
+use std::collections::HashMap;
 
 pub struct SqlParams {
     params: Vec<Box<dyn ToSql + Sync>>,
@@ -29,6 +28,7 @@ impl SqlParams {
     }
 }
 
+#[derive(Clone, Debug)]
 pub enum LegendValue {
     String(String),
     Bool(bool),
@@ -79,8 +79,11 @@ pub enum FeatureError {
     WrongTypeError(#[from] WrongTypeError),
     #[error("Geom error: {0}")]
     GeomError(#[from] GeomError),
-    #[error("missing geometry")]
-    MissingValue,
+    #[error("missing value for '{field}' (expected {expected})")]
+    MissingValue {
+        field: String,
+        expected: &'static str,
+    },
     #[error("Error getting value from database: {0}")]
     PgError(#[from] postgres::Error),
 }
@@ -96,63 +99,80 @@ impl Feature {
     pub fn geometry(&self) -> Result<Geometry, FeatureError> {
         match self {
             Self::Row(row) => Ok(geometry_geometry(row)?),
-            Self::LegendData(data) => match data
-                .get(GEOMETRY_COLUMN)
-                .ok_or(FeatureError::MissingValue)?
-            {
-                LegendValue::Geometry(geometry) => Ok(geometry.clone()),
-                other => {
-                    Err(
-                        WrongTypeError::new(GEOMETRY_COLUMN, "Geometry", legend_value_type(other))
-                            .into(),
+            Self::LegendData(data) => {
+                match data
+                    .get(GEOMETRY_COLUMN)
+                    .ok_or(FeatureError::MissingValue {
+                        field: GEOMETRY_COLUMN.to_string(),
+                        expected: "Geometry",
+                    })? {
+                    LegendValue::Geometry(geometry) => Ok(geometry.clone()),
+                    other => Err(WrongTypeError::new(
+                        GEOMETRY_COLUMN,
+                        "Geometry",
+                        legend_value_type(other),
                     )
+                    .into()),
                 }
-            },
+            }
         }
     }
 
     pub fn line_string(&self) -> Result<LineString, FeatureError> {
         match self {
             Self::Row(row) => Ok(geometry_line_string(row)?),
-            Self::LegendData(data) => match data
-                .get(GEOMETRY_COLUMN)
-                .ok_or(FeatureError::MissingValue)?
-            {
-                LegendValue::LineString(line_string) => Ok(line_string.clone()),
-                LegendValue::Geometry(Geometry::LineString(line_string)) => Ok(line_string.clone()),
-                other => Err(WrongTypeError::new(
-                    GEOMETRY_COLUMN,
-                    "LineString",
-                    legend_value_type(other),
-                )
-                .into()),
-            },
+            Self::LegendData(data) => {
+                match data
+                    .get(GEOMETRY_COLUMN)
+                    .ok_or(FeatureError::MissingValue {
+                        field: GEOMETRY_COLUMN.to_string(),
+                        expected: "LineString",
+                    })? {
+                    LegendValue::LineString(line_string) => Ok(line_string.clone()),
+                    LegendValue::Geometry(Geometry::LineString(line_string)) => {
+                        Ok(line_string.clone())
+                    }
+                    other => Err(WrongTypeError::new(
+                        GEOMETRY_COLUMN,
+                        "LineString",
+                        legend_value_type(other),
+                    )
+                    .into()),
+                }
+            }
         }
     }
 
     pub fn point(&self) -> Result<Point, FeatureError> {
         match self {
             Self::Row(row) => Ok(geometry_point(row)?),
-            Self::LegendData(data) => match data
-                .get(GEOMETRY_COLUMN)
-                .ok_or(FeatureError::MissingValue)?
-            {
-                LegendValue::Point(point) => Ok(point.clone()),
-                LegendValue::Geometry(Geometry::Point(point)) => Ok(point.clone()),
-                other => {
-                    Err(
-                        WrongTypeError::new(GEOMETRY_COLUMN, "Point", legend_value_type(other))
-                            .into(),
-                    )
+            Self::LegendData(data) => {
+                match data
+                    .get(GEOMETRY_COLUMN)
+                    .ok_or(FeatureError::MissingValue {
+                        field: GEOMETRY_COLUMN.to_string(),
+                        expected: "Point",
+                    })? {
+                    LegendValue::Point(point) => Ok(point.clone()),
+                    LegendValue::Geometry(Geometry::Point(point)) => Ok(point.clone()),
+                    other => {
+                        Err(
+                            WrongTypeError::new(GEOMETRY_COLUMN, "Point", legend_value_type(other))
+                                .into(),
+                        )
+                    }
                 }
-            },
+            }
         }
     }
 
     pub(crate) fn get_string(&self, arg: &str) -> Result<&str, FeatureError> {
         match self {
             Self::Row(row) => Ok(row.try_get(arg)?),
-            Self::LegendData(data) => match data.get(arg).ok_or(FeatureError::MissingValue)? {
+            Self::LegendData(data) => match data.get(arg).ok_or(FeatureError::MissingValue {
+                field: arg.to_string(),
+                expected: "String",
+            })? {
                 LegendValue::String(string) => Ok(string.as_str()),
                 other => Err(WrongTypeError::new(arg, "String", legend_value_type(other)).into()),
             },
@@ -162,7 +182,10 @@ impl Feature {
     pub(crate) fn get_bool(&self, arg: &str) -> Result<bool, FeatureError> {
         match self {
             Self::Row(row) => Ok(row.try_get(arg)?),
-            Self::LegendData(data) => match data.get(arg).ok_or(FeatureError::MissingValue)? {
+            Self::LegendData(data) => match data.get(arg).ok_or(FeatureError::MissingValue {
+                field: arg.to_string(),
+                expected: "Bool",
+            })? {
                 LegendValue::Bool(value) => Ok(*value),
                 other => Err(WrongTypeError::new(arg, "bool", legend_value_type(other)).into()),
             },
@@ -172,7 +195,10 @@ impl Feature {
     pub(crate) fn get_f64(&self, arg: &str) -> Result<f64, FeatureError> {
         match self {
             Self::Row(row) => Ok(row.try_get(arg)?),
-            Self::LegendData(data) => match data.get(arg).ok_or(FeatureError::MissingValue)? {
+            Self::LegendData(data) => match data.get(arg).ok_or(FeatureError::MissingValue {
+                field: arg.to_string(),
+                expected: "F64",
+            })? {
                 LegendValue::F64(value) => Ok(*value),
                 other => Err(WrongTypeError::new(arg, "f64", legend_value_type(other)).into()),
             },
@@ -182,7 +208,10 @@ impl Feature {
     pub(crate) fn get_i16(&self, arg: &str) -> Result<i16, FeatureError> {
         match self {
             Self::Row(row) => Ok(row.try_get(arg)?),
-            Self::LegendData(data) => match data.get(arg).ok_or(FeatureError::MissingValue)? {
+            Self::LegendData(data) => match data.get(arg).ok_or(FeatureError::MissingValue {
+                field: arg.to_string(),
+                expected: "I16",
+            })? {
                 LegendValue::I16(value) => Ok(*value),
                 other => Err(WrongTypeError::new(arg, "i16", legend_value_type(other)).into()),
             },
@@ -192,7 +221,10 @@ impl Feature {
     pub(crate) fn get_i32(&self, arg: &str) -> Result<i32, FeatureError> {
         match self {
             Self::Row(row) => Ok(row.try_get(arg)?),
-            Self::LegendData(data) => match data.get(arg).ok_or(FeatureError::MissingValue)? {
+            Self::LegendData(data) => match data.get(arg).ok_or(FeatureError::MissingValue {
+                field: arg.to_string(),
+                expected: "I32",
+            })? {
                 LegendValue::I32(value) => Ok(*value),
                 other => Err(WrongTypeError::new(arg, "i32", legend_value_type(other)).into()),
             },
@@ -206,7 +238,10 @@ impl Feature {
         match self {
             Self::Row(row) => Ok(row.try_get(arg)?),
             Self::LegendData(data) => {
-                let value = data.get(arg).ok_or(FeatureError::MissingValue)?;
+                let value = data.get(arg).ok_or(FeatureError::MissingValue {
+                    field: arg.to_string(),
+                    expected: "Hstore",
+                })?;
                 match value {
                     LegendValue::Hstore(value) => Ok(value.clone()),
                     other => {
@@ -231,6 +266,7 @@ pub struct Ctx<'a> {
     pub zoom: u8,
     pub tile_projector: TileProjector,
     pub scale: f64,
+    pub legend: Option<&'a HashMap<String, Vec<HashMap<String, LegendValue>>>>,
 }
 
 impl Ctx<'_> {
@@ -262,9 +298,20 @@ impl Ctx<'_> {
 
     pub fn legend_features(
         &self,
-        _layer_name: &str,
+        layer_name: &str,
         mut cb: impl FnMut() -> Result<Vec<Row>, postgres::Error>,
     ) -> Result<Vec<Feature>, postgres::Error> {
-        Ok(cb()?.into_iter().map(|row| row.into()).collect())
+        let Some(ref legend) = self.legend else {
+            return Ok(cb()?.into_iter().map(|row| row.into()).collect());
+        };
+
+        let Some(legend) = legend.get(layer_name) else {
+            return Ok(vec![]);
+        };
+
+        Ok(legend
+            .iter()
+            .map(|props| Feature::LegendData(props.clone()))
+            .collect())
     }
 }

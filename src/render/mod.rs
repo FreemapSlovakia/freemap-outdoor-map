@@ -1,3 +1,4 @@
+pub(super) use ctx::LegendValue;
 pub(super) use image_format::ImageFormat;
 pub(super) use layers::RouteTypes;
 pub(super) use render_request::RenderRequest;

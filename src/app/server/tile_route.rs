@@ -72,7 +72,7 @@ pub(crate) async fn serve_tile(
         }
     }
 
-    let tile_request = RenderRequest::new(bbox, coord.zoom, scale, ImageFormat::Jpeg);
+    let render_request = RenderRequest::new(bbox, coord.zoom, scale, ImageFormat::Jpeg);
 
     let file_path = if let Some(ref tile_cache_base_path) = *state.tile_cache_base_path {
         let file_path = cached_tile_path(tile_cache_base_path, coord, scale);
@@ -101,7 +101,7 @@ pub(crate) async fn serve_tile(
 
     let render_started_at = SystemTime::now();
 
-    let rendered = match state.render_worker_pool.render(tile_request).await {
+    let rendered = match state.render_worker_pool.render(render_request).await {
         Ok(rendered) => rendered,
         Err(err) => {
             eprintln!("render failed: {err}");

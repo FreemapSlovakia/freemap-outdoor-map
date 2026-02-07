@@ -1,4 +1,6 @@
-use crate::render::{image_format::ImageFormat, layers::RouteTypes};
+use std::collections::HashMap;
+
+use crate::render::{ctx::LegendValue, image_format::ImageFormat, layers::RouteTypes};
 use geo::Rect;
 use geojson::Feature;
 
@@ -12,6 +14,7 @@ pub struct RenderRequest {
     pub contours: bool,
     pub route_types: RouteTypes,
     pub featues: Option<Vec<Feature>>,
+    pub legend: Option<HashMap<String, Vec<HashMap<String, LegendValue>>>>,
 }
 
 impl RenderRequest {
@@ -25,6 +28,7 @@ impl RenderRequest {
             contours: true,
             route_types: RouteTypes::all(),
             featues: None,
+            legend: None,
         }
     }
 }
