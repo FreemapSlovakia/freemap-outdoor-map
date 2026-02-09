@@ -1134,6 +1134,7 @@ tables:
                 - water_ski
                 - weightlifting
                 - yoga
+
   power_generators:
     columns:
       - name: osm_id
