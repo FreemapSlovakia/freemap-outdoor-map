@@ -1,6 +1,8 @@
+use std::{collections::HashMap, sync::LazyLock};
+
 use super::landcover_z_order::build_landcover_z_order_case;
 use crate::render::{
-    colors::{self, Color, ContextExt},
+    colors::{self, Color, ContextExt, *},
     ctx::Ctx,
     draw::path_geom::{path_geometry, path_line_string_with_offset, walk_geometry_line_strings},
     layer_render_error::LayerRenderResult,
@@ -10,6 +12,68 @@ use crate::render::{
 };
 use cairo::{Extend, Matrix, SurfacePattern};
 use postgres::Client;
+
+pub enum Paint {
+    Fill(Color),
+    Pattern(&'static str),
+    Stroke(f64, Color),
+}
+
+#[rustfmt::skip]
+const PAINT_DEFS: &[(&[&str], &[Paint])] = &[
+    (&["allotments"], &[Paint::Fill(ALLOTMENTS)]),
+    (&["cemetery", "grave_yard"], &[Paint::Fill(GRASSY), Paint::Pattern("grave")]),
+    (&["clearcut"], &[Paint::Pattern("clearcut2")]),
+    (&["bare_rock"], &[Paint::Pattern("bare_rock")]),
+    (&["beach"], &[Paint::Fill(BEACH), Paint::Pattern("sand")]),
+    (&["brownfield"], &[Paint::Fill(BROWNFIELD)]),
+    (&["bog"], &[Paint::Fill(GRASSY), Paint::Pattern("wetland"), Paint::Pattern("bog")]),
+    (&["mangrove"], &[Paint::Fill(GRASSY), Paint::Pattern("wetland"), Paint::Pattern("mangrove")]),
+    (&["college", "school", "university"], &[Paint::Fill(COLLEGE)]),
+    (&["commercial", "retail"], &[Paint::Fill(COMMERCIAL)]),
+    (&["dam", "weir"], &[Paint::Fill(DAM)]),
+    (&["farmland"], &[Paint::Fill(FARMLAND)]),
+    (&["farmyard"], &[Paint::Fill(FARMYARD)]),
+    (&["fell", "grass", "grassland"], &[Paint::Fill(GRASSY)]),
+    (&["marsh", "wet_meadow", "fen"], &[Paint::Fill(GRASSY), Paint::Pattern("wetland"), Paint::Pattern("marsh")]),
+    (&["footway", "garages", "pedestrian", "railway"], &[Paint::Fill(NONE)]),
+    (&["forest", "wood"], &[Paint::Fill(FOREST)]),
+    (&["garden", "park"], &[Paint::Fill(ORCHARD), Paint::Stroke(1.0, BLACK)]),
+    (&["heath"], &[Paint::Fill(HEATH)]),
+    (&["hospital"], &[Paint::Fill(HOSPITAL)]),
+    (&["industrial", "wastewater_plant"], &[Paint::Fill(INDUSTRIAL)]),
+    (&["landfill"], &[Paint::Fill(LANDFILL)]),
+    (&["living_street", "residential"], &[Paint::Fill(RESIDENTIAL)]),
+    (&["meadow", "village_green"], &[Paint::Fill(GRASSY)]),
+    (&["orchard"], &[Paint::Fill(ORCHARD), Paint::Pattern("orchard")]),
+    (&["dog_park"], &[Paint::Fill(GRASSY), Paint::Pattern("dog_park")]),
+    (&["parking"], &[Paint::Fill(PARKING), Paint::Stroke(1.0, PARKING_STROKE)]),
+    (&["pitch", "playground", "golf_course", "track"], &[Paint::Fill(PITCH), Paint::Stroke(1.0, PITCH_STROKE)]),
+    (&["plant_nursery"], &[Paint::Fill(SCRUB), Paint::Pattern("plant_nursery")]),
+    (&["quarry"], &[Paint::Fill(QUARRY), Paint::Pattern("quarry")]),
+    (&["glacier"], &[Paint::Fill(GLACIER), Paint::Pattern("glacier")]),
+    (&["reedbed"], &[Paint::Fill(GRASSY), Paint::Pattern("wetland"), Paint::Pattern("reedbed")]),
+    (&["recreation_ground"], &[Paint::Fill(RECREATION_GROUND)]),
+    (&["silo"], &[Paint::Fill(SILO), Paint::Stroke(1.0, SILO_STROKE)]),
+    (&["scree"], &[Paint::Fill(SCREE), Paint::Pattern("scree")]),
+    (&["scrub"], &[Paint::Fill(SCRUB), Paint::Pattern("scrub")]),
+    (&["swamp"], &[Paint::Fill(GRASSY), Paint::Pattern("wetland"), Paint::Pattern("swamp")]),
+    (&["vineyard"], &[Paint::Fill(ORCHARD), Paint::Pattern("grapes")]),
+    (&["wetland"], &[Paint::Pattern("wetland")]),
+    (&["winter_sports"], &[]), // NOTE handled separately
+];
+
+pub static PAINTS: LazyLock<HashMap<&'static str, &'static [Paint]>> = LazyLock::new(|| {
+    let mut paint_map = HashMap::new();
+
+    for (types, paints) in PAINT_DEFS {
+        for &typ in *types {
+            paint_map.insert(typ, *paints);
+        }
+    }
+
+    paint_map
+});
 
 pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRenderResult {
     let _span = tracy_client::span!("landcover::render");
@@ -69,274 +133,81 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     for row in rows {
         let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
 
-        let colour_area = |color: Color| -> cairo::Result<()> {
-            context.set_source_color(color);
-            path_geometry(context, &geom);
-            context.fill()?;
-
-            Ok(())
-        };
-
-        let mut pattern_area = |path: &str| -> LayerRenderResult {
-            let tile = svg_repo.get(path)?;
-
-            let pattern = SurfacePattern::create(tile);
-
-            let (x, y) = to_absolute_pixel_coords(min.x, min.y, zoom);
-
-            let rect = tile.extents().expect("tile extents");
-
-            let mut matrix = Matrix::identity();
-            matrix.translate((x % rect.width()).round(), (y % rect.height()).round());
-            pattern.set_matrix(matrix);
-
-            pattern.set_extend(Extend::Repeat);
-
-            context.set_source(&pattern)?;
-
-            path_geometry(context, &geom);
-
-            context.fill()?;
-
-            Ok(())
-        };
-
         let typ = row.get_string("type")?;
 
-        match typ {
-            "allotments" => {
-                colour_area(colors::ALLOTMENTS)?;
-            }
-            "cemetery" | "grave_yard" => {
-                colour_area(colors::GRASSY)?;
-                pattern_area("grave")?;
-            }
-            "clearcut" => {
-                pattern_area("clearcut2")?;
-            }
-            "bare_rock" => {
-                pattern_area("bare_rock")?;
-            }
-            "beach" => {
-                colour_area(colors::BEACH)?;
-                pattern_area("sand")?;
-            }
-            "brownfield" => {
-                colour_area(colors::BROWNFIELD)?;
-            }
-            "bog" => {
-                colour_area(colors::GRASSY)?;
-                pattern_area("wetland")?;
-                pattern_area("bog")?;
-            }
-            "college" => {
-                colour_area(colors::COLLEGE)?;
-            }
-            "commercial" => {
-                colour_area(colors::COMMERCIAL)?;
-            }
-            "dam" => {
-                colour_area(colors::DAM)?;
-            }
-            "farmland" => {
-                colour_area(colors::FARMLAND)?;
-            }
-            "farmyard" => {
-                colour_area(colors::FARMYARD)?;
-            }
-            "fell" => {
-                colour_area(colors::GRASSY)?;
-            }
-            "marsh" | "wet_meadow" | "fen" => {
-                colour_area(colors::GRASSY)?;
-                pattern_area("wetland")?;
-                pattern_area("marsh")?;
-            }
-            "footway" => {
-                colour_area(colors::NONE)?;
-            }
-            "forest" => {
-                colour_area(colors::FOREST)?;
+        if let Some(paints) = PAINTS.get(typ) {
+            for paint in paints.iter() {
+                match paint {
+                    Paint::Fill(color) => {
+                        context.set_source_color(*color);
+                        path_geometry(context, &geom);
+                        context.fill()?;
+                    }
+                    Paint::Pattern(pattern) => {
+                        let tile = svg_repo.get(pattern)?;
 
-                context.set_source_rgb(0.0, 0.0, 0.0);
-                context.set_line_width(1.0);
-            }
-            "garages" => {
-                colour_area(colors::NONE)?;
-            }
-            "grass" => {
-                colour_area(colors::GRASSY)?;
-            }
-            "garden" => {
-                colour_area(colors::ORCHARD)?;
+                        let pattern = SurfacePattern::create(tile);
 
-                context.set_source_rgba(0.0, 0.0, 0.0, 0.2);
-                context.set_line_width(1.0);
-                path_geometry(context, &geom);
-                context.stroke()?;
-            }
-            "grassland" => {
-                colour_area(colors::GRASSY)?;
-            }
-            "heath" => {
-                colour_area(colors::HEATH)?;
-            }
-            "hospital" => {
-                colour_area(colors::HOSPITAL)?;
-            }
-            "industrial" => {
-                colour_area(colors::INDUSTRIAL)?;
-            }
-            "landfill" => {
-                colour_area(colors::LANDFILL)?;
-            }
-            "living_street" => {
-                colour_area(colors::RESIDENTIAL)?;
-            }
-            "mangrove" => {
-                colour_area(colors::GRASSY)?;
-                pattern_area("wetland")?;
-                pattern_area("mangrove")?;
-            }
-            "meadow" => {
-                colour_area(colors::GRASSY)?;
-            }
-            "orchard" => {
-                colour_area(colors::ORCHARD)?;
-                pattern_area("orchard")?;
-            }
-            "park" => {
-                colour_area(colors::GRASSY)?;
-            }
-            "dog_park" => {
-                colour_area(colors::GRASSY)?;
-                pattern_area("dog_park")?;
-            }
-            "parking" => {
-                colour_area(colors::PARKING)?;
+                        let (x, y) = to_absolute_pixel_coords(min.x, min.y, zoom);
 
-                context.set_source_color(colors::PARKING_STROKE);
-                context.set_line_width(1.0);
-                path_geometry(context, &geom);
-                context.stroke()?;
-            }
-            "pedestrian" => {
-                colour_area(colors::NONE)?;
-            }
-            "pitch" | "playground" | "golf_course" | "track" => {
-                colour_area(colors::PITCH)?;
+                        let rect = tile.extents().expect("tile extents");
 
-                context.set_source_color(colors::PITCH_STROKE);
-                context.set_line_width(1.0);
-                path_geometry(context, &geom);
-                context.stroke()?;
-            }
-            "plant_nursery" => {
-                colour_area(colors::SCRUB)?;
-                pattern_area("plant_nursery")?;
-            }
-            "quarry" => {
-                colour_area(colors::QUARRY)?;
-                pattern_area("quarry")?;
-            }
-            "glacier" => {
-                colour_area(colors::GLACIER)?;
-                pattern_area("glacier")?;
-            }
-            "railway" => {
-                colour_area(colors::NONE)?;
-            }
-            "reedbed" => {
-                colour_area(colors::GRASSY)?;
-                pattern_area("wetland")?;
-                pattern_area("reedbed")?;
-            }
-            "recreation_ground" => {
-                colour_area(colors::RECREATION_GROUND)?;
-            }
-            "residential" => {
-                colour_area(colors::RESIDENTIAL)?;
-            }
-            "retail" => {
-                colour_area(colors::COMMERCIAL)?;
-            }
-            "silo" => {
-                colour_area(colors::SILO)?;
+                        let mut matrix = Matrix::identity();
+                        matrix.translate((x % rect.width()).round(), (y % rect.height()).round());
+                        pattern.set_matrix(matrix);
 
-                context.set_source_color(colors::SILO_STROKE);
-                context.set_line_width(1.0);
-                path_geometry(context, &geom);
-                context.stroke()?;
-            }
-            "school" => {
-                colour_area(colors::COLLEGE)?;
-            }
-            "scree" | "blockfield" => {
-                colour_area(colors::SCREE)?;
-                pattern_area("scree")?;
-            }
-            "scrub" => {
-                colour_area(colors::SCRUB)?;
-                pattern_area("scrub")?;
-            }
-            "swamp" => {
-                colour_area(colors::GRASSY)?;
-                pattern_area("wetland")?;
-                pattern_area("swamp")?;
-            }
-            "university" => {
-                colour_area(colors::COLLEGE)?;
-            }
-            "village_green" => {
-                colour_area(colors::GRASSY)?;
-            }
-            "vineyard" => {
-                colour_area(colors::ORCHARD)?;
-                pattern_area("grapes")?;
-            }
-            "wastewater_plant" => {
-                colour_area(colors::INDUSTRIAL)?;
-            }
-            "weir" => {
-                colour_area(colors::DAM)?;
-            }
-            "wetland" => {
-                pattern_area("wetland")?;
-            }
-            "winter_sports" => {
-                let wb = if zoom > 10 {
-                    0.5f64.mul_add(zoom as f64 - 10.0, 2.0)
-                } else {
-                    2.0
-                };
+                        pattern.set_extend(Extend::Repeat);
 
-                context.push_group();
+                        context.set_source(&pattern)?;
 
-                context.set_source_color(colors::WATER);
-                context.set_dash(&[], 0.0);
-                context.set_line_width(wb * 0.75);
-                context.set_line_join(cairo::LineJoin::Round);
-                context.set_line_cap(cairo::LineCap::Round);
+                        path_geometry(context, &geom);
 
-                path_geometry(context, &geom);
-                context.stroke()?;
+                        context.fill()?;
+                    }
+                    Paint::Stroke(width, color) => {
+                        if matches!(typ, "garden" | "park") {
+                            context.set_source_color_a(*color, 0.2);
+                        } else {
+                            context.set_source_color(*color);
+                        }
 
-                context.set_line_width(wb);
-                context.set_source_color_a(colors::WATER, 0.5);
-                walk_geometry_line_strings(&geom, &mut |iter| {
-                    path_line_string_with_offset(context, iter, wb * 0.75);
-
-                    cairo::Result::Ok(())
-                })?;
-                context.stroke()?;
-
-                context.pop_group_to_source().expect("group in source");
-                context.paint_with_alpha(0.66)?;
+                        context.set_line_width(*width);
+                        path_geometry(context, &geom);
+                        context.stroke()?;
+                    }
+                }
             }
-            "wood" => {
-                colour_area(colors::FOREST)?;
-            }
-            _ => (),
+        }
+
+        if typ == "winter_sports" {
+            let wb = if zoom > 10 {
+                0.5f64.mul_add(zoom as f64 - 10.0, 2.0)
+            } else {
+                2.0
+            };
+
+            context.push_group();
+
+            context.set_source_color(colors::WATER);
+            context.set_dash(&[], 0.0);
+            context.set_line_width(wb * 0.75);
+            context.set_line_join(cairo::LineJoin::Round);
+            context.set_line_cap(cairo::LineCap::Round);
+
+            path_geometry(context, &geom);
+            context.stroke()?;
+
+            context.set_line_width(wb);
+            context.set_source_color_a(colors::WATER, 0.5);
+            walk_geometry_line_strings(&geom, &mut |iter| {
+                path_line_string_with_offset(context, iter, wb * 0.75);
+
+                cairo::Result::Ok(())
+            })?;
+            context.stroke()?;
+
+            context.pop_group_to_source().expect("group in source");
+            context.paint_with_alpha(0.66)?;
         }
     }
 
