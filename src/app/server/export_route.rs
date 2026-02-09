@@ -9,7 +9,7 @@ use axum::{
 };
 use geo::Rect;
 use geojson::{Feature, GeoJson};
-use rand::TryRngCore;
+use rand::TryRng;
 use serde::Deserialize;
 use serde_json::json;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
@@ -206,7 +206,7 @@ pub(crate) async fn delete(
 fn generate_token() -> String {
     let mut bytes = [0_u8; 16];
 
-    rand::rngs::OsRng
+    rand::rngs::SysRng
         .try_fill_bytes(&mut bytes)
         .expect("os rng error");
 
