@@ -1,8 +1,7 @@
-use crate::render::{feature::LegendValue, projectable::TileProjector, size::Size};
+use crate::render::{legend::LegendItemData, projectable::TileProjector, size::Size};
 use cairo::Context;
 use geo::Rect;
 use postgres::types::ToSql;
-use std::collections::HashMap;
 
 pub struct SqlParams {
     params: Vec<Box<dyn ToSql + Sync>>,
@@ -30,7 +29,7 @@ pub struct Ctx<'a> {
     pub zoom: u8,
     pub tile_projector: TileProjector,
     pub scale: f64,
-    pub legend: Option<&'a HashMap<String, Vec<HashMap<String, LegendValue>>>>,
+    pub legend: Option<&'a LegendItemData>,
 }
 
 impl Ctx<'_> {

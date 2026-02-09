@@ -1,3 +1,5 @@
+pub use crate::render::categories::Category;
+pub use features::{Def, POIS};
 pub use hillshading_datasets::HillshadingDatasets;
 pub use hillshading_datasets::load_hillshading_datasets;
 pub use layers::RenderError;

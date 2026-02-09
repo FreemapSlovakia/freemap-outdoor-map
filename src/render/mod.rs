@@ -5,6 +5,7 @@ pub(crate) use legend::{LegendMeta, legend_metadata, legend_render_request};
 pub(super) use render_request::RenderRequest;
 pub(super) use render_worker_pool::RenderWorkerPool;
 
+mod categories;
 mod collision;
 mod colors;
 mod ctx;

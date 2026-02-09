@@ -1,5 +1,6 @@
 use super::feature_z_order::build_feature_z_order_case;
 use crate::render::{
+    categories::Category,
     collision::Collision,
     colors::{self, Color},
     ctx::Ctx,
@@ -10,8 +11,7 @@ use crate::render::{
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
     regex_replacer::{Replacement, build_replacements, replace},
-    svg_repo::Options,
-    svg_repo::SvgRepo,
+    svg_repo::{Options, SvgRepo},
 };
 use core::f64;
 use geo::{Point, Rect};
@@ -46,18 +46,18 @@ impl Default for Extra<'_> {
     }
 }
 
-struct Def {
+pub struct Def {
     min_zoom: u8,
     min_text_zoom: u8,
     with_ele: bool,
     natural: bool,
+    pub category: Category,
     extra: Extra<'static>,
 }
 
-#[rustfmt::skip]
-static POIS: LazyLock<HashMap<&'static str, Vec<Def>>> = LazyLock::new(|| {
-    const Y: bool = true;
+pub static POIS: LazyLock<HashMap<&'static str, Vec<Def>>> = LazyLock::new(|| {
     const N: bool = false;
+    const Y: bool = true;
     const NN: u8 = u8::MAX;
 
     let spring_replacements = build_replacements(&[
@@ -67,15 +67,11 @@ static POIS: LazyLock<HashMap<&'static str, Vec<Def>>> = LazyLock::new(|| {
         (r"\b[Vv]yvieračka\b", "vyv."),
     ]);
 
-    let church_replacements = build_replacements(&[
-        (r"^[Kk]ostol\b *", ""),
-        (r"\b([Ss]vät\w+|Sv\.)", "sv."),
-    ]);
+    let church_replacements =
+        build_replacements(&[(r"^[Kk]ostol\b *", ""), (r"\b([Ss]vät\w+|Sv\.)", "sv.")]);
 
-    let chapel_replacements = build_replacements(&[
-        (r"^[Kk]aplnka\b *", ""),
-        (r"\b([Ss]vät\w+|Sv\.)", "sv."),
-    ]);
+    let chapel_replacements =
+        build_replacements(&[(r"^[Kk]aplnka\b *", ""), (r"\b([Ss]vät\w+|Sv\.)", "sv.")]);
 
     let school_replacements = build_replacements(&[
         (r"[Zz]ákladná [Šš]kola", "ZŠ"),
@@ -95,24 +91,27 @@ static POIS: LazyLock<HashMap<&'static str, Vec<Def>>> = LazyLock::new(|| {
 
     let university_replacements = build_replacements(&[(r"[V]ysoká [Šš]kola", "VŠ")]);
 
+    use Category::*;
+
+    #[rustfmt::skip]
     let entries = vec![
-        (12, 12, N, N, "aerodrome", Extra {
+        (12, 12, N, N, Poi, "aerodrome", Extra {
             replacements: build_replacements(&[(r"^[Ll]etisko\b *", "")]),
             ..Extra::default()
         }),
         // (12, 12, Y, N, "guidepost", Extra { icon: Some("guidepost_x"), weight: Weight::Bold, max_zoom: 12, ..Extra::default() }),
-        (13, 13, Y, N, "guidepost", Extra { icon: Some("guidepost_xx"), weight: Weight::Bold, max_zoom: 13, ..Extra::default() }),
-        (14, 14, Y, N, "guidepost", Extra { icon: Some("guidepost_xx"), weight: Weight::Bold, ..Extra::default() }),
-        (10, 10, Y, Y, "peak1", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
-        (11, 11, Y, Y, "peak2", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
-        (12, 12, Y, Y, "peak3", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
-        (13, 13, Y, Y, "peak", Extra { font_size: 13.0, halo: false, ..Extra::default() }),
-        (14, 14, N, N, "castle", Extra {
+        (13, 13, Y, N, Poi, "guidepost", Extra { icon: Some("guidepost_xx"), weight: Weight::Bold, max_zoom: 13, ..Extra::default() }),
+        (14, 14, Y, N, Poi, "guidepost", Extra { icon: Some("guidepost_xx"), weight: Weight::Bold, ..Extra::default() }),
+        (10, 10, Y, Y, NaturalPoi, "peak1", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
+        (11, 11, Y, Y, NaturalPoi, "peak2", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
+        (12, 12, Y, Y, NaturalPoi, "peak3", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
+        (13, 13, Y, Y, NaturalPoi, "peak", Extra { font_size: 13.0, halo: false, ..Extra::default() }),
+        (14, 14, N, N, Poi, "castle", Extra {
             replacements: build_replacements(&[(r"^[Hh]rad\b *", "")]),
             ..Extra::default()
         }),
-        (14, 15, Y, Y, "arch", Extra::default()),
-        (14, 15, Y, Y, "cave_entrance", Extra {
+        (14, 15, Y, Y, NaturalPoi, "arch", Extra::default()),
+        (14, 15, Y, Y, NaturalPoi, "cave_entrance", Extra {
             replacements: build_replacements(&[
                 (r"^[Jj]jaskyňa\b *", ""),
                 (r"\b[Jj]jaskyňa$", "j."),
@@ -120,8 +119,8 @@ static POIS: LazyLock<HashMap<&'static str, Vec<Def>>> = LazyLock::new(|| {
             ]),
             ..Extra::default()
         }),
-        (14, 15, Y, Y, "spring", Extra { replacements: spring_replacements.clone(), text_color: colors::WATER_LABEL, ..Extra::default() }),
-        (14, 15, Y, Y, "waterfall", Extra {
+        (14, 15, Y, Y, Water, "spring", Extra { replacements: spring_replacements.clone(), text_color: colors::WATER_LABEL, ..Extra::default() }),
+        (14, 15, Y, Y, Water, "waterfall", Extra {
             replacements: build_replacements(&[
                 (r"^[Vv]odopád\b *", ""),
                 (r"\b[Vv]odopád$", "vdp."),
@@ -129,237 +128,234 @@ static POIS: LazyLock<HashMap<&'static str, Vec<Def>>> = LazyLock::new(|| {
             text_color: colors::WATER_LABEL,
             ..Extra::default()
         }),
-        (14, 15, N, N, "drinking_water", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
-        (14, 15, N, N, "water_point", Extra { text_color: colors::WATER_LABEL, icon: Some("drinking_water"), ..Extra::default() }),
-        (14, 15, N, N, "water_well", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
-        (14, 15, Y, N, "monument", Extra::default()),
-        (14, 15, Y, Y, "viewpoint", Extra {
+        (14, 15, N, N, Water, "drinking_water", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
+        (14, 15, N, N, Water, "water_point", Extra { text_color: colors::WATER_LABEL, icon: Some("drinking_water"), ..Extra::default() }),
+        (14, 15, N, N, Water, "water_well", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
+        (14, 15, Y, N, Poi, "monument", Extra::default()),
+        (14, 15, Y, Y, Poi, "viewpoint", Extra {
             replacements: build_replacements(&[
                 (r"^[Vv]yhliadka\b *", ""),
                 (r"\b[Vv]yhliadka$", "vyhl."),
             ]),
             ..Extra::default()
         }),
-        (14, 15, Y, N, "mine", Extra { icon: Some("mine"), ..Extra::default() }),
-        (14, 15, Y, N, "adit", Extra { icon: Some("mine"), ..Extra::default() }),
-        (14, 15, Y, N, "mineshaft", Extra { icon: Some("mine"), ..Extra::default() }),
-        (14, 15, Y, N, "disused_mine", Extra::default()),
-        (14, 15, Y, N, "hotel", Extra {
+        (14, 15, Y, N, Water, "mine", Extra { icon: Some("mine"), ..Extra::default() }),
+        (14, 15, Y, N, Water, "adit", Extra { icon: Some("mine"), ..Extra::default() }),
+        (14, 15, Y, N, Water, "mineshaft", Extra { icon: Some("mine"), ..Extra::default() }),
+        (14, 15, Y, N, Water, "disused_mine", Extra::default()),
+        (14, 15, Y, N, Accomodation, "hotel", Extra {
             replacements: build_replacements(&[(r"^[Hh]otel\b *", "")]),
             ..Extra::default()
         }),
-        (14, 15, Y, N, "chalet", Extra {
+        (14, 15, Y, N, Accomodation, "chalet", Extra {
             replacements: build_replacements(&[
                 (r"^[Cc]hata\b *", ""),
                 (r"\b[Cc]hata$", "ch."),
             ]),
             ..Extra::default()
         }),
-        (14, 15, Y, N, "hostel", Extra::default()),
-        (14, 15, Y, N, "motel", Extra {
+        (14, 15, Y, N, Accomodation, "hostel", Extra::default()),
+        (14, 15, Y, N, Accomodation, "motel", Extra {
             replacements: build_replacements(&[(r"^[Mm]otel\b *", "")]),
             ..Extra::default()
         }),
-        (14, 15, Y, N, "guest_house", Extra::default()),
-        (14, 15, Y, N, "apartment", Extra::default()),
-        (14, 15, Y, N, "wilderness_hut", Extra::default()),
-        (14, 15, Y, N, "alpine_hut", Extra::default()),
-        (14, 15, Y, N, "camp_site", Extra::default()),
-        (14, 15, N, N, "attraction", Extra::default()),
-        (14, 15, N, N, "hospital", Extra {
+        (14, 15, Y, N, Accomodation, "guest_house", Extra::default()),
+        (14, 15, Y, N, Accomodation, "apartment", Extra::default()),
+        (14, 15, Y, N, Accomodation, "wilderness_hut", Extra::default()),
+        (14, 15, Y, N, Accomodation, "alpine_hut", Extra::default()),
+        (14, 15, Y, N, Accomodation, "camp_site", Extra::default()),
+        (14, 15, N, N, Poi, "attraction", Extra::default()),
+        (14, 15, N, N, Institution, "hospital", Extra {
             replacements: build_replacements(&[(r"^[Nn]emocnica\b", "Nem.")]),
             ..Extra::default()
         }),
-        (14, NN, N, N, "townhall", Extra {
+        (14, NN, N, N, Institution, "townhall", Extra {
             replacements: chapel_replacements.clone(),
             ..Extra::default()
         }),
-        (14, 15, N, N, "chapel", Extra::default()),
-        (14, 15, N, N, "church", Extra {
+        (14, 15, N, N, Institution, "chapel", Extra::default()),
+        (14, 15, N, N, Institution, "church", Extra {
             replacements: church_replacements.clone(),
             ..Extra::default()
         }),
-        (14, 15, N, N, "cathedral", Extra {
+        (14, 15, N, N, Institution, "cathedral", Extra {
             replacements: church_replacements.clone(),
             icon: Some("church"),
             ..Extra::default()
         }),
-        (14, 15, N, N, "synagogue", Extra::default()),
-        (14, 15, N, N, "mosque", Extra::default()),
-        (14, 15, Y, N, "tower_observation", Extra::default()),
-        (14, 15, Y, N, "archaeological_site", Extra::default()),
-        (14, 15, N, N, "station", Extra::default()),
-        (14, 15, N, N, "halt", Extra { icon: Some("station"), ..Extra::default() }),
-        (14, 15, N, N, "bus_station", Extra::default()),
-        (14, 15, N, N, "water_park", Extra::default()),
-        (14, 15, N, N, "museum", Extra::default()),
-        (14, 15, N, N, "manor", Extra::default()),
-        (14, 15, N, N, "free_flying", Extra::default()),
-        (14, 15, N, N, "forester's_lodge", Extra::default()),
-        (14, 15, N, N, "horse_riding", Extra::default()),
-        (14, 15, N, N, "equestrian", Extra { icon: Some("horse_riding"), ..Extra::default() }),
-        (14, 15, N, N, "horse_racing", Extra { icon: Some("horse_riding"), ..Extra::default() }), // TODO use different icon
-        (14, 15, N, N, "skiing", Extra::default()),
-        (14, 15, N, N, "golf_course", Extra::default()),
+        (14, 15, N, N, Institution, "synagogue", Extra::default()),
+        (14, 15, N, N, Institution, "mosque", Extra::default()),
+        (14, 15, Y, N, Poi, "tower_observation", Extra::default()),
+        (14, 15, Y, N, Poi, "archaeological_site", Extra::default()),
+        (14, 15, N, N, Railway, "station", Extra::default()),
+        (14, 15, N, N, Railway, "halt", Extra { icon: Some("station"), ..Extra::default() }),
+        (14, 15, N, N, Poi, "bus_station", Extra::default()),
+        (14, 15, N, N, Poi, "water_park", Extra::default()),
+        (14, 15, N, N, Institution, "museum", Extra::default()),
+        (14, 15, N, N, Institution, "manor", Extra::default()),
+        (14, 15, N, N, Sport, "free_flying", Extra::default()),
+        (14, 15, N, N, Poi, "forester's_lodge", Extra::default()),
+        (14, 15, N, N, Sport, "horse_riding", Extra::default()),
+        (14, 15, N, N, Sport, "equestrian", Extra { icon: Some("horse_riding"), ..Extra::default() }),
+        (14, 15, N, N, Sport, "horse_racing", Extra { icon: Some("horse_riding"), ..Extra::default() }), // TODO use different icon
+        (14, 15, N, N, Sport, "skiing", Extra::default()),
+        (14, 15, N, N, Poi, "golf_course", Extra::default()),
         // TODO (14, 14, N, N, "recycling", Extra { text_color: colors::AREA_LABEL, ..Extra::default() }), // { icon: null } // has no icon yet - render as area name
-        (15, NN, Y, N, "guidepost_noname", Extra { icon: Some("guidepost_x"), ..Extra::default() }),
-        (15, 15, Y, Y, "saddle", Extra { font_size: 13.0, halo: false, ..Extra::default() }),
-        (15, 15, Y, Y, "mountain_pass", Extra { icon: Some("saddle"), font_size: 13.0, halo: false, ..Extra::default() }),
-        (15, 16, N, N, "ruins", Extra::default()),
-        (15, 16, N, N, "generator_wind", Extra::default()),
-        (15, 16, N, N, "chimney", Extra::default()),
-        (15, 16, N, N, "fire_station", Extra {
+        (15, NN, Y, N, Poi, "guidepost_noname", Extra { icon: Some("guidepost_x"), ..Extra::default() }),
+        (15, 15, Y, Y, NaturalPoi, "saddle", Extra { font_size: 13.0, halo: false, ..Extra::default() }),
+        (15, 15, Y, Y, NaturalPoi, "mountain_pass", Extra { icon: Some("saddle"), font_size: 13.0, halo: false, ..Extra::default() }),
+        (15, 16, N, N, Poi, "ruins", Extra::default()),
+        (15, 16, N, N, Poi, "generator_wind", Extra::default()),
+        (15, 16, N, N, Poi, "chimney", Extra::default()),
+        (15, 16, N, N, Institution, "fire_station", Extra {
             replacements: build_replacements(&[(r"^([Hh]asičská zbrojnica|[Pp]ožiarná stanica)\b *", "")]),
             ..Extra::default()
         }),
-        (15, 16, N, N, "community_centre", Extra {
+        (15, 16, N, N, Institution, "community_centre", Extra {
             replacements: build_replacements(&[(r"\b[Cc]entrum voľného času\b", "CVČ")]),
             ..Extra::default()
         }),
-        (15, 16, N, N, "police", Extra {
+        (15, 16, N, N, Institution, "police", Extra {
             replacements: build_replacements(&[(r"^[Pp]olícia\b *", "")]),
             ..Extra::default()
         }),
-        (15, 16, N, N, "office", Extra::default()),           // information=office
-        (15, 16, N, N, "hunting_stand", Extra::default()),
-        (15, 16, Y, N, "shelter", Extra::default()),
-        // (15, 16, Y, N, 'shopping_cart', Extra::default()),
-        (15, 16, Y, N, "lean_to", Extra::default()),
-        (15, 16, Y, N, "public_transport", Extra::default()),
-        (15, 16, Y, N, "picnic_shelter", Extra::default()),
-        (15, 16, Y, N, "basic_hut", Extra::default()),
-        (15, 16, Y, N, "weather_shelter", Extra::default()),
-        (15, 16, N, N, "pharmacy", Extra {
+        (15, 16, N, N, Institution, "office", Extra::default()),           // information=office
+        (15, 16, N, N, Accomodation, "hunting_stand", Extra::default()),
+        (15, 16, Y, N, Accomodation, "shelter", Extra::default()),
+        (15, 16, Y, N, Accomodation, "lean_to", Extra::default()),
+        (15, 16, Y, N, Accomodation, "public_transport", Extra::default()),
+        (15, 16, Y, N, Accomodation, "picnic_shelter", Extra::default()),
+        (15, 16, Y, N, Accomodation, "basic_hut", Extra::default()),
+        (15, 16, Y, N, Accomodation, "weather_shelter", Extra::default()),
+        (15, 16, N, N, Institution, "pharmacy", Extra {
             replacements: build_replacements(&[(r"^[Ll]ekáreň\b *", "")]),
             ..Extra::default()
         }),
-        (15, 16, N, N, "cinema", Extra {
+        (15, 16, N, N, Institution, "cinema", Extra {
             replacements: build_replacements(&[(r"^[Kk]ino\b *", "")]),
             ..Extra::default()
         }),
-        (15, 16, N, N, "theatre", Extra {
+        (15, 16, N, N, Institution, "theatre", Extra {
             replacements: build_replacements(&[(r"^[Dd]ivadlo\b *", "")]),
             ..Extra::default()
         }),
-        (15, 16, N, N, "memorial", Extra {
+        (15, 16, N, N, Poi, "memorial", Extra {
             replacements: build_replacements(&[(r"^[Pp]amätník\b *", "")]),
             ..Extra::default()
         }),
-        (15, 16, N, N, "pub", Extra::default()),
-        (15, 16, N, N, "cafe", Extra {
+        (15, 16, N, N, GastroPoi, "pub", Extra::default()),
+        (15, 16, N, N, GastroPoi, "cafe", Extra {
             replacements: build_replacements(&[(r"^[Kk]aviareň\b *", "")]),
             ..Extra::default()
         }),
-        (15, 16, N, N, "bar", Extra::default()),
-        (15, 16, N, N, "restaurant", Extra {
+        (15, 16, N, N, GastroPoi, "bar", Extra::default()),
+        (15, 16, N, N, GastroPoi, "restaurant", Extra {
             replacements: build_replacements(&[(r"^[Rr]eštaurácia\b *", "")]),
             ..Extra::default()
         }),
-        (15, 16, N, N, "convenience", Extra::default()),
-        (15, 16, N, N, "greengrocer", Extra::default()),
-        (15, 16, N, N, "farm", Extra { icon: Some("greengrocer"), ..Extra::default()}),
-        (15, 16, N, N, "supermarket", Extra::default()),
-        (15, 16, N, N, "fast_food", Extra::default()),
-        (15, 16, N, N, "confectionery", Extra::default()),
-        (15, 16, N, N, "pastry", Extra { icon: Some("confectionery"), ..Extra::default() }),
-        (15, 16, N, N, "fuel", Extra::default()),
-        (15, 16, N, N, "post_office", Extra::default()),
-        (15, 16, N, N, "bunker", Extra::default()),
-        (15, NN, N, N, "mast_other", Extra::default()),
-        (15, NN, N, N, "tower_other", Extra::default()),
-        (15, NN, N, N, "tower_communication", Extra::default()),
-        (15, NN, N, N, "mast_communication", Extra { icon: Some("tower_communication"), ..Extra::default() }),
-        (15, 16, N, N, "tower_bell_tower", Extra::default()),
-        (15, 16, N, N, "water_tower", Extra::default()),
-        (15, 16, N, N, "bus_stop", Extra::default()),
-        (15, 16, N, N, "sauna", Extra::default()),
-        (15, 16, N, N, "taxi", Extra::default()),
-        (15, 16, N, N, "bicycle", Extra::default()),
-        (15, 15, N, Y, "tree_protected", Extra { text_color: colors::TREE, ..Extra::default() }),
-        (15, 15, N, Y, "tree", Extra::default()),
-        (15, 16, N, N, "bird_hide", Extra::default()),
-        (15, 16, N, N, "dam", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
-        (15, 16, N, N, "school", Extra { replacements: school_replacements.clone(), ..Extra::default() }),
-        (15, 16, N, N, "college", Extra { replacements: college_replacements.clone(), ..Extra::default() }),
-        (15, 16, N, N, "university", Extra { replacements: university_replacements.clone(), ..Extra::default() }),
-        (15, 16, N, N, "kindergarten", Extra {
+        (15, 16, N, N, GastroPoi, "convenience", Extra::default()),
+        (15, 16, N, N, GastroPoi, "greengrocer", Extra::default()),
+        (15, 16, N, N, GastroPoi, "farm", Extra { icon: Some("greengrocer"), ..Extra::default()}),
+        (15, 16, N, N, GastroPoi, "supermarket", Extra::default()),
+        (15, 16, N, N, GastroPoi, "fast_food", Extra::default()),
+        (15, 16, N, N, GastroPoi, "confectionery", Extra::default()),
+        (15, 16, N, N, GastroPoi, "pastry", Extra { icon: Some("confectionery"), ..Extra::default() }),
+        (15, 16, N, N, Poi, "fuel", Extra::default()),
+        (15, 16, N, N, Institution, "post_office", Extra::default()),
+        (15, 16, N, N, Poi, "bunker", Extra::default()),
+        (15, NN, N, N, Poi, "mast_other", Extra::default()),
+        (15, NN, N, N, Poi, "tower_other", Extra::default()),
+        (15, NN, N, N, Poi, "tower_communication", Extra::default()),
+        (15, NN, N, N, Poi, "mast_communication", Extra { icon: Some("tower_communication"), ..Extra::default() }),
+        (15, 16, N, N, Poi, "tower_bell_tower", Extra::default()),
+        (15, 16, N, N, Poi, "water_tower", Extra::default()),
+        (15, 16, N, N, Poi, "bus_stop", Extra::default()),
+        (15, 16, N, N, Poi, "sauna", Extra::default()),
+        (15, 16, N, N, Poi, "taxi", Extra::default()),
+        (15, 16, N, N, Poi, "bicycle", Extra::default()),
+        (15, 15, N, Y, NaturalPoi, "tree_protected", Extra { text_color: colors::TREE, ..Extra::default() }),
+        (15, 15, N, Y, NaturalPoi, "tree", Extra::default()),
+        (15, 16, N, N, Poi, "bird_hide", Extra::default()),
+        (15, 16, N, N, Water, "dam", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
+        (15, 16, N, N, Institution, "school", Extra { replacements: school_replacements.clone(), ..Extra::default() }),
+        (15, 16, N, N, Institution, "college", Extra { replacements: college_replacements.clone(), ..Extra::default() }),
+        (15, 16, N, N, Institution, "university", Extra { replacements: university_replacements.clone(), ..Extra::default() }),
+        (15, 16, N, N, Institution, "kindergarten", Extra {
             replacements: build_replacements(&[(r"[Mm]atersk(á|ou) [Šš]k[oô]lk?(a|ou)", "MŠ")]),
             ..Extra::default()
         }),
-        (15, 16, N, N, "climbing", Extra::default()),
-        (15, 16, N, N, "shooting", Extra::default()),
-        (16, 17, N, Y, "rock", Extra::default()),
-        (16, 17, N, Y, "stone", Extra::default()),
-        (16, 17, N, Y, "sinkhole", Extra::default()),
-        (16, 17, N, N, "building", Extra::default()),
-        (16, 17, N, N, "weir", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
-        (16, 17, N, N, "miniature_golf", Extra::default()),
-        (16, 17, N, N, "soccer", Extra::default()),
-        (16, 17, N, N, "tennis", Extra::default()),
-        (16, 17, N, N, "basketball", Extra::default()),
-        (16, 17, N, N, "volleyball", Extra::default()),
-        (16, 17, N, N, "running", Extra::default()),
-        (16, 17, N, N, "athletics", Extra { icon: Some("running"), ..Extra::default() }),
-        (16, 17, N, N, "swimming", Extra { icon: Some("water_park"), ..Extra::default() }),
-        (16, 17, N, N, "cycling", Extra::default()),
-        (16, 17, N, N, "ice_skating", Extra::default()),
-        (16, NN, Y, N, "guidepost_noname", Extra { icon: Some("guidepost_x"), ..Extra::default() }),
-        (16, NN, Y, N, "route_marker", Extra { icon: Some("guidepost_x"), ..Extra::default() }),
-        (16, NN, N, N, "picnic_table", Extra::default()),
-        (16, NN, N, N, "outdoor_seating", Extra::default()),
-        (16, 17, N, N, "picnic_site", Extra::default()),
-        (16, 16, N, N, "board", Extra::default()),
-        (16, 17, N, N, "map", Extra::default()),
-        (16, 17, N, N, "artwork", Extra::default()),
-        (16, 17, N, N, "fountain", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
-        (16, NN, N, N, "watering_place", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
-        (16, NN, N, N, "feeding_place", Extra { icon: Some("manger"), ..Extra::default() }),
-        (16, NN, N, N, "game_feeding", Extra { icon: Some("manger"), ..Extra::default() }),
-        (16, 17, N, N, "playground", Extra {
+        (15, 16, N, N, Sport, "climbing", Extra::default()),
+        (15, 16, N, N, Sport, "shooting", Extra::default()),
+        (16, 17, N, Y, NaturalPoi, "rock", Extra::default()),
+        (16, 17, N, Y, NaturalPoi, "stone", Extra::default()),
+        (16, 17, N, Y, NaturalPoi, "sinkhole", Extra::default()),
+        (16, 17, N, N, Other, "building", Extra::default()),
+        (16, 17, N, N, Water, "weir", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
+        (16, 17, N, N, Sport, "miniature_golf", Extra::default()),
+        (16, 17, N, N, Sport, "soccer", Extra::default()),
+        (16, 17, N, N, Sport, "tennis", Extra::default()),
+        (16, 17, N, N, Sport, "basketball", Extra::default()),
+        (16, 17, N, N, Sport, "volleyball", Extra::default()),
+        (16, 17, N, N, Sport, "running", Extra::default()),
+        (16, 17, N, N, Sport, "athletics", Extra { icon: Some("running"), ..Extra::default() }),
+        (16, 17, N, N, Sport, "swimming", Extra { icon: Some("water_park"), ..Extra::default() }),
+        (16, 17, N, N, Sport, "cycling", Extra::default()),
+        (16, 17, N, N, Sport, "ice_skating", Extra::default()),
+        (16, NN, Y, N, Poi, "guidepost_noname", Extra { icon: Some("guidepost_x"), ..Extra::default() }),
+        (16, NN, Y, N, Poi, "route_marker", Extra { icon: Some("guidepost_x"), ..Extra::default() }),
+        (16, NN, N, N, Poi, "picnic_table", Extra::default()),
+        (16, NN, N, N, Poi, "outdoor_seating", Extra::default()),
+        (16, 17, N, N, Poi, "picnic_site", Extra::default()),
+        (16, 16, N, N, Poi, "board", Extra::default()),
+        (16, 17, N, N, Poi, "map", Extra::default()),
+        (16, 17, N, N, Poi, "artwork", Extra::default()),
+        (16, 17, N, N, Water, "fountain", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
+        (16, NN, N, N, Water, "watering_place", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
+        (16, NN, N, N, Poi, "feeding_place", Extra { icon: Some("manger"), ..Extra::default() }),
+        (16, NN, N, N, Poi, "game_feeding", Extra { icon: Some("manger"), ..Extra::default() }),
+        (16, 17, N, N, Poi, "playground", Extra {
             replacements: build_replacements(&[(r"^[Dd]etské ihrisko\b", "")]),
             ..Extra::default()
         }),
-        (16, 17, N, N, "water_works", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
-        (16, 17, N, N, "reservoir_covered", Extra { icon: Some("water_works"), text_color: colors::WATER_LABEL, ..Extra::default() }),
-        (16, 17, N, N, "pumping_station", Extra { icon: Some("water_works"), text_color: colors::WATER_LABEL, ..Extra::default() }),
-        (16, 17, N, N, "wastewater_plant", Extra { icon: Some("water_works"), text_color: colors::WATER_LABEL, ..Extra::default() }),
-        (16, 17, N, N, "cross", Extra::default()),
-        (17, 18, N, N, "boundary_stone", Extra::default()),
-        (17, 18, N, N, "marker", Extra { icon: Some("boundary_stone"), ..Extra::default() }),
-        (17, 18, N, N, "wayside_shrine", Extra::default()),
-        (17, 18, N, N, "cross", Extra::default()), // NOTE cross is also on lower zoom
-        (17, 18, N, N, "wayside_cross", Extra { icon: Some("cross"), ..Extra::default() }), // NOTE cross is also on lower zoom
-        (17, 18, N, N, "tree_shrine", Extra { icon: Some("cross"), ..Extra::default() }), // NOTE cross is also on lower zoom
-        (17, NN, N, N, "firepit", Extra::default()),
-        (17, NN, N, N, "toilets", Extra::default()),
-        (17, NN, N, N, "bench", Extra::default()),
-        (17, 18, N, N, "beehive", Extra::default()),
-        (17, 18, N, N, "apiary", Extra { icon: Some("beehive"), ..Extra::default() }),
-        (17, NN, N, N, "lift_gate", Extra::default()),
-        (17, NN, N, N, "swing_gate", Extra { icon: Some("lift_gate"), ..Extra::default() }),
-        (17, NN, N, N, "ford", Extra::default()),
-        (17, 19, N, N, "parking", Extra { font_size: 10.0, text_color: colors::AREA_LABEL, ..Extra::default() }), // { font: { haloOpacity: 0.5 } },
-        (18, 19, N, N, "building_ruins", Extra { icon: Some("ruins"), ..Extra::default() }),
-        (18, 19, N, N, "post_box", Extra::default()),
-        (18, 19, N, N, "telephone", Extra::default()),
-        (18, NN, N, N, "gate", Extra::default()),
-        (18, NN, N, N, "waste_disposal", Extra::default()),
-        (19, NN, N, N, "waste_basket", Extra::default()),
+        (16, 17, N, N, Water, "water_works", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
+        (16, 17, N, N, Water, "reservoir_covered", Extra { icon: Some("water_works"), text_color: colors::WATER_LABEL, ..Extra::default() }),
+        (16, 17, N, N, Water, "pumping_station", Extra { icon: Some("water_works"), text_color: colors::WATER_LABEL, ..Extra::default() }),
+        (16, 17, N, N, Water, "wastewater_plant", Extra { icon: Some("water_works"), text_color: colors::WATER_LABEL, ..Extra::default() }),
+        (16, 17, N, N, Poi, "cross", Extra::default()),
+        (17, 18, N, N, Poi, "boundary_stone", Extra::default()),
+        (17, 18, N, N, Poi, "marker", Extra { icon: Some("boundary_stone"), ..Extra::default() }),
+        (17, 18, N, N, Poi, "wayside_shrine", Extra::default()),
+        (17, 18, N, N, Poi, "cross", Extra::default()), // NOTE cross is also on lower zoom
+        (17, 18, N, N, Poi, "wayside_cross", Extra { icon: Some("cross"), ..Extra::default() }), // NOTE cross is also on lower zoom
+        (17, 18, N, N, Water, "tree_shrine", Extra { icon: Some("cross"), ..Extra::default() }), // NOTE cross is also on lower zoom
+        (17, NN, N, N, Water, "firepit", Extra::default()),
+        (17, NN, N, N, Water, "toilets", Extra::default()),
+        (17, NN, N, N, Water, "bench", Extra::default()),
+        (17, 18, N, N, Water, "beehive", Extra::default()),
+        (17, 18, N, N, Water, "apiary", Extra { icon: Some("beehive"), ..Extra::default() }),
+        (17, NN, N, N, Water, "lift_gate", Extra::default()),
+        (17, NN, N, N, Water, "swing_gate", Extra { icon: Some("lift_gate"), ..Extra::default() }),
+        (17, NN, N, N, Water, "ford", Extra::default()),
+        (17, 19, N, N, Water, "parking", Extra { font_size: 10.0, text_color: colors::AREA_LABEL, ..Extra::default() }), // { font: { haloOpacity: 0.5 } },
+        (18, 19, N, N, Other, "building_ruins", Extra { icon: Some("ruins"), ..Extra::default() }),
+        (18, 19, N, N, Water, "post_box", Extra::default()),
+        (18, 19, N, N, Poi, "telephone", Extra::default()),
+        (18, NN, N, N, Poi, "gate", Extra::default()),
+        (18, NN, N, N, Poi, "waste_disposal", Extra::default()),
+        (19, NN, N, N, Poi, "waste_basket", Extra::default()),
         ];
 
     let mut pois = HashMap::new();
 
-    for (min_zoom, min_text_zoom, with_ele, natural, name, extra) in entries.into_iter() {
-        pois
-            .entry(name)
-            .or_insert_with(Vec::new)
-            .push(Def {
-                min_zoom,
-                min_text_zoom,
-                with_ele,
-                natural,
-                extra,
-            });
+    for (min_zoom, min_text_zoom, with_ele, natural, category, name, extra) in entries.into_iter() {
+        pois.entry(name).or_insert_with(Vec::new).push(Def {
+            min_zoom,
+            min_text_zoom,
+            with_ele,
+            natural,
+            category,
+            extra,
+        });
     }
 
     pois
