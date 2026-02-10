@@ -289,7 +289,6 @@ tables:
             - military
             - military # TODO maybe as overlay layer
             - orchard
-            - park
             - plant_nursery
             - plantation
             - quarry
@@ -300,12 +299,10 @@ tables:
             - reservoir_watershed
             - residential
             - retail
-            - school
             - shrubs
             - village_green
             - vineyard
             - winter_sports
-            - wood
       highway:
         mapping:
           highway:
@@ -579,7 +576,8 @@ tables:
           ford:
             __any__: ford
           historic:
-            mine: disused_mine
+            mine: historic_mine
+            bunker: historic_bunker
           mountain_pass:
             yes: mountain_pass
           power:
@@ -753,7 +751,6 @@ tables:
                 - nameplate
                 - nightclub
                 - nursing_home
-                - office
                 - parcel_locker
                 - parking
                 - parking_entrance
@@ -910,6 +907,7 @@ tables:
                 - wayside_shrine
           information:
             mapping:
+              # TODO filter only tourism=information
               information:
                 - guidepost
                 - board
@@ -943,7 +941,6 @@ tables:
                 - cross
                 - forester's_lodge
                 - ice_house # TODO
-                - mine
                 - mineshaft
                 - pumping_station
                 - reservoir_covered
@@ -998,13 +995,10 @@ tables:
                 - attraction
                 - camp_site
                 - caravan_site
-                - castle
                 - chalet
                 - guest_house
                 - hostel
                 - hotel
-                - memorial
-                - monument
                 - motel
                 - museum
                 - picnic_site

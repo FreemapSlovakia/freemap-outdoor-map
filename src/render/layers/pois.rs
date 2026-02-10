@@ -1,4 +1,4 @@
-use super::feature_z_order::build_feature_z_order_case;
+use super::poi_z_order::build_poi_z_order_case;
 use crate::render::{
     categories::Category,
     collision::Collision,
@@ -18,7 +18,10 @@ use geo::{Point, Rect};
 use pangocairo::pango::{AttrList, AttrSize, SCALE, Style, Weight};
 use postgres::Client;
 use std::borrow::Cow;
-use std::{collections::HashMap, sync::LazyLock};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::LazyLock,
+};
 
 struct Extra<'a> {
     replacements: Vec<Replacement<'a>>,
@@ -55,7 +58,19 @@ pub struct Def {
     extra: Extra<'static>,
 }
 
-pub static POIS: LazyLock<HashMap<&'static str, Vec<Def>>> = LazyLock::new(|| {
+impl Def {
+    pub(crate) fn is_active_at(&self, zoom: u8) -> bool {
+        self.min_zoom <= zoom && self.extra.max_zoom >= zoom
+    }
+
+    pub(crate) fn icon_key<'a>(&'a self, typ: &'a str) -> &'a str {
+        self.extra.icon.unwrap_or(typ)
+    }
+}
+
+type PoiEntry = (u8, u8, bool, bool, Category, &'static str, Extra<'static>);
+
+static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
     const N: bool = false;
     const Y: bool = true;
     const NN: u8 = u8::MAX;
@@ -139,10 +154,11 @@ pub static POIS: LazyLock<HashMap<&'static str, Vec<Def>>> = LazyLock::new(|| {
             ]),
             ..Extra::default()
         }),
-        (14, 15, Y, N, Water, "mine", Extra { icon: Some("mine"), ..Extra::default() }),
+        (14, 15, Y, N, Water, "historic_mine", Extra { icon: Some("disused_mine"), ..Extra::default() }),
         (14, 15, Y, N, Water, "adit", Extra { icon: Some("mine"), ..Extra::default() }),
         (14, 15, Y, N, Water, "mineshaft", Extra { icon: Some("mine"), ..Extra::default() }),
-        (14, 15, Y, N, Water, "disused_mine", Extra::default()),
+        (14, 15, Y, N, Water, "disused_adit", Extra { icon: Some("disused_mine"), ..Extra::default() }),
+        (14, 15, Y, N, Water, "disused_mineshaft", Extra { icon: Some("disused_mine"), ..Extra::default() }),
         (14, 15, Y, N, Accomodation, "hotel", Extra {
             replacements: build_replacements(&[(r"^[Hh]otel\b *", "")]),
             ..Extra::default()
@@ -263,9 +279,11 @@ pub static POIS: LazyLock<HashMap<&'static str, Vec<Def>>> = LazyLock::new(|| {
         (15, 16, N, N, Poi, "fuel", Extra::default()),
         (15, 16, N, N, Institution, "post_office", Extra::default()),
         (15, 16, N, N, Poi, "bunker", Extra::default()),
-        (15, NN, N, N, Poi, "mast_other", Extra::default()),
-        (15, NN, N, N, Poi, "tower_other", Extra::default()),
+        (15, 16, N, N, Poi, "historic_bunker", Extra { icon: Some("bunker"), ..Extra::default() }),
+        (15, NN, N, N, Poi, "mast", Extra::default()),
+        (15, NN, N, N, Poi, "tower", Extra::default()),
         (15, NN, N, N, Poi, "tower_communication", Extra::default()),
+        (15, NN, N, N, Poi, "communications_tower", Extra { icon: Some("tower_communication"), ..Extra::default() }),
         (15, NN, N, N, Poi, "mast_communication", Extra { icon: Some("tower_communication"), ..Extra::default() }),
         (15, 16, N, N, Poi, "tower_bell_tower", Extra::default()),
         (15, 16, N, N, Poi, "water_tower", Extra::default()),
@@ -330,35 +348,61 @@ pub static POIS: LazyLock<HashMap<&'static str, Vec<Def>>> = LazyLock::new(|| {
         (17, 18, N, N, Water, "tree_shrine", Extra { icon: Some("cross"), ..Extra::default() }), // NOTE cross is also on lower zoom
         (17, NN, N, N, Water, "firepit", Extra::default()),
         (17, NN, N, N, Water, "toilets", Extra::default()),
-        (17, NN, N, N, Water, "bench", Extra::default()),
-        (17, 18, N, N, Water, "beehive", Extra::default()),
-        (17, 18, N, N, Water, "apiary", Extra { icon: Some("beehive"), ..Extra::default() }),
-        (17, NN, N, N, Water, "lift_gate", Extra::default()),
-        (17, NN, N, N, Water, "swing_gate", Extra { icon: Some("lift_gate"), ..Extra::default() }),
+        (17, NN, N, N, Poi, "bench", Extra::default()),
+        (17, 18, N, N, Poi, "beehive", Extra::default()),
+        (17, 18, N, N, Poi, "apiary", Extra { icon: Some("beehive"), ..Extra::default() }),
+        (17, NN, N, N, Poi, "lift_gate", Extra::default()),
+        (17, NN, N, N, Poi, "swing_gate", Extra { icon: Some("lift_gate"), ..Extra::default() }),
         (17, NN, N, N, Water, "ford", Extra::default()),
-        (17, 19, N, N, Water, "parking", Extra { font_size: 10.0, text_color: colors::AREA_LABEL, ..Extra::default() }), // { font: { haloOpacity: 0.5 } },
+        (17, 19, N, N, Poi, "parking", Extra { font_size: 10.0, text_color: colors::AREA_LABEL, ..Extra::default() }), // { font: { haloOpacity: 0.5 } },
         (18, 19, N, N, Other, "building_ruins", Extra { icon: Some("ruins"), ..Extra::default() }),
-        (18, 19, N, N, Water, "post_box", Extra::default()),
+        (18, 19, N, N, Poi, "post_box", Extra::default()),
         (18, 19, N, N, Poi, "telephone", Extra::default()),
         (18, NN, N, N, Poi, "gate", Extra::default()),
         (18, NN, N, N, Poi, "waste_disposal", Extra::default()),
         (19, NN, N, N, Poi, "waste_basket", Extra::default()),
         ];
 
+    entries
+});
+
+pub static POIS: LazyLock<HashMap<&'static str, Vec<Def>>> = LazyLock::new(|| {
     let mut pois = HashMap::new();
 
-    for (min_zoom, min_text_zoom, with_ele, natural, category, name, extra) in entries.into_iter() {
-        pois.entry(name).or_insert_with(Vec::new).push(Def {
-            min_zoom,
-            min_text_zoom,
-            with_ele,
-            natural,
-            category,
-            extra,
+    for (min_zoom, min_text_zoom, with_ele, natural, category, name, extra) in POI_ENTRIES.iter() {
+        pois.entry(*name).or_insert_with(Vec::new).push(Def {
+            min_zoom: *min_zoom,
+            min_text_zoom: *min_text_zoom,
+            with_ele: *with_ele,
+            natural: *natural,
+            category: *category,
+            extra: Extra {
+                replacements: extra.replacements.clone(),
+                icon: extra.icon,
+                font_size: extra.font_size,
+                weight: extra.weight,
+                text_color: extra.text_color,
+                max_zoom: extra.max_zoom,
+                stylesheet: extra.stylesheet,
+                halo: extra.halo,
+            },
         });
     }
 
     pois
+});
+
+pub static POI_ORDER: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
+    let mut order = Vec::new();
+    let mut seen = HashSet::new();
+
+    for (_, _, _, _, _, name, _) in POI_ENTRIES.iter() {
+        if seen.insert(*name) {
+            order.push(*name);
+        }
+    }
+
+    order
 });
 
 const RADII: [f64; 4] = [2.0, 4.0, 6.0, 8.0];
@@ -504,8 +548,6 @@ pub fn render(
                             type = 'tree' AND
                             tags->'protected' <> 'no'
                         THEN 'tree_protected'
-                        WHEN type = 'communications_tower'
-                        THEN 'tower_communication'
                         WHEN
                             type = 'shelter' AND
                             tags->'shelter_type' IN (
@@ -514,18 +556,18 @@ pub fn render(
                             )
                         THEN tags->'shelter_type'
                         WHEN
-                            type IN ('mine', 'adit', 'mineshaft') AND
+                            type IN ('adit', 'mineshaft') AND
                             tags->'disused' <> 'no'
-                        THEN 'disused_mine'
+                        THEN 'disused_' || type
                         WHEN type IN ('hot_spring', 'geyser', 'spring_box')
                         THEN 'spring'
                         WHEN type IN ('tower', 'mast')
                         THEN
-                            type || '_' || CASE tags->'tower:type'
-                                WHEN 'communication' THEN 'communication'
-                                WHEN 'observation' THEN 'observation'
-                                WHEN 'bell_tower' THEN 'bell_tower'
-                                ELSE 'other'
+                            type || CASE tags->'tower:type'
+                                WHEN 'communication' THEN '_communication'
+                                WHEN 'observation' THEN '_observation'
+                                WHEN 'bell_tower' THEN '_bell_tower'
+                                ELSE ''
                             END
                         ELSE type
                     END AS type
@@ -599,7 +641,7 @@ pub fn render(
                 WHERE
                     geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
                     type IN (
-                        'convenience', 'fuel', 'confectionery', 'pastry', 'bicycle', 'supermarket', 'greengrocer', 'farm'
+                        'convenience', 'confectionery', 'pastry', 'bicycle', 'supermarket', 'greengrocer', 'farm'
                     )
             ");
 
@@ -618,7 +660,7 @@ pub fn render(
             ");
         }
 
-        let z_order_case = build_feature_z_order_case("type");
+        let z_order_case = build_poi_z_order_case("type");
 
         let sql = format!(r"
             SELECT

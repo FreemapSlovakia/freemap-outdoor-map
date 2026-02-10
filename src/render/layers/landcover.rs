@@ -20,7 +20,7 @@ pub enum Paint {
 }
 
 #[rustfmt::skip]
-const PAINT_DEFS: &[(&[&str], &[Paint])] = &[
+pub(crate) const PAINT_DEFS: &[(&[&str], &[Paint])] = &[
     (&["allotments"], &[Paint::Fill(ALLOTMENTS)]),
     (&["cemetery", "grave_yard"], &[Paint::Fill(GRASSY), Paint::Pattern("grave")]),
     (&["clearcut"], &[Paint::Pattern("clearcut2")]),
@@ -43,7 +43,7 @@ const PAINT_DEFS: &[(&[&str], &[Paint])] = &[
     (&["hospital"], &[Paint::Fill(HOSPITAL)]),
     (&["industrial", "wastewater_plant"], &[Paint::Fill(INDUSTRIAL)]),
     (&["landfill"], &[Paint::Fill(LANDFILL)]),
-    (&["living_street", "residential"], &[Paint::Fill(RESIDENTIAL)]),
+    (&["residential"], &[Paint::Fill(RESIDENTIAL)]),
     (&["meadow", "village_green"], &[Paint::Fill(GRASSY)]),
     (&["orchard"], &[Paint::Fill(ORCHARD), Paint::Pattern("orchard")]),
     (&["dog_park"], &[Paint::Fill(GRASSY), Paint::Pattern("dog_park")]),
@@ -84,7 +84,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
     let zoom = ctx.zoom;
 
-    let rows = ctx.legend_features("landcover", || {
+    let rows = ctx.legend_features("landcovers", || {
         let a = "'pitch', 'playground', 'golf_course', 'track'";
 
         let excl_types = match zoom {

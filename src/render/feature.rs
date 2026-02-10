@@ -27,7 +27,7 @@ pub struct WrongTypeError {
 }
 
 impl WrongTypeError {
-    fn new(field: impl Into<String>, expected: &'static str, actual: &'static str) -> Self {
+    pub fn new(field: impl Into<String>, expected: &'static str, actual: &'static str) -> Self {
         Self {
             field: field.into(),
             expected,

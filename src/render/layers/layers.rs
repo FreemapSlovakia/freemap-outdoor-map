@@ -69,7 +69,13 @@ pub fn render(
         legend: request.legend.as_ref(),
     };
 
-    layers::sea::render(ctx, client).with_layer("sea")?;
+    if request.legend.is_none() {
+        layers::sea::render(ctx, client).with_layer("sea")?;
+    } else {
+        // TODO configurable background, even transparent
+        context.set_source_rgb(1.0, 1.0, 1.0);
+        context.paint().expect("paint");
+    }
 
     ctx.context.push_group();
 
@@ -202,7 +208,7 @@ pub fn render(
     }
 
     if zoom >= 10 {
-        layers::features::render(ctx, client, collision, svg_repo).with_layer("features")?;
+        layers::pois::render(ctx, client, collision, svg_repo).with_layer("features")?;
     }
 
     if zoom >= 10 {
