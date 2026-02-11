@@ -222,17 +222,19 @@ static LEGEND_ITEMS: LazyLock<Vec<LegendItem>> = LazyLock::new(|| {
         &["tertiary", "tertiary_link", "secondary_link"],
         &["residential", "unclassified", "living_street", "road"],
         &["service"],
-        &["piste"],
         &["footway", "pedestrian"],
         &["platform"],
         &["steps"],
+        &["cycleway"],
         &["path"],
-        &["track"],
-        &["primary_link"],
+        &["piste"],
         &["bridleway"],
         &["via_ferrata"],
+        &["track"],
     ])
-        .map(|types| {
+        .into_iter()
+        .enumerate()
+        .map(|(i, types)| {
             LegendItem::new(
                 format!("road_{}", types[0]).leak(),
                 Category::Communications,
@@ -240,7 +242,7 @@ static LEGEND_ITEMS: LazyLock<Vec<LegendItem>> = LazyLock::new(|| {
                     .iter()
                     .map(|typ| IndexMap::from([("highway", *typ)]))
                     .collect::<Vec<_>>(),
-                legend_item_data_builder()
+                with_landcover(if i < 10 { "residential" } else { "wood" }, 17)
                     .with_feature(
                         "roads",
                         road_builder(types[0], 17).with("class", "highway").build(),
@@ -257,7 +259,7 @@ static LEGEND_ITEMS: LazyLock<Vec<LegendItem>> = LazyLock::new(|| {
             format!("road_track_{grade}").leak(),
             Category::Communications,
             vec![[("highway", "track"), ("tracktype", grade)].into()],
-            legend_item_data_builder()
+            with_landcover("wood", 17)
                 .with_feature(
                     "roads",
                     road_builder("track", 17)
@@ -278,7 +280,7 @@ static LEGEND_ITEMS: LazyLock<Vec<LegendItem>> = LazyLock::new(|| {
                 format!("road_visibility_{visibility}").leak(),
                 Category::Communications,
                 vec![[("highway", "path"), ("trail_visibility", visibility)].into()],
-                legend_item_data_builder()
+                with_landcover("wood", 17)
                     .with_feature(
                         "roads",
                         road_builder("path", 17)
@@ -443,7 +445,7 @@ fn build_poi_data(typ: &'static str, zoom: u8) -> LegendItemData {
             "pois",
             legend_feature_data_builder()
                 .with("type", typ)
-                .with("name", "Test")
+                .with("name", "Abc")
                 .with("extra", HashMap::<String, Option<String>>::new())
                 .with("geometry", Point::new(0.0, factor * -2.0))
                 .build(),
@@ -457,7 +459,7 @@ fn build_line_data(typ: &'static str, zoom: u8) -> LegendItemData {
             "feature_lines",
             legend_feature_data_builder()
                 .with("type", typ)
-                .with("name", "Test")
+                .with("name", "Abc")
                 .with("extra", HashMap::<String, Option<String>>::new())
                 .with_line_string(zoom)
                 .build(),
@@ -471,7 +473,7 @@ fn build_landcover_data(typ: &'static str, zoom: u8) -> LegendItemData {
             "landcovers",
             legend_feature_data_builder()
                 .with("type", typ)
-                .with("name", "Test")
+                .with("name", "Abc")
                 .with("geometry", polygon(true, zoom))
                 .build(),
         )
@@ -495,11 +497,11 @@ impl LegendFeatureDataBuilder {
             LineString::new(vec![
                 Coord {
                     x: -80.0 * factor,
-                    y: -30.0 * factor,
+                    y: -20.0 * factor,
                 },
                 Coord {
                     x: 80.0 * factor,
-                    y: 30.0 * factor,
+                    y: 20.0 * factor,
                 },
             ]),
         )

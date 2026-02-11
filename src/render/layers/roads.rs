@@ -475,7 +475,6 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             (14.., "highway", "piste") => {
                 apply_highway_defaults(1.2);
                 context.set_source_color(colors::PISTE);
-                context.set_dash(&[9.5, 1.5], 0.0);
                 draw()?;
 
                 draw_bridges_tunnels(1.2 + 1.0)?;

@@ -22,7 +22,7 @@ pub enum Paint {
 #[rustfmt::skip]
 pub(crate) const PAINT_DEFS: &[(&[&str], &[Paint])] = &[
     (&["allotments"], &[Paint::Fill(ALLOTMENTS)]),
-    (&["cemetery", "grave_yard"], &[Paint::Fill(GRASSY), Paint::Pattern("grave")]),
+    (&["cemetery", "grave_yard"], &[Paint::Fill(GRASSY), Paint::Stroke(2.0, BLACK), Paint::Pattern("grave")]),
     (&["clearcut"], &[Paint::Pattern("clearcut2")]),
     (&["bare_rock"], &[Paint::Pattern("bare_rock")]),
     (&["beach"], &[Paint::Fill(BEACH), Paint::Pattern("sand")]),
@@ -33,12 +33,12 @@ pub(crate) const PAINT_DEFS: &[(&[&str], &[Paint])] = &[
     (&["commercial", "retail"], &[Paint::Fill(COMMERCIAL)]),
     (&["dam", "weir"], &[Paint::Fill(DAM)]),
     (&["farmland"], &[Paint::Fill(FARMLAND)]),
-    (&["farmyard"], &[Paint::Fill(FARMYARD)]),
+    (&["farmyard"], &[Paint::Fill(FARMYARD), Paint::Stroke(2.0, BLACK)]),
     (&["fell", "grass", "grassland"], &[Paint::Fill(GRASSY)]),
     (&["marsh", "wet_meadow", "fen"], &[Paint::Fill(GRASSY), Paint::Pattern("wetland"), Paint::Pattern("marsh")]),
     (&["footway", "garages", "pedestrian", "railway"], &[Paint::Fill(NONE)]),
     (&["forest", "wood"], &[Paint::Fill(FOREST)]),
-    (&["garden", "park"], &[Paint::Fill(ORCHARD), Paint::Stroke(1.0, BLACK)]),
+    (&["garden", "park"], &[Paint::Fill(ORCHARD), Paint::Stroke(2.0, BLACK)]),
     (&["heath"], &[Paint::Fill(HEATH)]),
     (&["hospital"], &[Paint::Fill(HOSPITAL)]),
     (&["industrial", "wastewater_plant"], &[Paint::Fill(INDUSTRIAL)]),
@@ -46,15 +46,15 @@ pub(crate) const PAINT_DEFS: &[(&[&str], &[Paint])] = &[
     (&["residential"], &[Paint::Fill(RESIDENTIAL)]),
     (&["meadow", "village_green"], &[Paint::Fill(GRASSY)]),
     (&["orchard"], &[Paint::Fill(ORCHARD), Paint::Pattern("orchard")]),
-    (&["dog_park"], &[Paint::Fill(GRASSY), Paint::Pattern("dog_park")]),
-    (&["parking"], &[Paint::Fill(PARKING), Paint::Stroke(1.0, PARKING_STROKE)]),
-    (&["pitch", "playground", "golf_course", "track"], &[Paint::Fill(PITCH), Paint::Stroke(1.0, PITCH_STROKE)]),
+    (&["dog_park"], &[Paint::Fill(GRASSY), Paint::Pattern("dog_park"), Paint::Stroke(2.0, BLACK)]),
+    (&["parking"], &[Paint::Fill(PARKING), Paint::Stroke(2.0, PARKING_STROKE)]),
+    (&["pitch", "playground", "golf_course", "track"], &[Paint::Fill(PITCH), Paint::Stroke(2.0, PITCH_STROKE)]),
     (&["plant_nursery"], &[Paint::Fill(SCRUB), Paint::Pattern("plant_nursery")]),
     (&["quarry"], &[Paint::Fill(QUARRY), Paint::Pattern("quarry")]),
     (&["glacier"], &[Paint::Fill(GLACIER), Paint::Pattern("glacier")]),
     (&["reedbed"], &[Paint::Fill(GRASSY), Paint::Pattern("wetland"), Paint::Pattern("reedbed")]),
     (&["recreation_ground"], &[Paint::Fill(RECREATION_GROUND)]),
-    (&["silo"], &[Paint::Fill(SILO), Paint::Stroke(1.0, SILO_STROKE)]),
+    (&["silo"], &[Paint::Fill(SILO), Paint::Stroke(2.0, SILO_STROKE)]),
     (&["scree"], &[Paint::Fill(SCREE), Paint::Pattern("scree")]),
     (&["scrub"], &[Paint::Fill(SCRUB), Paint::Pattern("scrub")]),
     (&["swamp"], &[Paint::Fill(GRASSY), Paint::Pattern("wetland"), Paint::Pattern("swamp")]),
@@ -136,6 +136,8 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         let typ = row.get_string("type")?;
 
         if let Some(paints) = PAINTS.get(typ) {
+            context.push_group();
+
             for paint in paints.iter() {
                 match paint {
                     Paint::Fill(color) => {
@@ -165,7 +167,10 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
                         context.fill()?;
                     }
                     Paint::Stroke(width, color) => {
-                        if matches!(typ, "garden" | "park") {
+                        if matches!(
+                            typ,
+                            "garden" | "park" | "cemetery" | "dog_park" | "farmyard"
+                        ) {
                             context.set_source_color_a(*color, 0.2);
                         } else {
                             context.set_source_color(*color);
@@ -173,10 +178,17 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
                         context.set_line_width(*width);
                         path_geometry(context, &geom);
+
+                        context.set_line_cap(cairo::LineCap::Square);
+                        context.set_operator(cairo::Operator::Atop);
                         context.stroke()?;
                     }
                 }
             }
+
+            context.pop_group_to_source()?;
+
+            context.paint()?;
         }
 
         if typ == "winter_sports" {
@@ -191,8 +203,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             context.set_source_color(colors::WATER);
             context.set_dash(&[], 0.0);
             context.set_line_width(wb * 0.75);
-            context.set_line_join(cairo::LineJoin::Round);
-            context.set_line_cap(cairo::LineCap::Round);
+            context.set_line_cap(cairo::LineCap::Square);
 
             path_geometry(context, &geom);
             context.stroke()?;
