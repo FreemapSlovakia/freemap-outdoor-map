@@ -18,9 +18,9 @@ CREATE INDEX idx_network ON osm_routes (network);
 
 CREATE INDEX idx_type ON osm_routes (type);
 
-CREATE INDEX osm_features_osm_id ON osm_features (osm_id);
+CREATE INDEX osm_pois_osm_id ON osm_pois (osm_id);
 
-CREATE INDEX osm_features_type ON osm_features (type);
+CREATE INDEX osm_pois_type ON osm_pois (type);
 
 CREATE INDEX osm_places_type ON osm_places (type);
 
@@ -40,4 +40,4 @@ CREATE INDEX osm_shops_type ON osm_shops(type);
 
 CREATE INDEX osm_feature_lines_type ON osm_feature_lines(type);
 
-CREATE INDEX CONCURRENTLY osm_features_peak_named_geom_gist ON osm_features USING GIST (geometry) WHERE type = 'peak' AND name <> '';
+CREATE INDEX CONCURRENTLY osm_pois_peak_named_geom_gist ON osm_pois USING GIST (geometry) WHERE type = 'peak' AND name <> '';

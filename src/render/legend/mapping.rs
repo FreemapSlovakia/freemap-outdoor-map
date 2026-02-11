@@ -21,7 +21,6 @@ pub(crate) struct Table {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct Column {
-    pub(crate) name: String,
     #[serde(rename = "type")]
     pub(crate) column_type: String,
     #[serde(default)]
@@ -73,7 +72,6 @@ pub(crate) enum MappingKind {
 #[derive(Debug)]
 pub(crate) struct MappingEntry {
     pub(crate) table: String,
-    pub(crate) geometry: Option<String>,
     pub(crate) key: String,
     pub(crate) value: String,
     pub(crate) kind: MappingKind,
@@ -84,20 +82,13 @@ pub(crate) fn collect_mapping_entries(root: &MappingRoot) -> Vec<MappingEntry> {
 
     for (table_name, table) in &root.tables {
         if let Some(mapping) = &table.mapping {
-            push_mapping_entries(
-                &mut entries,
-                table_name,
-                None,
-                mapping,
-                MappingKind::TableMapping,
-            );
+            push_mapping_entries(&mut entries, table_name, mapping, MappingKind::TableMapping);
         }
         if let Some(mappings) = &table.mappings {
             for sub_mapping in mappings.values() {
                 push_mapping_entries(
                     &mut entries,
                     table_name,
-                    None,
                     &sub_mapping.mapping,
                     MappingKind::TableMappingNested,
                 );
@@ -108,11 +99,11 @@ pub(crate) fn collect_mapping_entries(root: &MappingRoot) -> Vec<MappingEntry> {
             continue;
         };
 
-        for (geometry, tm_opt) in [
-            ("points", &type_mappings.points),
-            ("linestrings", &type_mappings.linestrings),
-            ("polygons", &type_mappings.polygons),
-            ("any", &type_mappings.any),
+        for tm_opt in [
+            &type_mappings.points,
+            &type_mappings.linestrings,
+            &type_mappings.polygons,
+            &type_mappings.any,
         ] {
             let Some(tm) = tm_opt else {
                 continue;
@@ -123,7 +114,6 @@ pub(crate) fn collect_mapping_entries(root: &MappingRoot) -> Vec<MappingEntry> {
                     push_mapping_entries(
                         &mut entries,
                         table_name,
-                        Some(geometry),
                         mapping,
                         MappingKind::TypeMappingDirect,
                     );
@@ -133,7 +123,6 @@ pub(crate) fn collect_mapping_entries(root: &MappingRoot) -> Vec<MappingEntry> {
                         push_mapping_entries(
                             &mut entries,
                             table_name,
-                            Some(geometry),
                             mapping,
                             MappingKind::TypeMappingDirect,
                         );
@@ -143,7 +132,6 @@ pub(crate) fn collect_mapping_entries(root: &MappingRoot) -> Vec<MappingEntry> {
                             push_mapping_entries(
                                 &mut entries,
                                 table_name,
-                                Some(geometry),
                                 &sub_mapping.mapping,
                                 MappingKind::TypeMappingNested,
                             );
@@ -160,7 +148,6 @@ pub(crate) fn collect_mapping_entries(root: &MappingRoot) -> Vec<MappingEntry> {
 fn push_mapping_entries(
     entries: &mut Vec<MappingEntry>,
     table: &str,
-    geometry: Option<&str>,
     mapping: &MappingValues,
     kind: MappingKind,
 ) {
@@ -168,7 +155,6 @@ fn push_mapping_entries(
         for value in values {
             entries.push(MappingEntry {
                 table: table.to_string(),
-                geometry: geometry.map(str::to_string),
                 key: key.to_string(),
                 value: value.to_string(),
                 kind,

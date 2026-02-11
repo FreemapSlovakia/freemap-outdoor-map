@@ -24,7 +24,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
                 name,
                 geometry
             FROM
-                osm_features
+                osm_pois
             WHERE
                 name <> '' AND
                 (type = 'zoo' OR type = 'theme_park') AND

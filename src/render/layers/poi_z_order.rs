@@ -1,4 +1,4 @@
-const FEATURE_Z_ORDER: &[&str] = &[
+const POI_Z_ORDER: &[&str] = &[
     "monument",
     "archaeological_site",
     "tower_observation",
@@ -160,7 +160,7 @@ const FEATURE_Z_ORDER: &[&str] = &[
 
 pub(crate) fn build_poi_z_order_case(column: &str) -> String {
     let mut case = format!("CASE {column}");
-    for (idx, typ) in FEATURE_Z_ORDER.iter().enumerate() {
+    for (idx, typ) in POI_Z_ORDER.iter().enumerate() {
         let escaped = typ.replace('\'', "''");
         case.push_str(&format!(" WHEN '{escaped}' THEN {idx}"));
     }

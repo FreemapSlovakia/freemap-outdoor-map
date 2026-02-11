@@ -30,6 +30,8 @@ tags:
     - tower:type
     - water_characteristic
     - wetland
+  include_regex:
+    - ^(disused|abandoned|ruins|demolished|removed|destroyed|was):(leisure|natural|amenity|highway)
 generalized_tables:
   waterareas_gen1:
     source: waterareas
@@ -552,7 +554,7 @@ tables:
       leisure:
         - nature_reserve
 
-  features:
+  pois:
     multi_values: [sport, amenity]
     columns:
       - name: osm_id
@@ -582,6 +584,9 @@ tables:
             yes: mountain_pass
           power:
             tower: power_tower
+          leisure:
+            miniature_golf: leisure_miniature_golf
+            horse_riding: leisure_horse_riding
       - name: tags
         type: hstore_tags
         args:
@@ -1012,122 +1017,151 @@ tables:
                 - waterfall
                 - weir
                 - dam
-          sport:
-            mapping:
-              sport:
-                - 10pin
-                - 9pin
-                - aikido
-                - american_football
-                - archery
-                - athletics
-                - badminton
-                - baseball
-                - basketball
-                - beachvolleyball
-                - biathlon
-                - billiards
-                - bmx
-                - boules
-                - bowls
-                - boxing
-                - bullfighting
-                - calisthenics
-                - canoe
-                - chess
-                - climbing
-                - climbing_adventure
-                - cricket
-                - cricket_nets
-                - croquet
-                - crossfit
-                - cycling
-                - darts
-                - disc_golf
-                - dog_agility
-                - dog_racing
-                - dog_training
-                - equestrian
-                - fencing
-                - field_hockey
-                - fishing
-                - fitness
-                - five-a-side
-                - football
-                - free_flying
-                - futsal
-                - gaelic_games
-                - golf
-                - gymnastics
-                - handball
-                - hockey
-                - horse_racing
-                - horse_riding
-                - ice_hockey
-                - ice_skating
-                - ice_stock
-                - judo
-                - karate
-                - karting
-                - kitesurfing
-                - korfball
-                - laser_tag
-                - long_jump
-                - martial_arts
-                - mini_tennis
-                - miniature_golf
-                - model_aerodrome
-                - motocross
-                - motor
-                - mtb
-                - multi
-                - netball
-                - orienteering
-                - paddle_tennis
-                - padel
-                - paintball
-                - paragliding
-                - parkour
-                - pelota
-                - petanque
-                - pickleball
-                - pilates
-                - racquet
-                - rc_car
-                - roller_skating
-                - rowing
-                - rugby
-                - rugby_league
-                - rugby_union
-                - running
-                - sailing
-                - scuba_diving
-                - shooting
-                - skateboard
-                - skating
-                - ski
-                - ski_jumping
-                - skiing
-                - skittles
-                - snooker
-                - soccer
-                - squash
-                - surfing
-                - swimming
-                - table_soccer
-                - table_tennis
-                - taekwondo
-                - team_handball
-                - tennis
-                - toboggan
-                - trampoline
-                - ultralight_aviation
-                - via_ferrata
-                - volleyball
-                - wakeboarding
-                - water_ski
-                - weightlifting
-                - yoga
+
+  sports:
+    multi_values: [sport]
+    columns:
+      - name: osm_id
+        type: id
+      - name: geometry
+        type: geometry
+        geometry_transform: point_on_surface
+      - name: name
+        type: string
+        key: name
+      - name: type
+        type: mapping_value
+      - name: tags
+        type: hstore_tags
+        args:
+          include:
+            - access
+    filters:
+      filter: |
+        !("shop" in tags) &&
+        (
+          !(
+            "club" in tags ||
+            any(keys(tags), { # matches "^(disused|abandoned|ruins|demolished|removed|destroyed|was):(leisure|natural|amenity|highway)" })
+          ) ||
+          any(["leisure", "natural", "amenity", "highway"], # in tags)
+        )
+    type: point_or_polygon
+    mapping:
+      sport:
+        - 10pin
+        - 9pin
+        - aikido
+        - american_football
+        - archery
+        - athletics
+        - badminton
+        - baseball
+        - basketball
+        - beachvolleyball
+        - biathlon
+        - billiards
+        - bmx
+        - boules
+        - bowls
+        - boxing
+        - bullfighting
+        - calisthenics
+        - canoe
+        - chess
+        - climbing
+        - climbing_adventure
+        - cricket
+        - cricket_nets
+        - croquet
+        - crossfit
+        - cycling
+        - darts
+        - disc_golf
+        - dog_agility
+        - dog_racing
+        - dog_training
+        - equestrian
+        - fencing
+        - field_hockey
+        - fishing
+        - fitness
+        - five-a-side
+        - football
+        - free_flying
+        - futsal
+        - gaelic_games
+        - golf
+        - gymnastics
+        - handball
+        - hockey
+        - horse_racing
+        - horse_riding
+        - ice_hockey
+        - ice_skating
+        - ice_stock
+        - judo
+        - karate
+        - karting
+        - kitesurfing
+        - korfball
+        - laser_tag
+        - long_jump
+        - martial_arts
+        - mini_tennis
+        - miniature_golf
+        - model_aerodrome
+        - motocross
+        - motor
+        - mtb
+        - multi
+        - netball
+        - orienteering
+        - paddle_tennis
+        - padel
+        - paintball
+        - paragliding
+        - parkour
+        - pelota
+        - petanque
+        - pickleball
+        - pilates
+        - racquet
+        - rc_car
+        - roller_skating
+        - rowing
+        - rugby
+        - rugby_league
+        - rugby_union
+        - running
+        - sailing
+        - scuba_diving
+        - shooting
+        - skateboard
+        - skating
+        - ski
+        - ski_jumping
+        - skiing
+        - skittles
+        - snooker
+        - soccer
+        - squash
+        - surfing
+        - swimming
+        - table_soccer
+        - table_tennis
+        - taekwondo
+        - team_handball
+        - tennis
+        - toboggan
+        - trampoline
+        - ultralight_aviation
+        - via_ferrata
+        - volleyball
+        - wakeboarding
+        - water_ski
+        - weightlifting
+        - yoga
 
   power_generators:
     columns:

@@ -22,7 +22,24 @@ pub struct LegendMeta {
 
 struct LegendItem {
     meta: LegendMeta,
+    zoom: u8,
     data: LegendItemData,
+}
+
+impl LegendItem {
+    fn new(
+        id: String,
+        category: Category,
+        tags: Vec<IndexMap<String, String>>,
+        data: LegendItemData,
+        zoom: u8,
+    ) -> Self {
+        Self {
+            meta: LegendMeta { id, category, tags },
+            data,
+            zoom,
+        }
+    }
 }
 
 static MAPPING_PATH: OnceLock<PathBuf> = OnceLock::new();
@@ -50,60 +67,55 @@ static LEGEND_ITEMS: LazyLock<Vec<LegendItem>> = LazyLock::new(|| {
 
     let mut landcover_tags = HashMap::new();
 
-    if let Some(features) = mapping_root.tables.get("features") {
-        if let Some(columns) = &features.columns {
-            for column in columns {
-                if column.column_type != "mapping_value" {
-                    continue;
-                }
+    if let Some(pois) = mapping_root.tables.get("pois")
+        && let Some(columns) = &pois.columns
+    {
+        for column in columns {
+            if column.column_type != "mapping_value" {
+                continue;
+            }
 
-                let Some(aliases) = &column.aliases else {
-                    continue;
-                };
+            let Some(aliases) = &column.aliases else {
+                continue;
+            };
 
-                for (key, values) in aliases {
-                    for (value, alias) in values {
-                        if value == "__any__" {
-                            feature_alias_catchall.insert(key.to_string());
-                            poi_tags
-                                .entry(alias.to_string())
-                                .or_default()
-                                .push((key.to_string(), "*".to_string()));
-                            continue;
-                        }
-
-                        feature_alias_values
-                            .entry(key.to_string())
-                            .or_default()
-                            .insert(value.to_string());
-
+            for (key, values) in aliases {
+                for (value, alias) in values {
+                    if value == "__any__" {
+                        feature_alias_catchall.insert(key.to_string());
                         poi_tags
                             .entry(alias.to_string())
                             .or_default()
-                            .push((key.to_string(), value.to_string()));
+                            .push((key.to_string(), "*".to_string()));
+                        continue;
                     }
+
+                    feature_alias_values
+                        .entry(key.to_string())
+                        .or_default()
+                        .insert(value.to_string());
+
+                    poi_tags
+                        .entry(alias.to_string())
+                        .or_default()
+                        .push((key.to_string(), value.to_string()));
                 }
             }
         }
     }
 
     for entry in collect_mapping_entries(&mapping_root).into_iter() {
-        if entry.table == "features"
-            && entry.geometry.as_deref() == Some("any")
-            && matches!(entry.kind, MappingKind::TypeMappingNested)
-        {
-            if feature_alias_catchall.contains(&entry.key) {
-                continue;
-            }
-
-            if feature_alias_values
-                .get(&entry.key)
-                .is_some_and(|values| values.contains(&entry.value))
+        if entry.table == "pois" || entry.table == "sports" {
+            if feature_alias_catchall.contains(&entry.key)
+                || feature_alias_values
+                    .get(&entry.key)
+                    .is_some_and(|values| values.contains(&entry.value))
             {
                 continue;
             }
 
             let value = entry.value.clone();
+
             poi_tags
                 .entry(value)
                 .or_default()
@@ -148,11 +160,12 @@ static LEGEND_ITEMS: LazyLock<Vec<LegendItem>> = LazyLock::new(|| {
     let poi_items = poi_groups
         .into_iter()
         .map(|(visual_key, (category, tags, repr_typ))| {
-            li(
+            LegendItem::new(
                 format!("poi_{}", visual_key),
                 category,
                 tags,
-                build_poi_data(&repr_typ),
+                build_poi_data(&repr_typ, 19),
+                19,
             )
         });
 
@@ -165,49 +178,77 @@ static LEGEND_ITEMS: LazyLock<Vec<LegendItem>> = LazyLock::new(|| {
 
         let id_typ = types[0];
 
-        li(
+        LegendItem::new(
             format!("landcover_{}", id_typ),
             Category::Landcover,
             tags,
-            build_landcover_data(id_typ),
+            build_landcover_data(id_typ, 19),
+            19,
         )
     });
 
-    poi_items.chain(landcover_items).collect()
+    let mut legend_feature = HashMap::new();
+
+    legend_feature.insert(
+        "type".to_string(),
+        LegendValue::String("tree_row".to_string()),
+    );
+    legend_feature.insert(
+        "geometry".to_string(),
+        LegendValue::LineString(LineString::new(vec![
+            Coord { x: -60.0, y: -30.0 },
+            Coord { x: 60.0, y: 30.0 },
+        ])),
+    );
+
+    let mut legend_map: LegendItemData = HashMap::new();
+    legend_map.insert("feature_lines".to_string(), vec![legend_feature]);
+
+    let lines = vec![LegendItem::new(
+        "tree_row".to_string(),
+        Category::Water,
+        vec![IndexMap::from([(
+            "natural".to_string(),
+            "tree_row".to_string(),
+        )])],
+        legend_map,
+        17,
+    )];
+
+    poi_items.chain(landcover_items).chain(lines).collect()
 });
 
 pub fn legend_metadata() -> Vec<LegendMeta> {
     LEGEND_ITEMS.iter().map(|item| item.meta.clone()).collect()
 }
 
+// layer -> "tags"
 pub type LegendItemData = HashMap<String, Vec<HashMap<String, LegendValue>>>;
 
 pub fn legend_render_request(id: &str, scale: f64) -> Option<RenderRequest> {
-    let zoom = 19;
-
-    let bbox = Rect::new(Coord { x: -10.0, y: -7.0 }, Coord { x: 10.0, y: 7.0 });
-
-    let legend_map = LEGEND_ITEMS
+    let (legend_item_data, zoom) = LEGEND_ITEMS
         .iter()
         .find(|item| item.meta.id == id)
-        .map(|item| item.data.clone())?;
+        .map(|item| (item.data.clone(), item.zoom))?;
+
+    let zoom_factor = (20f64 - zoom as f64).exp2();
+
+    let bbox = Rect::new(
+        Coord {
+            x: -8.0 * zoom_factor,
+            y: -4.0 * zoom_factor,
+        },
+        Coord {
+            x: 8.0 * zoom_factor,
+            y: 4.0 * zoom_factor,
+        },
+    );
 
     let mut render_request = RenderRequest::new(bbox, zoom, scale, ImageFormat::Jpeg);
-    render_request.legend = Some(legend_map);
+
+    render_request.legend = Some(legend_item_data);
 
     Some(render_request)
-}
-
-fn li(
-    id: String,
-    category: Category,
-    tags: Vec<IndexMap<String, String>>,
-    data: LegendItemData,
-) -> LegendItem {
-    LegendItem {
-        meta: LegendMeta { id, category, tags },
-        data,
-    }
 }
 
 fn build_poi_tags(
@@ -313,49 +354,56 @@ fn build_tags_map(tags: Vec<(&str, &str)>) -> IndexMap<String, String> {
     t
 }
 
-fn build_poi_data(typ: &str) -> LegendItemData {
-    let mut legend_map: LegendItemData = HashMap::new();
-    let mut legend_feature = HashMap::new();
-
-    legend_feature.insert("type".to_string(), LegendValue::String(typ.to_string()));
-    legend_feature.insert("n".to_string(), LegendValue::String("Test".to_string()));
-    legend_feature.insert("h".to_string(), LegendValue::Hstore(HashMap::new()));
-    legend_feature.insert(
-        "geometry".to_string(),
-        LegendValue::Point(Point::new(1.0, 1.0)),
-    );
-
-    legend_map.insert("features".to_string(), vec![legend_feature]);
-
-    legend_map
+fn build_poi_data(typ: &str, for_zoom: u8) -> LegendItemData {
+    HashMap::from([
+        (
+            "landcovers".to_string(),
+            vec![HashMap::from([
+                ("type".to_string(), LegendValue::String("wood".to_string())),
+                ("name".to_string(), LegendValue::String("".to_string())),
+                (
+                    "geometry".to_string(),
+                    LegendValue::Geometry(geo::Geometry::Polygon(polygon(true, for_zoom))),
+                ),
+            ])],
+        ),
+        (
+            "pois".to_string(),
+            vec![HashMap::from([
+                ("type".to_string(), LegendValue::String(typ.to_string())),
+                ("name".to_string(), LegendValue::String("Test".to_string())),
+                ("extra".to_string(), LegendValue::Hstore(HashMap::new())),
+                (
+                    "geometry".to_string(),
+                    LegendValue::Point(Point::new(0.0, 0.0)),
+                ),
+            ])],
+        ),
+    ])
 }
 
-fn build_landcover_data(typ: &str) -> LegendItemData {
-    let mut legend_map: LegendItemData = HashMap::new();
-    let mut legend_feature = HashMap::new();
-
-    legend_feature.insert("type".to_string(), LegendValue::String(typ.to_string()));
-    legend_feature.insert("name".to_string(), LegendValue::String("Test".to_string()));
-    legend_feature.insert(
-        "geometry".to_string(),
-        LegendValue::Geometry(geo::Geometry::Polygon(polygon(true))),
-    );
-
-    legend_map.insert("landcovers".to_string(), vec![legend_feature]);
-
-    legend_map
+fn build_landcover_data(typ: &str, for_zoom: u8) -> LegendItemData {
+    HashMap::from([(
+        "landcovers".to_string(),
+        vec![HashMap::from([
+            ("type".to_string(), LegendValue::String(typ.to_string())),
+            ("name".to_string(), LegendValue::String("Test".to_string())),
+            (
+                "geometry".to_string(),
+                LegendValue::Geometry(geo::Geometry::Polygon(polygon(true, for_zoom))),
+            ),
+        ])],
+    )])
 }
 
-fn polygon(skew: bool) -> Polygon {
-    let forZoom = 19f64;
+fn polygon(skew: bool, for_zoom: u8) -> Polygon {
+    let factor = (19.0 - for_zoom as f64).exp2();
 
-    let factor = (18.0 - forZoom).exp2();
+    let ssx = if skew { 2.0 } else { 0.0 };
+    let ssy = if skew { 1.0 } else { 0.0 };
 
-    let ssx = if skew { 2.22 } else { 0.0 };
-    let ssy = if skew { 1.11 } else { 0.0 };
-
-    let xx = 16.66;
-    let yy = 6.66;
+    let xx = 12.0;
+    let yy = 6.0;
 
     Polygon::new(
         LineString::new(vec![

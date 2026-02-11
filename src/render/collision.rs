@@ -1,4 +1,3 @@
-use crate::render::colors::ContextExt;
 use cairo::Context;
 use geo::{Coord, Intersects, Rect};
 

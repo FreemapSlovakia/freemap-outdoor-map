@@ -76,7 +76,7 @@ pub fn render_towers_poles(ctx: &Ctx, client: &mut Client) -> LayerRenderResult 
             SELECT
                 geometry, type
             FROM
-                osm_features
+                osm_pois
             WHERE
                 type IN ('power_tower'{by_zoom}) AND
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)

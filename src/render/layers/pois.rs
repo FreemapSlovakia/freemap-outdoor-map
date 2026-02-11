@@ -212,6 +212,7 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (14, 15, N, N, Sport, "free_flying", Extra::default()),
         (14, 15, N, N, Poi, "forester's_lodge", Extra::default()),
         (14, 15, N, N, Sport, "horse_riding", Extra::default()),
+        (16, 17, N, N, Sport, "leisure_horse_riding", Extra { icon: Some("horse_riding"), ..Extra::default() }),
         (14, 15, N, N, Sport, "equestrian", Extra { icon: Some("horse_riding"), ..Extra::default() }),
         (14, 15, N, N, Sport, "horse_racing", Extra { icon: Some("horse_riding"), ..Extra::default() }), // TODO use different icon
         (14, 15, N, N, Sport, "skiing", Extra::default()),
@@ -310,6 +311,7 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (16, 17, N, N, Other, "building", Extra::default()),
         (16, 17, N, N, Water, "weir", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
         (16, 17, N, N, Sport, "miniature_golf", Extra::default()),
+        (16, 17, N, N, Sport, "leisure_miniature_golf", Extra { icon: Some("miniature_golf"), ..Extra::default() }),
         (16, 17, N, N, Sport, "soccer", Extra::default()),
         (16, 17, N, N, Sport, "tennis", Extra::default()),
         (16, 17, N, N, Sport, "basketball", Extra::default()),
@@ -442,26 +444,26 @@ pub fn render(
     collision: &mut Collision,
     svg_repo: &mut SvgRepo,
 ) -> LayerRenderResult {
-    let _span = tracy_client::span!("features::render");
+    let _span = tracy_client::span!("pois::render");
 
     let zoom = ctx.zoom;
 
-    let rows = ctx.legend_features("features", || {
+    let rows = ctx.legend_features("pois", || {
         let mut selects = vec![];
 
         selects.push(
             "SELECT
                 osm_id,
                 geometry,
-                name AS n,
-                hstore(ARRAY['ele', tags->'ele', 'isolation', tags->'isolation']) AS h,
+                name,
+                hstore(ARRAY['ele', tags->'ele', 'isolation', tags->'isolation']) AS extra,
                 CASE WHEN isolation > 4500 THEN 'peak1'
                     WHEN isolation BETWEEN 3000 AND 4500 THEN 'peak2'
                     WHEN isolation BETWEEN 1500 AND 3000 THEN 'peak3'
                     ELSE 'peak'
                 END AS type
             FROM
-                osm_features
+                osm_pois
             NATURAL LEFT JOIN
                 isolations
             WHERE
@@ -475,11 +477,11 @@ pub fn render(
                 "SELECT
                     osm_id,
                     geometry,
-                    name AS n,
-                    hstore('ele', tags->'ele') AS h,
+                    name,
+                    hstore('ele', tags->'ele') AS extra,
                     CASE WHEN type = 'guidepost' AND name = '' THEN 'guidepost_noname' ELSE type END
                 FROM
-                    osm_features
+                    osm_pois
                 WHERE
                     type = 'guidepost' AND
                     geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
@@ -492,11 +494,11 @@ pub fn render(
                 "SELECT
                     osm_id,
                     geometry,
-                    name AS n,
-                    hstore('ele', tags->'ele') AS h,
+                    name,
+                    hstore('ele', tags->'ele') AS extra,
                     type
                 FROM
-                    osm_features
+                    osm_pois
                 WHERE
                     geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
                     type = 'aerodrome' AND
@@ -525,86 +527,103 @@ pub fn render(
             format!("AND type NOT IN ({})", omit_types.join(", "))
         };
 
-            z14_sql = format!("
-                SELECT
-                    osm_id,
-                    geometry,
-                    COALESCE(NULLIF(name, ''), tags->'ref', '') AS n,
-                    hstore(ARRAY[
-                        'ele', tags->'ele',
-                        'access', tags->'access',
-                        'hot', (type = 'hot_spring')::text,
-                        'drinkable', tags->'drinking_water',
-                        'refitted', tags->'refitted',
-                        'intermittent', COALESCE(tags->'intermittent', tags->'seasonal'),
-                        'water_characteristic', tags->'water_characteristic'
-                    ]) AS h,
-                    CASE
-                        WHEN
-                            type = 'guidepost' AND
-                            name = ''
-                        THEN 'guidepost_noname'
-                        WHEN
-                            type = 'tree' AND
-                            tags->'protected' <> 'no'
-                        THEN 'tree_protected'
-                        WHEN
-                            type = 'shelter' AND
-                            tags->'shelter_type' IN (
-                                'shopping_cart', 'lean_to', 'public_transport', 'picnic_shelter',
-                                'basic_hut', 'weather_shelter'
-                            )
-                        THEN tags->'shelter_type'
-                        WHEN
-                            type IN ('adit', 'mineshaft') AND
-                            tags->'disused' <> 'no'
-                        THEN 'disused_' || type
-                        WHEN type IN ('hot_spring', 'geyser', 'spring_box')
-                        THEN 'spring'
-                        WHEN type IN ('tower', 'mast')
-                        THEN
-                            type || CASE tags->'tower:type'
-                                WHEN 'communication' THEN '_communication'
-                                WHEN 'observation' THEN '_observation'
-                                WHEN 'bell_tower' THEN '_bell_tower'
-                                ELSE ''
-                            END
-                        ELSE type
-                    END AS type
-                FROM
-                    osm_features
-                WHERE
-                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                    (
-                        type <> 'saddle' OR
-                        NOT EXISTS (
-                            SELECT 1
-                            FROM osm_features b
-                            WHERE
-                                type = 'mountain_pass' AND
-                                osm_features.osm_id = b.osm_id
+        z14_sql = format!("
+            SELECT
+                osm_id,
+                geometry,
+                COALESCE(NULLIF(name, ''), tags->'ref', '') AS name,
+                hstore(ARRAY[
+                    'ele', tags->'ele',
+                    'access', tags->'access',
+                    'hot', (type = 'hot_spring')::text,
+                    'drinkable', tags->'drinking_water',
+                    'refitted', tags->'refitted',
+                    'intermittent', COALESCE(tags->'intermittent', tags->'seasonal'),
+                    'water_characteristic', tags->'water_characteristic'
+                ]) AS extra,
+                CASE
+                    WHEN
+                        type = 'guidepost' AND
+                        name = ''
+                    THEN 'guidepost_noname'
+                    WHEN
+                        type = 'tree' AND
+                        tags->'protected' <> 'no'
+                    THEN 'tree_protected'
+                    WHEN
+                        type = 'shelter' AND
+                        tags->'shelter_type' IN (
+                            'shopping_cart', 'lean_to', 'public_transport', 'picnic_shelter',
+                            'basic_hut', 'weather_shelter'
                         )
-                    ) AND
-                    (
-                        type <> 'tree' OR
-                        tags->'protected' NOT IN ('', 'no') OR
-                        tags->'denotation' = 'natural_monument'
-                    ) AND
-                    (
-                        type NOT IN ('saddle', 'mountain_pass') OR
-                        name <> ''
+                    THEN tags->'shelter_type'
+                    WHEN
+                        type IN ('adit', 'mineshaft') AND
+                        tags->'disused' <> 'no'
+                    THEN 'disused_' || type
+                    WHEN type IN ('hot_spring', 'geyser', 'spring_box')
+                    THEN 'spring'
+                    WHEN type IN ('tower', 'mast')
+                    THEN
+                        type || CASE tags->'tower:type'
+                            WHEN 'communication' THEN '_communication'
+                            WHEN 'observation' THEN '_observation'
+                            WHEN 'bell_tower' THEN '_bell_tower'
+                            ELSE ''
+                        END
+                    ELSE type
+                END AS type
+            FROM
+                osm_pois
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                (
+                    type <> 'saddle' OR
+                    NOT EXISTS (
+                        SELECT 1
+                        FROM osm_pois b
+                        WHERE
+                            type = 'mountain_pass' AND
+                            osm_pois.osm_id = b.osm_id
                     )
-                    {w}
+                ) AND
+                (
+                    type <> 'tree' OR
+                    tags->'protected' NOT IN ('', 'no') OR
+                    tags->'denotation' = 'natural_monument'
+                ) AND
+                (
+                    type NOT IN ('saddle', 'mountain_pass') OR
+                    COALESCE(NULLIF(name, ''), tags->'ref', '') <> ''
+                )
+                {w}
             ");
 
             selects.push(&z14_sql);
+
+            // TODO filter only used sports
+            selects.push("
+                SELECT
+                    osm_id,
+                    geometry,
+                    name,
+                    hstore(ARRAY[
+                        'access', tags->'access'
+                    ]) AS extra,
+                    type
+                FROM
+                    osm_sports
+                WHERE
+                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                    osm_id NOT IN (SELECT osm_id FROM osm_pois WHERE type IN ('leisure_miniature_golf', 'leisure_horse_riding'))
+            ");
 
             selects.push("
                 SELECT
                     osm_id,
                     geometry,
-                    name AS n,
-                    hstore('') as h,
+                    name,
+                    hstore('') as extra,
                     building AS type
                 FROM
                     osm_place_of_worships
@@ -619,8 +638,8 @@ pub fn render(
                 SELECT
                     osm_id,
                     ST_PointOnSurface(geometry) AS geometry,
-                    name AS n,
-                    hstore('') AS h,
+                    name,
+                    hstore('') AS extra,
                     'generator_wind' AS type
                 FROM
                     osm_power_generators
@@ -633,8 +652,8 @@ pub fn render(
                 SELECT
                     osm_id,
                     geometry,
-                    name AS n,
-                    hstore('') AS h,
+                    name,
+                    hstore('') AS extra,
                     type
                 FROM
                     osm_shops
@@ -649,8 +668,8 @@ pub fn render(
                 SELECT
                     osm_id,
                     ST_LineInterpolatePoint(geometry, 0.5) AS geometry,
-                    name AS n,
-                    hstore('') AS h,
+                    name,
+                    hstore('') AS extra,
                     type
                 FROM
                     osm_feature_lines
@@ -669,9 +688,9 @@ pub fn render(
                 ({}) AS tmp
             ORDER BY
                 {z_order_case},
-                h->'isolation' DESC NULLS LAST,
+                extra->'isolation' DESC NULLS LAST,
                 CASE
-                    WHEN (h->'ele') ~ '^\s*-?\d+(\.\d+)?\s*$' THEN (h->'ele')::real
+                    WHEN (extra->'ele') ~ '^\s*-?\d+(\.\d+)?\s*$' THEN (extra->'ele')::real
                     ELSE NULL
                 END DESC NULLS LAST,
                 osm_id
@@ -696,7 +715,7 @@ pub fn render(
         for row in rows {
             let typ = row.get_string("type")?;
 
-            let h = row.get_hstore("h")?;
+            let extra = row.get_hstore("extra")?;
 
             let Some(def) = POIS.get(typ).and_then(|defs| {
                 defs.iter()
@@ -713,7 +732,7 @@ pub fn render(
                 "spring" => {
                     let mut stylesheet = String::new();
 
-                    let is_mineral = h
+                    let is_mineral = extra
                         .get("water_characteristic")
                         .is_some_and(|v| v.is_some() && v.as_deref() != Some(""));
 
@@ -727,14 +746,18 @@ pub fn render(
                     let mut names = vec![key.clone()];
 
                     if !is_mineral
-                        && h.get("refitted")
+                        && extra
+                            .get("refitted")
                             .is_some_and(|r| r.as_deref() == Some("yes"))
                     {
                         key.push_str("|refitted");
                         names.push("refitted_spring".into());
                     }
 
-                    let fill = if h.get("hot").is_some_and(|r| r.as_deref() == Some("true")) {
+                    let fill = if extra
+                        .get("hot")
+                        .is_some_and(|r| r.as_deref() == Some("true"))
+                    {
                         key.push_str("|hot");
 
                         "#e11919"
@@ -742,7 +765,8 @@ pub fn render(
                         "#0064ff"
                     };
 
-                    if h.get("intermittent")
+                    if extra
+                        .get("intermittent")
                         .is_some_and(|r| r.as_deref() == Some("yes"))
                     {
                         key.push_str("|tmp");
@@ -751,7 +775,7 @@ pub fn render(
 
                     stylesheet.push_str(&format!("#spring {{ fill: {fill} }}"));
 
-                    match h.get("drinkable").and_then(Option::as_deref) {
+                    match extra.get("drinkable").and_then(Option::as_deref) {
                         Some("yes" | "treated") => {
                             key.push_str("|drinkable");
                             names.push("drinkable_spring".into());
@@ -805,7 +829,7 @@ pub fn render(
                 let bbox_idx = collision.add(bbox);
 
                 if def.min_text_zoom <= zoom {
-                    let name = row.get_string("n")?;
+                    let name = row.get_string("name")?;
 
                     if !name.is_empty() {
                         let name = replace(name, &def.extra.replacements);
@@ -814,7 +838,7 @@ pub fn render(
                             Point::new(point.x() + dx, point.y() + dy),
                             he / 2.0,
                             name.into_owned(),
-                            h.get("ele").and_then(Option::clone),
+                            extra.get("ele").and_then(Option::clone),
                             bbox_idx,
                             def,
                         ));
@@ -827,7 +851,7 @@ pub fn render(
 
                 context.paint_with_alpha(
                     if typ != "cave_entrance"
-                        && h.get("access").is_some_and(|access| {
+                        && extra.get("access").is_some_and(|access| {
                             matches!(access.as_deref(), Some("private" | "no"))
                         })
                     {

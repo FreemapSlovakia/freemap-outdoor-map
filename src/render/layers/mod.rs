@@ -1,11 +1,10 @@
 pub use crate::render::categories::Category;
 pub use hillshading_datasets::HillshadingDatasets;
 pub use hillshading_datasets::load_hillshading_datasets;
-pub use landcover::PAINTS;
 pub(crate) use landcover::PAINT_DEFS;
 pub use layers::RenderError;
 pub use layers::render;
-pub use pois::{Def, POIS, POI_ORDER};
+pub use pois::{POI_ORDER, POIS};
 pub use routes::RouteTypes;
 
 mod aerialway_names;
