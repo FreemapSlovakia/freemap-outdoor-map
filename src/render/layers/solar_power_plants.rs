@@ -64,7 +64,8 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
         context.set_source_color(colors::SOLAR_PLANT_BORDER);
         context.set_dash(&[], 0.0);
-        context.set_line_width(1.0);
+        context.set_line_width(2.0);
+        context.set_operator(cairo::Operator::Atop);
         context.stroke()?;
 
         context.pop_group_to_source()?;
