@@ -196,21 +196,90 @@ static LEGEND_ITEMS: LazyLock<Vec<LegendItem>> = LazyLock::new(|| {
             "line_tree_row",
             Category::NaturalPoi,
             [[("natural", "tree_row")].into()],
-            build_line_data("tree_row", 17),
+            with_landcover("farmland", 17)
+                .with_feature(
+                    "feature_lines",
+                    legend_feature_data_builder()
+                        .with("type", "tree_row")
+                        .with_line_string(17)
+                        .build(),
+                )
+                .build(),
             17,
+        ),
+        LegendItem::new(
+            "barrier_other",
+            Category::Other,
+            [[("barrier", "*")].into()],
+            with_landcover("meadow", 17)
+                .with_feature(
+                    "barrierways",
+                    legend_feature_data_builder()
+                        .with("type", "")
+                        .with_line_string(17)
+                        .build(),
+                )
+                .build(),
+            17,
+        ),
+        LegendItem::new(
+            "barrier_city_wall",
+            Category::Other,
+            [[("barrier", "city_wall")].into()],
+            with_landcover("residential", 17)
+                .with_feature(
+                    "barrierways",
+                    legend_feature_data_builder()
+                        .with("type", "city_wall")
+                        .with_line_string(17)
+                        .build(),
+                )
+                .build(),
+            17,
+        ),
+        LegendItem::new(
+            "barrier_hedge",
+            Category::Other,
+            [[("barrier", "hedge")].into()],
+            with_landcover("residential", 19)
+                .with_feature(
+                    "barrierways",
+                    legend_feature_data_builder()
+                        .with("type", "hedge")
+                        .with_line_string(19)
+                        .build(),
+                )
+                .build(),
+            19,
         ),
         LegendItem::new(
             "line_weir",
             Category::Water,
             [[("waterway", "weir")].into()],
-            build_line_data("weir", 17),
+            with_landcover("water", 17) // TODO there is no water actaully
+                .with_feature(
+                    "feature_lines",
+                    legend_feature_data_builder()
+                        .with("type", "weir")
+                        .with_line_string(17)
+                        .build(),
+                )
+                .build(),
             17,
         ),
         LegendItem::new(
             "line_dam",
             Category::Water,
             [[("waterway", "dam")].into()],
-            build_line_data("dam", 17),
+            with_landcover("water", 17) // TODO there is no water actaully
+                .with_feature(
+                    "feature_lines",
+                    legend_feature_data_builder()
+                        .with("type", "dam")
+                        .with_line_string(17)
+                        .build(),
+                )
+                .build(),
             17,
         ),
     ];
@@ -448,20 +517,6 @@ fn build_poi_data(typ: &'static str, zoom: u8) -> LegendItemData {
                 .with("name", "Abc")
                 .with("extra", HashMap::<String, Option<String>>::new())
                 .with("geometry", Point::new(0.0, factor * -2.0))
-                .build(),
-        )
-        .build()
-}
-
-fn build_line_data(typ: &'static str, zoom: u8) -> LegendItemData {
-    with_landcover("wood", zoom)
-        .with_feature(
-            "feature_lines",
-            legend_feature_data_builder()
-                .with("type", typ)
-                .with("name", "Abc")
-                .with("extra", HashMap::<String, Option<String>>::new())
-                .with_line_string(zoom)
                 .build(),
         )
         .build()
