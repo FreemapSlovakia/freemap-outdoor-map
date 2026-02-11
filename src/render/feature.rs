@@ -7,7 +7,7 @@ use postgres::Row;
 
 #[derive(Clone, Debug)]
 pub enum LegendValue {
-    String(String),
+    String(&'static str),
     Bool(bool),
     F64(f64),
     I16(i16),
@@ -16,6 +16,66 @@ pub enum LegendValue {
     Point(Point),
     LineString(LineString),
     Geometry(Geometry),
+}
+
+impl From<f64> for LegendValue {
+    fn from(value: f64) -> Self {
+        Self::F64(value)
+    }
+}
+
+impl From<i16> for LegendValue {
+    fn from(value: i16) -> Self {
+        Self::I16(value)
+    }
+}
+
+impl From<i32> for LegendValue {
+    fn from(value: i32) -> Self {
+        Self::I32(value)
+    }
+}
+
+impl From<bool> for LegendValue {
+    fn from(value: bool) -> Self {
+        Self::Bool(value)
+    }
+}
+
+impl From<&'static str> for LegendValue {
+    fn from(value: &'static str) -> Self {
+        Self::String(value)
+    }
+}
+
+impl From<LineString> for LegendValue {
+    fn from(value: LineString) -> Self {
+        Self::LineString(value)
+    }
+}
+
+impl From<Polygon> for LegendValue {
+    fn from(value: Polygon) -> Self {
+        Self::Geometry(Geometry::Polygon(value))
+    }
+}
+
+impl From<Point> for LegendValue {
+    fn from(value: Point) -> Self {
+        Self::Point(value)
+    }
+}
+
+impl From<Geometry> for LegendValue {
+    fn from(value: Geometry) -> Self {
+        Self::Geometry(value)
+    }
+}
+
+impl From<HashMap<String, Option<String>>> for LegendValue {
+    fn from(value: HashMap<String, Option<String>>) -> Self {
+        Self::Hstore(value)
+    }
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -150,7 +210,7 @@ impl Feature {
                 field: arg.to_string(),
                 expected: "String",
             })? {
-                LegendValue::String(string) => Ok(string.as_str()),
+                LegendValue::String(string) => Ok(string),
                 other => Err(WrongTypeError::new(arg, "String", legend_value_type(other)).into()),
             },
         }

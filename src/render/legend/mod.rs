@@ -14,28 +14,32 @@ use std::sync::LazyLock;
 use std::sync::OnceLock;
 
 #[derive(Clone, Serialize)]
-pub struct LegendMeta {
-    pub id: String,
+pub struct LegendMeta<'a> {
+    pub id: &'a str,
     pub category: Category,
-    pub tags: Vec<IndexMap<String, String>>,
+    pub tags: Vec<IndexMap<&'a str, &'a str>>,
 }
 
-struct LegendItem {
-    meta: LegendMeta,
+struct LegendItem<'a> {
+    meta: LegendMeta<'a>,
     zoom: u8,
     data: LegendItemData,
 }
 
-impl LegendItem {
+impl<'a> LegendItem<'a> {
     fn new(
-        id: String,
+        id: &'static str,
         category: Category,
-        tags: Vec<IndexMap<String, String>>,
+        tags: impl Into<Vec<IndexMap<&'static str, &'static str>>>,
         data: LegendItemData,
         zoom: u8,
     ) -> Self {
         Self {
-            meta: LegendMeta { id, category, tags },
+            meta: LegendMeta {
+                id,
+                category,
+                tags: tags.into(),
+            },
             data,
             zoom,
         }
@@ -61,11 +65,11 @@ static LEGEND_ITEMS: LazyLock<Vec<LegendItem>> = LazyLock::new(|| {
         serde_saphyr::from_reader(BufReader::new(mapping_file)).expect("parse mapping.yaml")
     };
 
-    let mut poi_tags: HashMap<String, Vec<(String, String)>> = HashMap::new();
-    let mut feature_alias_values: HashMap<String, HashSet<String>> = HashMap::new();
-    let mut feature_alias_catchall: HashSet<String> = HashSet::new();
+    let mut poi_tags: HashMap<&'static str, Vec<(&'static str, &'static str)>> = HashMap::new();
+    let mut feature_alias_values: HashMap<&'static str, HashSet<&'static str>> = HashMap::new();
+    let mut feature_alias_catchall: HashSet<&'static str> = HashSet::new();
 
-    let mut landcover_tags = HashMap::new();
+    let mut landcover_tags = HashMap::<&'static str, &'static str>::new();
 
     if let Some(pois) = mapping_root.tables.get("pois")
         && let Some(columns) = &pois.columns
@@ -80,25 +84,21 @@ static LEGEND_ITEMS: LazyLock<Vec<LegendItem>> = LazyLock::new(|| {
             };
 
             for (key, values) in aliases {
+                let key = leak_str(key);
+
                 for (value, alias) in values {
+                    let value = leak_str(value);
+                    let alias = leak_str(alias);
+
                     if value == "__any__" {
-                        feature_alias_catchall.insert(key.to_string());
-                        poi_tags
-                            .entry(alias.to_string())
-                            .or_default()
-                            .push((key.to_string(), "*".to_string()));
+                        feature_alias_catchall.insert(key);
+                        poi_tags.entry(alias).or_default().push((key, "yes")); // "*"
                         continue;
                     }
 
-                    feature_alias_values
-                        .entry(key.to_string())
-                        .or_default()
-                        .insert(value.to_string());
+                    feature_alias_values.entry(key).or_default().insert(value);
 
-                    poi_tags
-                        .entry(alias.to_string())
-                        .or_default()
-                        .push((key.to_string(), value.to_string()));
+                    poi_tags.entry(alias).or_default().push((key, value));
                 }
             }
         }
@@ -106,32 +106,36 @@ static LEGEND_ITEMS: LazyLock<Vec<LegendItem>> = LazyLock::new(|| {
 
     for entry in collect_mapping_entries(&mapping_root).into_iter() {
         if entry.table == "pois" || entry.table == "sports" {
-            if feature_alias_catchall.contains(&entry.key)
+            if feature_alias_catchall.contains(entry.key.as_str())
                 || feature_alias_values
-                    .get(&entry.key)
-                    .is_some_and(|values| values.contains(&entry.value))
+                    .get(entry.key.as_str())
+                    .is_some_and(|values| values.contains(entry.value.as_str()))
             {
                 continue;
             }
 
-            let value = entry.value.clone();
+            let value = leak_str(&entry.value);
+            let key = leak_str(&entry.key);
 
-            poi_tags
-                .entry(value)
-                .or_default()
-                .push((entry.key, entry.value));
+            poi_tags.entry(value).or_default().push((key, value));
         } else if entry.table == "landcovers"
             && matches!(
                 entry.kind,
                 MappingKind::TableMapping | MappingKind::TableMappingNested
             )
         {
-            landcover_tags.insert(entry.value, entry.key);
+            landcover_tags.insert(leak_str(&entry.value), leak_str(&entry.key));
         }
     }
 
-    let mut poi_groups: IndexMap<String, (Category, Vec<IndexMap<String, String>>, String)> =
-        IndexMap::new();
+    let mut poi_groups: IndexMap<
+        &'static str,
+        (
+            Category,
+            Vec<IndexMap<&'static str, &'static str>>,
+            &'static str,
+        ),
+    > = IndexMap::new();
 
     for typ in POI_ORDER.iter() {
         let typ = *typ;
@@ -151,8 +155,8 @@ static LEGEND_ITEMS: LazyLock<Vec<LegendItem>> = LazyLock::new(|| {
         let visual_key = def.icon_key(typ);
 
         let entry = poi_groups
-            .entry(visual_key.to_string())
-            .or_insert_with(|| (def.category, Vec::new(), typ.to_string()));
+            .entry(visual_key)
+            .or_insert_with(|| (def.category, Vec::new(), typ));
 
         entry.1.push(build_poi_tags(typ, &poi_tags));
     }
@@ -161,7 +165,7 @@ static LEGEND_ITEMS: LazyLock<Vec<LegendItem>> = LazyLock::new(|| {
         .into_iter()
         .map(|(visual_key, (category, tags, repr_typ))| {
             LegendItem::new(
-                format!("poi_{}", visual_key),
+                format!("poi_{}", visual_key).leak(),
                 category,
                 tags,
                 build_poi_data(&repr_typ, 19),
@@ -179,7 +183,7 @@ static LEGEND_ITEMS: LazyLock<Vec<LegendItem>> = LazyLock::new(|| {
         let id_typ = types[0];
 
         LegendItem::new(
-            format!("landcover_{}", id_typ),
+            format!("landcover_{}", id_typ).leak(),
             Category::Landcover,
             tags,
             build_landcover_data(id_typ, 19),
@@ -187,43 +191,123 @@ static LEGEND_ITEMS: LazyLock<Vec<LegendItem>> = LazyLock::new(|| {
         )
     });
 
-    let mut legend_feature = HashMap::new();
+    let other = vec![
+        LegendItem::new(
+            "line_tree_row",
+            Category::NaturalPoi,
+            [[("natural", "tree_row")].into()],
+            build_line_data("tree_row", 17),
+            17,
+        ),
+        LegendItem::new(
+            "line_weir",
+            Category::Water,
+            [[("waterway", "weir")].into()],
+            build_line_data("weir", 17),
+            17,
+        ),
+        LegendItem::new(
+            "line_dam",
+            Category::Water,
+            [[("waterway", "dam")].into()],
+            build_line_data("dam", 17),
+            17,
+        ),
+    ];
 
-    legend_feature.insert(
-        "type".to_string(),
-        LegendValue::String("tree_row".to_string()),
-    );
-    legend_feature.insert(
-        "geometry".to_string(),
-        LegendValue::LineString(LineString::new(vec![
-            Coord { x: -60.0, y: -30.0 },
-            Coord { x: 60.0, y: 30.0 },
-        ])),
-    );
+    let roads = (&[
+        &["motorway", "trunk"] as &[&str],
+        &["primary", "motorway_link", "trunk_link"],
+        &["secondary", "primary_link", ""],
+        &["tertiary", "tertiary_link", "secondary_link"],
+        &["residential", "unclassified", "living_street", "road"],
+        &["service"],
+        &["piste"],
+        &["footway", "pedestrian"],
+        &["platform"],
+        &["steps"],
+        &["path"],
+        &["track"],
+        &["primary_link"],
+        &["bridleway"],
+        &["via_ferrata"],
+    ])
+        .map(|types| {
+            LegendItem::new(
+                format!("road_{}", types[0]).leak(),
+                Category::Communications,
+                types
+                    .iter()
+                    .map(|typ| IndexMap::from([("highway", *typ)]))
+                    .collect::<Vec<_>>(),
+                legend_item_data_builder()
+                    .with_feature(
+                        "roads",
+                        road_builder(types[0], 17).with("class", "highway").build(),
+                    )
+                    .build(),
+                17,
+            )
+        });
 
-    let mut legend_map: LegendItemData = HashMap::new();
-    legend_map.insert("feature_lines".to_string(), vec![legend_feature]);
+    let tracks = (1..=5).map(|grade| {
+        let grade: &str = format!("grade{grade}").leak();
 
-    let lines = vec![LegendItem::new(
-        "tree_row".to_string(),
-        Category::Water,
-        vec![IndexMap::from([(
-            "natural".to_string(),
-            "tree_row".to_string(),
-        )])],
-        legend_map,
-        17,
-    )];
+        LegendItem::new(
+            format!("road_track_{grade}").leak(),
+            Category::Communications,
+            vec![[("highway", "track"), ("tracktype", grade)].into()],
+            legend_item_data_builder()
+                .with_feature(
+                    "roads",
+                    road_builder("track", 17)
+                        .with("class", "highway")
+                        .with("tracktype", grade)
+                        .build(),
+                )
+                .build(),
+            17,
+        )
+    });
 
-    poi_items.chain(landcover_items).chain(lines).collect()
+    let visibilities = ["excellent", "good", "intermediate", "bad", "horrible", "no"]
+        .into_iter()
+        .enumerate()
+        .map(|(i, visibility)| {
+            LegendItem::new(
+                format!("road_visibility_{visibility}").leak(),
+                Category::Communications,
+                vec![[("highway", "path"), ("trail_visibility", visibility)].into()],
+                legend_item_data_builder()
+                    .with_feature(
+                        "roads",
+                        road_builder("path", 17)
+                            .with("class", "highway")
+                            .with("trail_visibility", i as i32)
+                            .build(),
+                    )
+                    .build(),
+                17,
+            )
+        });
+
+    poi_items
+        .chain(landcover_items)
+        .chain(roads)
+        .chain(tracks)
+        .chain(visibilities)
+        .chain(other)
+        .collect()
 });
 
-pub fn legend_metadata() -> Vec<LegendMeta> {
+pub fn legend_metadata() -> Vec<LegendMeta<'static>> {
     LEGEND_ITEMS.iter().map(|item| item.meta.clone()).collect()
 }
 
 // layer -> "tags"
 pub type LegendItemData = HashMap<String, Vec<HashMap<String, LegendValue>>>;
+
+type LegendFeatureData = HashMap<String, LegendValue>;
 
 pub fn legend_render_request(id: &str, scale: f64) -> Option<RenderRequest> {
     let (legend_item_data, zoom) = LEGEND_ITEMS
@@ -252,9 +336,9 @@ pub fn legend_render_request(id: &str, scale: f64) -> Option<RenderRequest> {
 }
 
 fn build_poi_tags(
-    typ: &str,
-    poi_tags: &HashMap<String, Vec<(String, String)>>,
-) -> IndexMap<String, String> {
+    typ: &'static str,
+    poi_tags: &HashMap<&'static str, Vec<(&'static str, &'static str)>>,
+) -> IndexMap<&'static str, &'static str> {
     let mut tags = vec![];
 
     if matches!(
@@ -308,10 +392,7 @@ fn build_poi_tags(
 
         if let Some(pairs) = poi_tags.get(override_key.unwrap_or(typ)) {
             for (key, value) in pairs {
-                let key = key.as_str();
-                let value = value.as_str();
-
-                if key == "information" {
+                if *key == "information" {
                     tags.push(("tourism", key));
                 }
 
@@ -324,13 +405,13 @@ fn build_poi_tags(
 }
 
 fn build_landcover_tags(
-    typ: &str,
-    landcover_tags: &HashMap<String, String>,
-) -> IndexMap<String, String> {
+    typ: &'static str,
+    landcover_tags: &HashMap<&'static str, &'static str>,
+) -> IndexMap<&'static str, &'static str> {
     let mut tags = vec![];
 
     if let Some(value) = landcover_tags.get(typ) {
-        tags.push((value.as_str(), typ));
+        tags.push((*value, typ));
     }
 
     if matches!(
@@ -344,60 +425,146 @@ fn build_landcover_tags(
     build_tags_map(tags)
 }
 
-fn build_tags_map(tags: Vec<(&str, &str)>) -> IndexMap<String, String> {
+fn build_tags_map(tags: Vec<(&'static str, &'static str)>) -> IndexMap<&'static str, &'static str> {
     let mut t = IndexMap::with_capacity(tags.len());
 
     for (k, v) in tags {
-        t.insert(k.to_string(), v.to_string());
+        t.insert(k, v);
     }
 
     t
 }
 
-fn build_poi_data(typ: &str, for_zoom: u8) -> LegendItemData {
-    HashMap::from([
-        (
-            "landcovers".to_string(),
-            vec![HashMap::from([
-                ("type".to_string(), LegendValue::String("wood".to_string())),
-                ("name".to_string(), LegendValue::String("".to_string())),
-                (
-                    "geometry".to_string(),
-                    LegendValue::Geometry(geo::Geometry::Polygon(polygon(true, for_zoom))),
-                ),
-            ])],
-        ),
-        (
-            "pois".to_string(),
-            vec![HashMap::from([
-                ("type".to_string(), LegendValue::String(typ.to_string())),
-                ("name".to_string(), LegendValue::String("Test".to_string())),
-                ("extra".to_string(), LegendValue::Hstore(HashMap::new())),
-                (
-                    "geometry".to_string(),
-                    LegendValue::Point(Point::new(0.0, 0.0)),
-                ),
-            ])],
-        ),
-    ])
+fn build_poi_data(typ: &'static str, zoom: u8) -> LegendItemData {
+    let factor = (19.0 - zoom as f64).exp2();
+
+    with_landcover("wood", zoom)
+        .with_feature(
+            "pois",
+            legend_feature_data_builder()
+                .with("type", typ)
+                .with("name", "Test")
+                .with("extra", HashMap::<String, Option<String>>::new())
+                .with("geometry", Point::new(0.0, factor * -2.0))
+                .build(),
+        )
+        .build()
 }
 
-fn build_landcover_data(typ: &str, for_zoom: u8) -> LegendItemData {
-    HashMap::from([(
-        "landcovers".to_string(),
-        vec![HashMap::from([
-            ("type".to_string(), LegendValue::String(typ.to_string())),
-            ("name".to_string(), LegendValue::String("Test".to_string())),
-            (
-                "geometry".to_string(),
-                LegendValue::Geometry(geo::Geometry::Polygon(polygon(true, for_zoom))),
-            ),
-        ])],
-    )])
+fn build_line_data(typ: &'static str, zoom: u8) -> LegendItemData {
+    with_landcover("wood", zoom)
+        .with_feature(
+            "feature_lines",
+            legend_feature_data_builder()
+                .with("type", typ)
+                .with("name", "Test")
+                .with("extra", HashMap::<String, Option<String>>::new())
+                .with_line_string(zoom)
+                .build(),
+        )
+        .build()
 }
 
-fn polygon(skew: bool, for_zoom: u8) -> Polygon {
-    let factor = (19.0 - for_zoom as f64).exp2();
+fn build_landcover_data(typ: &'static str, zoom: u8) -> LegendItemData {
+    legend_item_data_builder()
+        .with_feature(
+            "landcovers",
+            legend_feature_data_builder()
+                .with("type", typ)
+                .with("name", "Test")
+                .with("geometry", polygon(true, zoom))
+                .build(),
+        )
+        .build()
+}
+
+#[derive(Default)]
+struct LegendFeatureDataBuilder(LegendFeatureData);
+
+impl LegendFeatureDataBuilder {
+    fn with(mut self, key: impl Into<String>, value: impl Into<LegendValue>) -> Self {
+        self.0.insert(key.into(), value.into());
+        self
+    }
+
+    fn with_line_string(self, zoom: u8) -> Self {
+        let factor = (17.0 - zoom as f64).exp2();
+
+        self.with(
+            "geometry",
+            LineString::new(vec![
+                Coord {
+                    x: -80.0 * factor,
+                    y: -30.0 * factor,
+                },
+                Coord {
+                    x: 80.0 * factor,
+                    y: 30.0 * factor,
+                },
+            ]),
+        )
+    }
+
+    fn build(self) -> LegendFeatureData {
+        self.0
+    }
+}
+
+#[derive(Default)]
+struct LegendItemDataBuilder(LegendItemData);
+
+impl LegendItemDataBuilder {
+    fn with_layer(mut self, layer: impl Into<String>, features: Vec<LegendFeatureData>) -> Self {
+        self.0.insert(layer.into(), features);
+        self
+    }
+
+    fn with_feature(self, layer: impl Into<String>, feature: LegendFeatureData) -> Self {
+        self.with_layer(layer, vec![feature])
+    }
+
+    fn build(self) -> LegendItemData {
+        self.0
+    }
+}
+
+fn legend_feature_data_builder() -> LegendFeatureDataBuilder {
+    LegendFeatureDataBuilder::default()
+}
+
+fn legend_item_data_builder() -> LegendItemDataBuilder {
+    LegendItemDataBuilder::default()
+}
+
+fn with_landcover(typ: &'static str, zoom: u8) -> LegendItemDataBuilder {
+    legend_item_data_builder().with_feature(
+        "landcovers",
+        legend_feature_data_builder()
+            .with("type", typ)
+            .with("name", "")
+            .with("geometry", polygon(true, zoom))
+            .build(),
+    )
+}
+
+fn road_builder(typ: &'static str, zoom: u8) -> LegendFeatureDataBuilder {
+    legend_feature_data_builder()
+        .with("type", typ)
+        .with("name", "Abc")
+        .with("tracktype", "")
+        .with("class", "")
+        .with("service", "")
+        .with("bridge", 0i16)
+        .with("tunnel", 0i16)
+        .with("oneway", 0i16)
+        .with("bicycle", "")
+        .with("foot", "")
+        .with("trail_visibility", 0)
+        .with_line_string(zoom)
+}
+
+fn polygon(skew: bool, zoom: u8) -> Polygon {
+    let factor = (19.0 - zoom as f64).exp2();
 
     let ssx = if skew { 2.0 } else { 0.0 };
     let ssy = if skew { 1.0 } else { 0.0 };
@@ -430,4 +597,8 @@ fn polygon(skew: bool, for_zoom: u8) -> Polygon {
         ]),
         vec![],
     )
+}
+
+fn leak_str(value: &str) -> &'static str {
+    value.to_string().leak()
 }

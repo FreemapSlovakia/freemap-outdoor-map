@@ -15,7 +15,7 @@ pub struct LegendScale {
     scale: f64,
 }
 
-pub(crate) async fn get_metadata() -> Json<Vec<LegendMeta>> {
+pub(crate) async fn get_metadata() -> Json<Vec<LegendMeta<'static>>> {
     Json(legend_metadata())
 }
 

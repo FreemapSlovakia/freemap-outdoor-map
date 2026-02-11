@@ -185,7 +185,7 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
             replacements: build_replacements(&[(r"^[Nn]emocnica\b", "Nem.")]),
             ..Extra::default()
         }),
-        (14, NN, N, N, Institution, "townhall", Extra {
+        (14, 15, N, N, Institution, "townhall", Extra {
             replacements: chapel_replacements.clone(),
             ..Extra::default()
         }),

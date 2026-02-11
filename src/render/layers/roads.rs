@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 
 use crate::render::{
+    FeatureError,
     colors::{self, Color, ContextExt},
     ctx::Ctx,
     draw::{markers_on_path::draw_markers_on_path, path_geom::path_line_string},
-    FeatureError,
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
     svg_repo::SvgRepo,
@@ -59,7 +59,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
                 oneway,
                 bicycle,
                 foot,
-                power(0.666, greatest(0, trail_visibility - 1))::DOUBLE PRECISION AS trail_visibility
+                trail_visibility
                 {select_member}
             FROM
                 {table}
@@ -111,7 +111,12 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
     let rows: Vec<_> = rows
         .iter()
-        .map(|row| Ok((row, row.get_line_string()?.project_to_tile(&ctx.tile_projector))))
+        .map(|row| {
+            Ok((
+                row,
+                row.get_line_string()?.project_to_tile(&ctx.tile_projector),
+            ))
+        })
         .collect::<Result<Vec<_>, FeatureError>>()?;
 
     for (row, geom) in &rows {
@@ -134,7 +139,8 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         } else {
             false
         };
-        let trail_visibility = row.get_f64("trail_visibility")?;
+
+        let trail_visibility = 0.666f64.powf(row.get_i32("trail_visibility")? as f64);
 
         match (zoom, class, typ) {
             (..=11, _, _) => (),
@@ -333,7 +339,8 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         } else {
             false
         };
-        let trail_visibility = row.get_f64("trail_visibility")?;
+
+        let trail_visibility = 0.666f64.powf(row.get_i32("trail_visibility")? as f64);
 
         match (zoom, class, typ) {
             (14.., _, "pier") => {
