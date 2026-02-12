@@ -49,8 +49,6 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         })
         .collect::<Result<Vec<_>, FeatureError>>()?;
 
-    let context = context;
-
     // hatching
     for (projected, unprojected) in &geometries {
         context.push_group();

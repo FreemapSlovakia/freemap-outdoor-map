@@ -29,7 +29,7 @@ fn concatenate_merge(
     merged_bytes: &[u8],      // the new bytes being merged in
 ) -> Option<Vec<u8>> {
     // set the new value, return None to delete
-    let mut ret = old_value.map(|ov| ov.to_vec()).unwrap_or_else(|| vec![]);
+    let mut ret = old_value.map(|ov| ov.to_vec()).unwrap_or_default();
 
     ret.extend_from_slice(merged_bytes);
 
@@ -86,7 +86,7 @@ impl TileProcessor {
         }
     }
 
-    fn remove(self: &Self, batch: &mut Batch, coord: TileCoord, scales: impl AsRef<[u8]>) {
+    fn remove(&self, batch: &mut Batch, coord: TileCoord, scales: impl AsRef<[u8]>) {
         for scale in scales.as_ref() {
             let path = cached_tile_path(&self.config.tile_cache_base_path, coord, *scale as f64);
 

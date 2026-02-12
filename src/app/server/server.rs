@@ -16,11 +16,12 @@ use axum::{
 };
 use geo::Geometry;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use tokio::sync::broadcast;
 use tower::limit::ConcurrencyLimitLayer;
 use tower_http::cors::{Any, CorsLayer};
 
 pub async fn start_server(
-    render_worker_pool: RenderWorkerPool,
+    render_worker_pool: Arc<RenderWorkerPool>,
     tile_cache_base_path: Option<PathBuf>,
     tile_worker: Option<TileProcessingWorker>,
     serve_cached: bool,
@@ -29,9 +30,10 @@ pub async fn start_server(
     allowed_scales: Vec<f64>,
     max_concurrent_connections: usize,
     addr: SocketAddr,
+    mut shutdown_rx: broadcast::Receiver<()>,
 ) {
     let app_state = AppState {
-        render_worker_pool: Arc::new(render_worker_pool),
+        render_worker_pool,
         export_state: Arc::new(ExportState::new()),
         tile_cache_base_path: Arc::new(tile_cache_base_path),
         tile_worker,
@@ -66,5 +68,10 @@ pub async fn start_server(
         .await
         .expect("bind address");
 
-    serve(listener, router).await.expect("server");
+    serve(listener, router)
+        .with_graceful_shutdown(async move {
+            let _ = shutdown_rx.recv().await;
+        })
+        .await
+        .expect("server");
 }

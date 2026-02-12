@@ -7,6 +7,7 @@ use r2d2_postgres::PostgresConnectionManager;
 use std::{
     path::Path,
     sync::{Arc, Mutex},
+    thread::JoinHandle,
 };
 use tokio::sync::{mpsc, oneshot};
 
@@ -16,7 +17,8 @@ struct RenderTask {
 }
 
 pub(crate) struct RenderWorkerPool {
-    tx: mpsc::Sender<RenderTask>,
+    tx: Mutex<Option<mpsc::Sender<RenderTask>>>,
+    workers: Mutex<Vec<JoinHandle<()>>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -45,6 +47,7 @@ impl RenderWorkerPool {
         let queue_size = worker_count.max(1) * 2;
         let (tx, rx) = mpsc::channel(queue_size);
         let rx = Arc::new(Mutex::new(rx));
+        let mut workers = Vec::with_capacity(worker_count);
 
         for worker_id in 0..worker_count {
             let rx = rx.clone();
@@ -53,7 +56,7 @@ impl RenderWorkerPool {
             let hillshading_base_path = hillshading_base_path.clone();
             let mask_geometry = mask_geometry.clone();
 
-            std::thread::Builder::new()
+            let handle = std::thread::Builder::new()
                 .name(format!("render-worker-{worker_id}"))
                 .spawn(move || {
                     let mut svg_repo = SvgRepo::new(svg_base_path.as_ref().to_path_buf());
@@ -85,21 +88,39 @@ impl RenderWorkerPool {
                         // Ignore send errors (client dropped).
                         let _ = resp_tx.send(result);
                     }
-                })
-                .expect("render worker spawn");
+                });
+
+            workers.push(handle.expect("render worker spawn"));
         }
 
-        Self { tx }
+        Self {
+            tx: Mutex::new(Some(tx)),
+            workers: Mutex::new(workers),
+        }
     }
 
     pub(crate) async fn render(&self, request: RenderRequest) -> Result<Vec<u8>, ReError> {
         let (resp_tx, resp_rx) = oneshot::channel();
 
-        self.tx
-            .send(RenderTask { request, resp_tx })
+        let tx = {
+            let guard = self.tx.lock().unwrap();
+            guard.clone().ok_or(ReError::QueueClosed)?
+        };
+
+        tx.send(RenderTask { request, resp_tx })
             .await
             .map_err(|_| ReError::QueueClosed)?;
 
         resp_rx.await?
+    }
+
+    pub(crate) fn shutdown(&self) {
+        let tx = self.tx.lock().unwrap().take();
+        drop(tx);
+
+        let mut workers = self.workers.lock().unwrap();
+        for handle in workers.drain(..) {
+            let _ = handle.join();
+        }
     }
 }

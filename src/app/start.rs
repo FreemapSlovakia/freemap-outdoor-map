@@ -11,8 +11,18 @@ use postgres::{Config, NoTls};
 use proj::Proj;
 use r2d2_postgres::PostgresConnectionManager;
 use std::{
-    cell::Cell, fs::File, io::BufReader, net::SocketAddr, path::Path, str::FromStr, sync::Arc,
+    cell::Cell,
+    fs::File,
+    io::BufReader,
+    net::SocketAddr,
+    path::Path,
+    str::FromStr,
+    sync::{Arc, Mutex},
 };
+use tokio::signal;
+#[cfg(unix)]
+use tokio::signal::unix::{SignalKind, signal as unix_signal};
+use tokio::sync::broadcast;
 
 pub(crate) fn start() {
     dotenv().ok();
@@ -38,13 +48,13 @@ pub(crate) fn start() {
                 Err(err) => panic!("failed to load mask geojson {}: {err}", path.display()),
             });
 
-        RenderWorkerPool::new(
+        Arc::new(RenderWorkerPool::new(
             connection_pool,
             cli.worker_count,
             Arc::from(cli.svg_base_path),
             Arc::from(cli.hillshading_base_path),
             mask_geometry,
-        )
+        ))
     };
 
     let limits_geometry = cli
@@ -59,6 +69,7 @@ pub(crate) fn start() {
         });
 
     let mut tile_processing_worker = None;
+    let mut tile_invalidation_watcher = None;
 
     if let Some(tile_cache_base_path) = cli.tile_cache_base_path.clone() {
         let processing_config = TileProcessingConfig {
@@ -76,7 +87,10 @@ pub(crate) fn start() {
             tile_invalidation::process_existing_expiration_files(watch_base.as_ref(), &worker);
 
             println!("Starting tile invalidation watcher");
-            tile_invalidation::start_watcher(watch_base.as_ref(), worker);
+            tile_invalidation_watcher = Some(tile_invalidation::start_watcher(
+                watch_base.as_ref(),
+                worker,
+            ));
         }
     } else if cli.expires_base_path.is_some() {
         eprintln!("imposm watcher disabled: missing --tile-base-path");
@@ -87,17 +101,94 @@ pub(crate) fn start() {
         .build()
         .expect("tokio");
 
+    let tile_processing_worker_for_server = tile_processing_worker.clone();
+
+    let tile_processing_worker = Arc::new(Mutex::new(tile_processing_worker));
+    let tile_invalidation_watcher = Arc::new(Mutex::new(tile_invalidation_watcher));
+
+    let (shutdown_tx, _) = broadcast::channel(1);
+
+    rt.spawn({
+        let shutdown_tx_signal = shutdown_tx.clone();
+        let tile_processing_worker = tile_processing_worker.clone();
+        let tile_invalidation_watcher = tile_invalidation_watcher.clone();
+
+        async move {
+            shutdown_signal(shutdown_tx_signal).await;
+
+            let result = tokio::task::spawn_blocking(move || {
+                shutdown_tile_workers(&tile_invalidation_watcher, &tile_processing_worker);
+            })
+            .await;
+
+            if let Err(err) = result {
+                eprintln!("Error joining: {err}");
+            }
+        }
+    });
+
     rt.block_on(start_server(
-        render_worker_pool,
+        render_worker_pool.clone(),
         cli.tile_cache_base_path.clone(),
-        tile_processing_worker,
+        tile_processing_worker_for_server,
         cli.serve_cached,
         cli.max_zoom,
         limits_geometry,
         cli.allowed_scales.clone(),
         cli.max_concurrent_connections,
         SocketAddr::from((cli.host, cli.port)),
+        shutdown_tx.subscribe(),
     ));
+
+    shutdown_tile_workers(&tile_invalidation_watcher, &tile_processing_worker);
+
+    println!("Stopping render worker pool.");
+    render_worker_pool.shutdown();
+    println!("Render worker pool stopped.");
+}
+
+async fn shutdown_signal(shutdown_tx: broadcast::Sender<()>) {
+    let ctrl_c = async {
+        signal::ctrl_c().await.expect("install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        let mut sigterm = unix_signal(SignalKind::terminate()).expect("install SIGTERM handler");
+        sigterm.recv().await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    if let Err(err) = shutdown_tx.send(()) {
+        eprintln!("Error sending shutdown signal: {err}");
+    }
+}
+
+fn shutdown_tile_workers(
+    tile_invalidation_watcher: &Arc<Mutex<Option<tile_invalidation::TileInvalidationWatcher>>>,
+    tile_processing_worker: &Arc<Mutex<Option<TileProcessingWorker>>>,
+) {
+    let watcher = tile_invalidation_watcher.lock().unwrap().take();
+    let worker = tile_processing_worker.lock().unwrap().take();
+
+    if let Some(watcher) = watcher {
+        println!("Stopping tile invalidation watcher.");
+        watcher.shutdown();
+        println!("Tile invalidation watcher stopped.");
+    }
+
+    if let Some(worker) = worker {
+        println!("Stopping tile processing worker.");
+        worker.shutdown();
+        println!("Tile processing worker stopped.");
+    }
 }
 
 pub fn load_geometry_from_geojson(path: &Path) -> Result<Geometry, String> {
