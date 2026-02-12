@@ -202,82 +202,103 @@ pub fn render(
         layers::borders::render(ctx, client).with_layer("borders")?;
     }
 
-    layers::routes::render_marking(ctx, client, &request.route_types, svg_repo)
-        .with_layer("routes")?;
+    if zoom >= 9 {
+        // osm_routes, osm_route_members (routes)
+        layers::routes::render_marking(ctx, client, &request.route_types, svg_repo)
+            .with_layer("routes")?;
+    }
 
     if (9..=11).contains(&zoom) {
+        // geonames_smooth (geonames)
         layers::geonames::render(ctx, client).with_layer("geonames")?;
     }
 
     if (8..=14).contains(&zoom) {
+        // osm_places (place_names)
         layers::place_names::render(ctx, client, &mut Some(collision)).with_layer("place_names")?;
     }
 
     if (8..=10).contains(&zoom) {
+        // osm_landcovers (national_park_names)
         layers::national_park_names::render(ctx, client, collision)
             .with_layer("national_park_names")?;
     }
 
     if (13..=16).contains(&zoom) {
+        // osm_pois (special_park_names)
         layers::special_park_names::render(ctx, client, collision)
             .with_layer("special_park_names")?;
     }
 
     if zoom >= 10 {
+        // osm_pois (pois)
         layers::pois::render(ctx, client, collision, svg_repo).with_layer("features")?;
     }
 
     if zoom >= 10 {
+        // osm_waterareas (water_area_names)
         layers::water_area_names::render(ctx, client, collision).with_layer("water_area_names")?;
     }
 
     if zoom >= 17 {
+        // osm_buildings (building_names)
         layers::building_names::render(ctx, client, collision).with_layer("building_names")?;
     }
 
     if zoom >= 12 {
+        // osm_landcovers (landcovers)
         layers::bordered_area_names::render(ctx, client, collision)
             .with_layer("protected_area_names")?;
     }
 
     if zoom >= 12 {
+        // osm_landcovers (landcovers)
         layers::landcover_names::render(ctx, client, collision).with_layer("landcover_names")?;
     }
 
     if zoom >= 15 {
+        // osm_places (locality_names)
         layers::locality_names::render(ctx, client, collision).with_layer("locality_names")?;
     }
 
     if zoom >= 18 {
+        // osm_housenumbers (housenumbers)
         layers::housenumbers::render(ctx, client, collision).with_layer("housenumbers")?;
     }
 
     if zoom >= 15 {
+        // osm_roads (roads)
         layers::highway_names::render(ctx, client, collision).with_layer("highway_names")?;
     }
 
     if zoom >= 14 {
+        // osm_routes, osm_route_members (routes)
         layers::routes::render_labels(ctx, client, &request.route_types, collision)
             .with_layer("routes")?;
     }
 
     if zoom >= 16 {
+        // osm_feature_lines (feature_lines)
         layers::aerialway_names::render(ctx, client, collision).with_layer("aerialway_names")?;
     }
 
     if zoom >= 12 {
+        // water_lines (osm_waterways)
         layers::water_line_names::render(ctx, client, collision).with_layer("water_line_names")?;
     }
 
     if zoom >= 14 {
+        // osm_fixmes (fixmes)
         layers::fixmes::render(ctx, client, svg_repo).with_layer("fixmes")?;
     }
 
     if zoom >= 13 {
+        // osm_feature_lines (valleys_ridges)
         layers::valleys_ridges::render(ctx, client).with_layer("valleys_ridges")?;
     }
 
     if zoom >= 15 {
+        // osm_places (place_names)
         layers::place_names::render(ctx, client, &mut None).with_layer("place_names")?;
     }
 
@@ -292,6 +313,7 @@ pub fn render(
         .with_layer("top")?;
 
     if zoom < 8 {
+        // country_names_smooth (country_names)
         layers::country_names::render(ctx, client).with_layer("country_names")?;
     }
 

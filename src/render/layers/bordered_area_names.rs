@@ -19,7 +19,7 @@ use postgres::Client;
 pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
     let _span = tracy_client::span!("protected_area_names::render");
 
-    let rows = ctx.legend_features("osm_protected_areas", || {
+    let rows = ctx.legend_features("landcovers", || {
         let sql = "
             SELECT
                 name,
@@ -56,35 +56,21 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         )?;
     }
 
-    let rows = ctx.legend_features("osm_landcovers", || {
-
-            let sql = "
-                WITH merged AS (
-                    SELECT
-                        type, name, geometry, area
-                    FROM
-                        osm_protected_areas
-                    WHERE
-                        (type = 'national_park' OR (type = 'protected_area' AND protect_class = '2'))
-
-                    UNION ALL
-
-                    SELECT
-                        type, name, geometry, area
-                    FROM
-                        osm_landcovers
-                    WHERE
-                        type = 'winter_sports'
-                )
-                SELECT
-                    type, name, ST_Boundary(geometry) AS geometry, area
-                FROM
-                    merged
-                WHERE
-                    name <> '' AND
-                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-                ORDER BY
-                    area DESC";
+    let rows = ctx.legend_features("landcovers", || {
+        let sql = "
+            SELECT
+                type,
+                name,
+                ST_Boundary(geometry) AS geometry
+            FROM
+                osm_landcovers
+            WHERE
+                type IN ('national_park', 'winter_sports') OR (type = 'protected_area' AND tags->'protect_class' = '2') AND
+                name <> '' AND
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            ORDER BY
+                area DESC
+        ";
 
         client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
     })?;

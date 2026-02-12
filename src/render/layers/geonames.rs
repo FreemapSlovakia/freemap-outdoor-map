@@ -18,7 +18,9 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         let sql = "
             SELECT
                 name,
-                geometry FROM geonames_smooth
+                geometry
+            FROM
+                geonames_smooth
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
             ORDER BY
