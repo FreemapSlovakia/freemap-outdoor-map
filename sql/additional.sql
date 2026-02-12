@@ -28,6 +28,8 @@ CREATE INDEX osm_route_members_idx1 ON osm_route_members (member);
 
 CREATE INDEX osm_route_members_idx2 ON osm_route_members (type);
 
+CREATE INDEX CONCURRENTLY osm_route_members_type_member_idx ON osm_route_members (type, member);
+
 CREATE INDEX osm_route_members_idx1_g1 ON osm_route_members_gen1(member);
 
 CREATE INDEX osm_route_members_idx2_g1 ON osm_route_members_gen1(type);

@@ -191,12 +191,8 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             context.paint()?;
         }
 
-        if typ == "winter_sports" {
-            let wb = if zoom > 10 {
-                0.5f64.mul_add(zoom as f64 - 10.0, 2.0)
-            } else {
-                2.0
-            };
+        if typ == "winter_sports" && zoom >= 11 {
+            let wb = 0.5f64.mul_add(zoom as f64 - 10.0, 2.0);
 
             context.push_group();
 

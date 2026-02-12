@@ -52,7 +52,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
                 FROM
                     osm_landcovers
                 WHERE
-                    type NOT IN ('zoo', 'theme_park', 'winter_sports') AND
+                    type NOT IN ('zoo', 'theme_park', 'winter_sports', 'national_park', 'protected_area') AND
                     name <> '' AND
                     area >= $6 AND
                     geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
