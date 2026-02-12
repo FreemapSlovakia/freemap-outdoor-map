@@ -14,15 +14,16 @@ use postgres::Client;
 pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
     let _span = tracy_client::span!("aerialway_names::render");
 
-    let rows = ctx.legend_features("aerialway_names", || {
+    let rows = ctx.legend_features("feature_lines", || {
         let sql = "
             SELECT
                 geometry,
                 name
             FROM
-                osm_aerialways
+                osm_feature_lines
             WHERE
                 name <> '' AND
+                type IN ('cable_car', 'chair_lift', 'drag_lift', 'gondola', 'goods', 'j-bar', 'magic_carpet', 'mixed_lift', 'platter', 'rope_tow', 't-bar', 'zip_line') AND
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
             ORDER BY
                 osm_id

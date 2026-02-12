@@ -22,7 +22,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         let extra_where = if zoom < 12 {
             " AND NOT (
                 type = 'nature_reserve' OR
-                type = 'protected_area' AND protect_class <> '2'
+                type = 'protected_area' AND tags->'protect_class' <> '2'
             )"
         } else {
             ""
@@ -31,13 +31,14 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         #[cfg_attr(any(), rustfmt::skip)]
         let sql = &format!("
             SELECT
-                type, protect_class, geometry
+                type, COALESCE(tags->'protect_class', '') AS protect_class, geometry
             FROM
-                osm_protected_areas
+                osm_landcovers
             WHERE
+                type IN ('national_park', 'protected_area', 'leisure', 'nature_reserve') AND
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
                 {extra_where}
-        ");
+            ");
 
         client.query(sql, &ctx.bbox_query_params(Some(10.0)).as_params())
     })?;
@@ -89,7 +90,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     }
 
     let w = if zoom < 12 {
-        " AND NOT (type = 'nature_reserve' OR type = 'protected_area' AND protect_class <> '2')"
+        " AND NOT (type = 'nature_reserve' OR type = 'protected_area' AND tags->'protect_class' <> '2')"
     } else {
         ""
     };
@@ -100,14 +101,15 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     let sql = &format!("
         SELECT
             type,
-            protect_class,
+            COALESCE(tags->'protect_class', '') AS protect_class,
             ST_Intersection(
                 geometry,
                 ST_Expand(ST_MakeEnvelope($6, $7, $8, $9, 3857), 50000)
             ) AS geometry
         FROM
-            osm_protected_areas
+            osm_landcovers
         WHERE
+            type IN ('national_park', 'protected_area', 'leisure', 'nature_reserve') AND
             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
             {w}
         ");

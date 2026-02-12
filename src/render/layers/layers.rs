@@ -41,7 +41,7 @@ pub fn render(
     bbox: Rect<f64>,
     size: Size<u32>,
     svg_repo: &mut SvgRepo,
-    hillshading_datasets: &mut Option<HillshadingDatasets>,
+    mut hillshading_datasets: Option<&mut HillshadingDatasets>,
     mask_geometry: Option<&Geometry>,
     scale: f64,
 ) -> Result<(), RenderError> {
@@ -79,58 +79,77 @@ pub fn render(
 
     ctx.context.push_group();
 
+    // osm_landcovers (landcovers)
     layers::landcover::render(ctx, client, svg_repo).with_layer("landcover")?;
 
+    // osm_feature_lines (feature_lines)
+    let feature_line_rows =
+        layers::feature_lines::query(ctx, client).map_err(|err| RenderError {
+            layer: "feature_lines_query",
+            source: err.into(),
+        })?;
+
     if zoom >= 13 {
-        layers::cutlines::render(ctx, client).with_layer("cutlines")?;
+        layers::feature_lines::render(ctx, 1, &feature_line_rows, svg_repo, None)
+            .with_layer("feature_lines 1")?;
     }
 
+    // waterways
     layers::water_lines::render(ctx, client, svg_repo).with_layer("water_lines")?;
 
+    // waterareas
     layers::water_areas::render(ctx, client).with_layer("water_areas")?;
 
     if zoom >= 15 {
+        // osm_landcovers (bridge_areas)
         layers::bridge_areas::render(ctx, client, false).with_layer("bridge_areas")?;
     }
 
     if zoom >= 16 {
+        // pois
         layers::trees::render(ctx, client, svg_repo).with_layer("trees")?;
     }
 
     if zoom >= 12 {
-        layers::pipelines::render(ctx, client).with_layer("pipelines")?;
-    }
-
-    if zoom >= 13 {
-        layers::feature_lines::render(ctx, client, svg_repo).with_layer("feature_lines")?;
-    }
-
-    if zoom >= 15 {
-        layers::feature_lines_maskable::render(
+        // feature_lines
+        layers::feature_lines::render(
             ctx,
-            client,
+            2,
+            &feature_line_rows,
             svg_repo,
-            hillshading_datasets,
-            request.shading,
+            if request.shading {
+                hillshading_datasets.as_deref_mut()
+            } else {
+                None
+            },
         )
-        .with_layer("feature_lines_maskable")?;
+        .with_layer("feature_lines 2")?;
     }
 
     if zoom >= 16 {
+        // roads
         layers::embankments::render(ctx, client, svg_repo).with_layer("embankments")?;
     }
 
     if zoom >= 8 {
+        // roads
         layers::roads::render(ctx, client, svg_repo).with_layer("roads")?;
     }
 
     if zoom >= 14 {
+        // roads
         layers::road_access_restrictions::render(ctx, client, svg_repo)
             .with_layer("road_access_restrictions")?;
     }
 
+    if zoom >= 11 {
+        // feature_lines
+        layers::feature_lines::render(ctx, 3, &feature_line_rows, svg_repo, None)
+            .with_layer("feature_lines 3")?;
+    }
+
     if (request.shading || request.contours)
-        && let Some(hillshading_datasets) = hillshading_datasets
+        && let Some(hillshading_datasets) = hillshading_datasets.as_deref_mut()
     {
         layers::shading_and_contours::render(
             ctx,
@@ -142,47 +161,44 @@ pub fn render(
         .with_layer("shading_and_contours")?;
     }
 
-    if zoom >= 11 {
-        layers::aeroways::render(ctx, client).with_layer("aeroways")?;
-    }
-
     if zoom >= 12 {
+        // osm_power_generators (solar_power_plants)
         layers::solar_power_plants::render(ctx, client).with_layer("solar_power_plants")?;
     }
 
     if zoom >= 13 {
+        // osm_buildings (buildings)
         layers::buildings::render(ctx, client).with_layer("buildings")?;
     }
 
-    if zoom >= 16 {
-        layers::barrierways::render(ctx, client).with_layer("barrierways")?;
-    }
-
     if zoom >= 12 {
-        layers::aerialways::render(ctx, client).with_layer("aerialways")?;
-    }
-
-    if zoom >= 13 {
-        layers::power_lines::render_lines(ctx, client).with_layer("power_lines")?;
+        // feature_lines
+        layers::feature_lines::render(ctx, 4, &feature_line_rows, svg_repo, None)
+            .with_layer("feature_lines 4")?;
     }
 
     if zoom >= 14 {
-        layers::power_lines::render_towers_poles(ctx, client).with_layer("power_lines")?;
+        // osm_pois (power_poles)
+        layers::power_towers_poles::render(ctx, client).with_layer("power_towers_poles")?;
     }
 
     if zoom >= 8 {
+        // osm_landcovers (protected_areas)
         layers::protected_areas::render(ctx, client, svg_repo).with_layer("protected_areas")?;
     }
 
     if zoom >= 13 {
+        // osm_landcovers (special_parks)
         layers::special_parks::render(ctx, client).with_layer("special_parks")?;
     }
 
     if zoom >= 10 {
+        // osm_landcovers (military_areas)
         layers::military_areas::render(ctx, client).with_layer("military_areas")?;
     }
 
     if zoom >= 8 {
+        // osm_country_members (country_borders)
         layers::borders::render(ctx, client).with_layer("borders")?;
     }
 

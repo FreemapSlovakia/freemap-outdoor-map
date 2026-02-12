@@ -7,6 +7,8 @@ impl Ctx<'_> {
         layer_name: &str,
         mut cb: impl FnMut() -> Result<Vec<Row>, postgres::Error>,
     ) -> Result<Vec<Feature>, postgres::Error> {
+        let _span = tracy_client::span!("legend_features");
+
         let Some(ref legend) = self.legend else {
             return Ok(cb()?.into_iter().map(|row| row.into()).collect());
         };

@@ -12,7 +12,7 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
     let zoom = ctx.zoom;
 
-    let rows = ctx.legend_features("solat_poser_plants", || {
+    let rows = ctx.legend_features("solar_power_plants", || {
         let sql = "
             SELECT
                 geometry FROM osm_power_generators

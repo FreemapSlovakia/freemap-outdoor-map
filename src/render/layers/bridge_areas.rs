@@ -10,7 +10,7 @@ use postgres::Client;
 pub fn render(ctx: &Ctx, client: &mut Client, mask: bool) -> LayerRenderResult {
     let _span = tracy_client::span!("bridge_areas::render");
 
-    let rows = ctx.legend_features("osm_landcovers_bridge", || {
+    let rows = ctx.legend_features("bridge_areas", || {
         let query = "
             SELECT
                 geometry

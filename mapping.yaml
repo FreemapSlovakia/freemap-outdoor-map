@@ -22,7 +22,9 @@ tags:
     - fee
     - icao
     - intermittent
+    - location
     - protected
+    - protect_class
     - ref
     - refitted
     - seasonal
@@ -195,18 +197,10 @@ tables:
         type: hstore_tags
         args:
           include:
+            - protect_class
             - wetland
     type: polygon
     mappings:
-      man_made:
-        mapping:
-          man_made:
-            - clearcut
-            - bunker_silo
-            - silo
-            - storage_tank
-            - wastewater_plant
-            - bridge
       amenity:
         mapping:
           amenity:
@@ -217,44 +211,16 @@ tables:
             - parking
             - hospital
             - grave_yard
-      leisure:
+      boundary:
         mapping:
-          leisure:
-            - park
-            - garden
-            - playground
-            - golf_course
-            - sports_centre # TODO
-            - pitch
-            - stadium
-            - dog_park # TODO
-            - track
-      tourism:
+          boundary:
+            - national_park
+            - protected_area
+      highway:
         mapping:
-          tourism:
-            - zoo
-            - theme_park
-      natural:
-        mapping:
-          natural:
-            - bare_rock
-            - bay # TODO can also be a node
-            - beach
-            - blockfield
-            - fell
-            - fjord # TODO can also be a node or way
-            - glacier
-            - grassland
-            - heath
-            - moor
-            - peninsula # TODO can also be a node
-            - sand
-            - scree
-            - scrub
-            - shingle # TODO
-            - wetland # TODO as overlay layer
-            - wood
-
+          highway:
+            - pedestrian
+            - footway
       landuse:
         mapping:
           landuse:
@@ -305,11 +271,53 @@ tables:
             - village_green
             - vineyard
             - winter_sports
-      highway:
+      leisure:
         mapping:
-          highway:
-            - pedestrian
-            - footway
+          leisure:
+            - dog_park
+            - garden
+            - golf_course
+            - nature_reserve
+            - park
+            - pitch
+            - playground
+            - sports_centre
+            - stadium
+            - track
+      man_made:
+        mapping:
+          man_made:
+            - clearcut
+            - bunker_silo
+            - silo
+            - storage_tank
+            - wastewater_plant
+            - bridge
+      natural:
+        mapping:
+          natural:
+            - bare_rock
+            - bay # TODO can also be a node
+            - beach
+            - blockfield
+            - fell
+            - fjord # TODO can also be a node or way
+            - glacier
+            - grassland
+            - heath
+            - moor
+            - peninsula # TODO can also be a node
+            - sand
+            - scree
+            - scrub
+            - shingle # TODO
+            - wetland
+            - wood
+      tourism:
+        mapping:
+          tourism:
+            - zoo
+            - theme_park
       waterway:
         mapping:
           waterway:
@@ -399,23 +407,6 @@ tables:
       place:
         - __any__
 
-  aeroways:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: name
-        type: string
-        key: name
-      - name: type
-        type: mapping_value
-    type: linestring
-    mapping:
-      aeroway:
-        - runway
-        - taxiway
-
   waterways:
     columns:
       - name: osm_id
@@ -445,22 +436,6 @@ tables:
         - drain
         - ditch
 
-  barrierways:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: name
-        type: string
-        key: name
-      - name: type
-        type: mapping_value
-    type: linestring
-    mapping:
-      barrier:
-        - __any__
-
   feature_lines:
     columns:
       - name: osm_id
@@ -475,6 +450,11 @@ tables:
         aliases:
           ford:
             __any__: ford
+      - name: tags
+        type: hstore_tags
+        args:
+          include:
+            - location
       - name: fixme
         type: string
         key: fixme
@@ -484,21 +464,45 @@ tables:
           - "no"
     type: linestring
     mapping:
+      aeroway:
+        - parking_position
+        - runway
+        - taxilane
+        - taxiway
+      aerialway:
+        - cable_car
+        - chair_lift
+        - drag_lift
+        - gondola
+        - goods
+        - j-bar
+        - magic_carpet
+        - mixed_lift
+        - platter
+        - rope_tow
+        - t-bar
+        - zip_line
       barrier:
-        - ditch # TODO
+        - city_wall
+        - ditch
+        - fence
+        - hedge
+        - retaining_wall
+        - wall
       ford:
         - __any__
       man_made:
         - cutline
-        - embankment
         - dyke
+        - embankment
+        - pipeline
       millitary:
         - trench
       natural:
         - cliff
         - earth_bank
         - gully
-        - ridge # TODO
+        - ridge
         - strait # TODO can be also node or area
         - tree_row
         - valley
@@ -508,51 +512,6 @@ tables:
       waterway:
         - dam
         - weir
-
-  pipelines:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: name
-        type: string
-        key: name
-      - name: location
-        type: string
-        key: location
-      - name: substance
-        type: string # TODO
-        key: substance
-    type: linestring
-    mapping:
-      man_made:
-        - pipeline
-
-  # TODO merge to landcover
-  protected_areas:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: name
-        type: string
-        key: name
-      - name: type
-        type: mapping_value
-      - name: protect_class
-        type: string
-        key: protect_class
-      - name: area
-        type: webmerc_area
-    type: polygon
-    mapping:
-      boundary:
-        - national_park
-        - protected_area
-      leisure:
-        - nature_reserve
 
   pois:
     multi_values: [sport, amenity]
@@ -922,9 +881,9 @@ tables:
           leisure:
             mapping:
               leisure:
-                - beach_resort # TODO
+                - beach_resort
                 - bird_hide
-                - dog_park # TODO
+                - dog_park
                 - firepit
                 - golf_course
                 - horse_riding
@@ -932,7 +891,7 @@ tables:
                 - outdoor_seating
                 - picnic_table
                 - playground
-                - resort # TODO
+                - resort
                 - sauna
                 - water_park
           man_made:
@@ -1207,25 +1166,6 @@ tables:
     mapping:
       amenity:
         - place_of_worship
-
-  aerialways:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: type
-        type: mapping_value
-      - name: name
-        type: string
-        key: name
-      - name: ref
-        type: string
-        key: ref
-    type: linestring
-    mapping:
-      aerialway:
-        - __any__
 
   roads:
     columns:

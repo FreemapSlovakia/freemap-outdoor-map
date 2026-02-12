@@ -25,10 +25,10 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
                 name,
                 ST_Centroid(geometry) AS geometry
             FROM
-                osm_protected_areas
+                osm_landcovers
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                (type = 'nature_reserve' OR (type = 'protected_area' AND protect_class <> '2'))
+                (type = 'nature_reserve' OR (type = 'protected_area' AND tags->'protect_class' <> '2'))
             ORDER BY
                 area DESC
         ";
