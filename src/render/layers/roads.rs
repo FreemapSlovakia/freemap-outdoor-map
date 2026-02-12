@@ -479,7 +479,8 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
                 draw_bridges_tunnels(1.2 + 1.0)?;
             }
-            (14.., "highway", "footway" | "pedestrian") | (14.., "railway", "platform") => {
+            (14.., "highway", "footway" | "pedestrian")
+            | (14.., "highway" | "railway" | "public_transport", "platform") => {
                 apply_highway_defaults(1.0);
                 context.set_dash(&[4.0, 2.0], 0.0);
                 draw()?;
