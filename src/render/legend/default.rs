@@ -1,10 +1,10 @@
 use super::mapping;
-use super::shared::{legend_feature_data_builder, road_builder, with_landcover};
+use super::shared::{legend_feature_data_builder, with_landcover};
 use super::{LegendItem, mapping_path};
-use crate::render::layers::Category;
-use crate::render::legend::landcovers::landcovers;
-use crate::render::legend::pois::pois;
-use crate::render::legend::shared::leak_str;
+use crate::render::{
+    layers::Category,
+    legend::{landcovers::landcovers, pois::pois, roads::roads, shared::leak_str},
+};
 use indexmap::IndexMap;
 use mapping::collect_mapping_entries;
 use std::collections::HashMap;
@@ -95,94 +95,16 @@ pub(super) fn build_default_legend_items() -> Vec<LegendItem<'static>> {
             )
         });
 
-    let roads = (&[
-        &["motorway", "trunk"] as &[&str],
-        &["primary", "motorway_link", "trunk_link"],
-        &["secondary", "primary_link", ""],
-        &["tertiary", "tertiary_link", "secondary_link"],
-        &["residential", "unclassified", "living_street", "road"],
-        &["service"],
-        &["footway", "pedestrian"],
-        &["platform"],
-        &["steps"],
-        &["cycleway"],
-        &["path"],
-        &["piste"],
-        &["bridleway"],
-        &["via_ferrata"],
-        &["track"],
-    ])
-        .into_iter()
-        .enumerate()
-        .map(|(i, types)| {
-            LegendItem::new(
-                format!("road_{}", types[0]).leak(),
-                Category::Communications,
-                types
-                    .iter()
-                    .map(|typ| IndexMap::from([("highway", *typ)]))
-                    .collect::<Vec<_>>(),
-                with_landcover(if i < 10 { "residential" } else { "wood" }, 17)
-                    .with_feature(
-                        "roads",
-                        road_builder(types[0], 17).with("class", "highway").build(),
-                    )
-                    .build(),
-                17,
-            )
-        });
-
-    let tracks = (1..=5).map(|grade| {
-        let grade: &str = format!("grade{grade}").leak();
-
-        LegendItem::new(
-            format!("road_track_{grade}").leak(),
-            Category::Communications,
-            vec![[("highway", "track"), ("tracktype", grade)].into()],
-            with_landcover("wood", 17)
-                .with_feature(
-                    "roads",
-                    road_builder("track", 17)
-                        .with("class", "highway")
-                        .with("tracktype", grade)
-                        .build(),
-                )
-                .build(),
-            17,
-        )
-    });
-
-    let visibilities = ["excellent", "good", "intermediate", "bad", "horrible", "no"]
-        .into_iter()
-        .enumerate()
-        .map(|(i, visibility)| {
-            LegendItem::new(
-                format!("road_visibility_{visibility}").leak(),
-                Category::Communications,
-                vec![[("highway", "path"), ("trail_visibility", visibility)].into()],
-                with_landcover("wood", 17)
-                    .with_feature(
-                        "roads",
-                        road_builder("path", 17)
-                            .with("class", "highway")
-                            .with("trail_visibility", i as i32)
-                            .build(),
-                    )
-                    .build(),
-                17,
-            )
-        });
-
     let poi_items = pois(&mapping_root, &mapping_entries);
 
     let landcover_items = landcovers(&mapping_entries);
+
+    let roads = roads();
 
     poi_items
         .into_iter()
         .chain(landcover_items)
         .chain(roads)
-        .chain(tracks)
-        .chain(visibilities)
         .chain(lines)
         .collect()
 }

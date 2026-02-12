@@ -79,22 +79,6 @@ pub(super) fn with_landcover(typ: &'static str, zoom: u8) -> LegendItemDataBuild
     )
 }
 
-pub(super) fn road_builder(typ: &'static str, zoom: u8) -> LegendFeatureDataBuilder {
-    legend_feature_data_builder()
-        .with("type", typ)
-        .with("name", "Abc")
-        .with("tracktype", "")
-        .with("class", "")
-        .with("service", "")
-        .with("bridge", 0i16)
-        .with("tunnel", 0i16)
-        .with("oneway", 0i16)
-        .with("bicycle", "")
-        .with("foot", "")
-        .with("trail_visibility", 0)
-        .with_line_string(zoom)
-}
-
 pub(super) fn polygon(skew: bool, zoom: u8) -> Polygon {
     let factor = (19.0 - zoom as f64).exp2();
 

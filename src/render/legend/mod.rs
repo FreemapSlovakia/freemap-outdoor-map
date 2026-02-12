@@ -3,6 +3,7 @@ mod default;
 mod landcovers;
 mod mapping;
 mod pois;
+mod roads;
 mod shared;
 
 use crate::render::layers::Category;

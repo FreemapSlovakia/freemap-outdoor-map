@@ -56,7 +56,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         )?;
     }
 
-    let rows = ctx.legend_features("landcovers", || {
+    let rows = ctx.legend_features("protected_area_names", || {
         let sql = "
             SELECT
                 type,
