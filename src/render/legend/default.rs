@@ -87,7 +87,7 @@ pub(super) fn build_default_legend_items() -> Vec<LegendItem<'static>> {
                             .with("type", types[0])
                             .with("class", "highway")
                             .with("tags", HashMap::new())
-                            .with_line_string(zoom)
+                            .with_line_string(zoom, false)
                             .build(),
                     )
                     .build(),

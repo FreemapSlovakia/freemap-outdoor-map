@@ -168,7 +168,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     [("type", "route"), ("route", "hiking"), ("network", "iwn")].into(),
                 ],
                 with_route(
-                    route_builder(17)
+                    route_builder(17, false)
                         .with("refs1", "0901")
                         .with("off1", 1i32)
                         .with("h_red", 1i32)
@@ -181,7 +181,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                 Category::Communications,
                 vec![[("type", "route"), ("route", "hiking"), ("network", "lwn")].into()],
                 with_route(
-                    route_builder(17)
+                    route_builder(17, false)
                         .with("refs1", "M0123")
                         .with("off1", 1i32)
                         .with("h_red_loc", 1i32)
@@ -194,7 +194,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                 Category::Communications,
                 vec![[("type", "route"), ("route", "bicycle"), ("network", "lwn")].into()],
                 with_route(
-                    route_builder(17)
+                    route_builder(17, true)
                         .with("refs2", "C12")
                         .with("off2", 1i32)
                         .with("b_red", 1i32)
@@ -207,7 +207,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                 Category::Communications,
                 vec![[("type", "route"), ("route", "ski")].into()],
                 with_route(
-                    route_builder(17)
+                    route_builder(17, true)
                         .with("refs2", "S12")
                         .with("off2", 1i32)
                         .with("s_red", 1i32)
@@ -220,7 +220,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                 Category::Communications,
                 vec![[("type", "route"), ("route", "horse")].into()],
                 with_route(
-                    route_builder(17)
+                    route_builder(17, false)
                         .with("refs1", "H12")
                         .with("off1", 1i32)
                         .with("r_red", 1i32)
@@ -302,12 +302,12 @@ fn road_builder(typ: &'static str, zoom: u8) -> LegendFeatureDataBuilder {
         .with("bicycle", "")
         .with("foot", "")
         .with("trail_visibility", 0)
-        .with_line_string(zoom)
+        .with_line_string(zoom, false)
 }
 
-fn route_builder(zoom: u8) -> LegendFeatureDataBuilder {
+fn route_builder(zoom: u8, reverse: bool) -> LegendFeatureDataBuilder {
     legend_feature_data_builder()
-        .with_line_string(zoom)
+        .with_line_string(zoom, reverse)
         .with("refs1", "")
         .with("off1", 0i32)
         .with("refs2", "")

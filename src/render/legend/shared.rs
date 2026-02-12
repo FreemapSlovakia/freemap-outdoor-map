@@ -15,22 +15,25 @@ impl LegendFeatureDataBuilder {
         self
     }
 
-    pub(super) fn with_line_string(self, zoom: u8) -> Self {
+    pub(super) fn with_line_string(self, zoom: u8, reverse: bool) -> Self {
         let factor = (17.0 - zoom as f64).exp2();
 
-        self.with(
-            "geometry",
-            LineString::new(vec![
-                Coord {
-                    x: 80.0 * factor,
-                    y: 20.0 * factor,
-                },
-                Coord {
-                    x: -80.0 * factor,
-                    y: -20.0 * factor,
-                },
-            ]),
-        )
+        let mut coords = vec![
+            Coord {
+                x: 80.0 * factor,
+                y: 20.0 * factor,
+            },
+            Coord {
+                x: -80.0 * factor,
+                y: -20.0 * factor,
+            },
+        ];
+
+        if reverse {
+            coords.reverse();
+        }
+
+        self.with("geometry", LineString::new(coords))
     }
 
     pub(super) fn build(self) -> LegendFeatureData {
