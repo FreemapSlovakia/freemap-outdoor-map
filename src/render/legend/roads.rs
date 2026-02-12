@@ -28,6 +28,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
         &["bridleway"],
         &["via_ferrata"],
         &["track"],
+        &["raceway"],
     ])
         .into_iter()
         .enumerate()
@@ -37,7 +38,16 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                 Category::Communications,
                 types
                     .iter()
-                    .map(|typ| IndexMap::from([("highway", *typ)]))
+                    .flat_map(|typ| {
+                        if *typ == "raceway" {
+                            vec![
+                                IndexMap::from([("highway", "raceway")]),
+                                IndexMap::from([("leisure", "track")]),
+                            ]
+                        } else {
+                            vec![IndexMap::from([("highway", *typ)])]
+                        }
+                    })
                     .collect::<Vec<_>>(),
                 with_landcover(if i < 10 { "residential" } else { "wood" }, 17)
                     .with_feature(
@@ -75,7 +85,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     .leak(),
                     Category::Communications,
                     vec![{
-                        let mut map = IndexMap::new();
+                        let mut map = IndexMap::from([("highway", "*")]);
                         map.extend(tags.iter().copied());
                         map
                     }],
@@ -270,6 +280,81 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     )
                 }),
         )
+        .chain(
+            (&[
+                &["rail"] as &[&str],
+                &["light_rail", "tram"], // || typ == "rail" && service != "main" && !service.is_empty()
+                &[
+                    "miniature",
+                    "monorail",
+                    "funicular",
+                    "narrow_gauge",
+                    "subway",
+                ],
+                &["disused", "preserved"],
+                &["construction"],
+            ])
+                .into_iter()
+                .map(|types| {
+                    LegendItem::new(
+                        format!("railway_{}", types[0]).leak(),
+                        Category::Railway,
+                        types
+                            .iter()
+                            .flat_map(|typ| match *typ {
+                                "rail" => vec![
+                                    IndexMap::from([("railway", "rail")]),
+                                    IndexMap::from([("railway", "rail"), ("service", "main")]),
+                                ],
+                                "light_rail" => vec![
+                                    IndexMap::from([("railway", "light_rail")]),
+                                    IndexMap::from([("railway", "rail"), ("service", "!main")]),
+                                ],
+                                _ => vec![IndexMap::from([("railway", *typ)])],
+                            })
+                            .collect::<Vec<_>>(),
+                        with_landcover("residential", 17)
+                            .with_feature(
+                                "roads",
+                                road_builder(types[0], 17).with("class", "railway").build(),
+                            )
+                            .build(),
+                        17,
+                    )
+                }),
+        )
+        .chain([
+            LegendItem::new(
+                "railway_bridge",
+                Category::Railway,
+                vec![[("railway", "rail"), ("bridge", "yes")].into()],
+                with_landcover("residential", 17)
+                    .with_feature(
+                        "roads",
+                        road_builder("rail", 17)
+                            .with("class", "railway")
+                            .with("bridge", 1i16)
+                            .build(),
+                    )
+                    .build(),
+                17,
+            ),
+            LegendItem::new(
+                "railway_tunnel",
+                Category::Railway,
+                vec![[("railway", "rail"), ("tunnel", "yes")].into()],
+                with_landcover("residential", 17)
+                    .with_feature(
+                        "roads",
+                        road_builder("rail", 17)
+                            .with("class", "railway")
+                            .with("tunnel", 1i16)
+                            .build(),
+                    )
+                    .build(),
+                17,
+            ),
+        ])
         .collect()
 }
 

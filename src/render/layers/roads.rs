@@ -187,7 +187,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
                 apply_highway_defaults(3.666);
                 draw()?;
             }
-            (_, "highway", "primary_link" | "secondary" | "construction") => {
+            (_, "highway", "primary_link" | "secondary") | (_, _, "construction") => {
                 apply_highway_defaults(3.333);
                 draw()?;
             }
@@ -364,7 +364,19 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             ) => {
                 draw_rail(colors::TRAM, 1.0, 4.5, 7.5, 1.0)?;
             }
-            (14.., "railway", "construction" | "disused" | "preserved") => {
+            (14.., "railway", "construction") => {
+                draw_rail(colors::RAILWAY_DISUSED, 1.0, 4.5, 7.5, 1.0)?;
+
+                apply_highway_defaults(1.5 + 1.0 / 3.0);
+                context.set_source_color(colors::CONSTRUCTION_ROAD_1);
+                context.set_dash(&[5.0, 5.0], 0.0);
+                draw()?;
+
+                context.set_source_color(colors::CONSTRUCTION_ROAD_2);
+                context.set_dash(&[5.0, 5.0], 5.0);
+                draw()?;
+            }
+            (14.., "railway", "disused" | "preserved") => {
                 draw_rail(colors::RAILWAY_DISUSED, 1.0, 4.5, 7.5, 1.0)?;
             }
             (8..=11, "railway", "rail") if ["main", ""].contains(&service) => {
