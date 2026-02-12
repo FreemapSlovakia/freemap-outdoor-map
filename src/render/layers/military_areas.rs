@@ -1,8 +1,8 @@
 use crate::render::{
+    FeatureError,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{hatch::hatch_geometry, path_geom::path_geometry},
-    FeatureError,
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };

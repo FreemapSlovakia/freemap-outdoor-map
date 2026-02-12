@@ -1,4 +1,5 @@
 use crate::render::{
+    FeatureError,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{
@@ -6,7 +7,6 @@ use crate::render::{
         line_pattern::draw_line_pattern,
         path_geom::{path_geometry, path_line_string_with_offset, walk_geometry_line_strings},
     },
-    FeatureError,
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
     svg_repo::SvgRepo,

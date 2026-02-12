@@ -1,4 +1,5 @@
 use crate::render::{
+    Feature,
     collision::Collision,
     colors,
     ctx::Ctx,
@@ -6,7 +7,6 @@ use crate::render::{
         create_pango_layout::FontAndLayoutOptions,
         text_on_line::{Align, Distribution, Repeat, TextOnLineOptions, draw_text_on_line},
     },
-    Feature,
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
     regex_replacer::{Replacement, replace},
