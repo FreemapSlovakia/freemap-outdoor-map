@@ -4,8 +4,10 @@ use super::{LegendItem, mapping_path};
 use crate::render::layers::Category;
 use crate::render::legend::landcovers::landcovers;
 use crate::render::legend::pois::pois;
+use crate::render::legend::shared::leak_str;
 use indexmap::IndexMap;
 use mapping::collect_mapping_entries;
+use std::collections::HashMap;
 use std::io::BufReader;
 
 pub(super) fn build_default_legend_items() -> Vec<LegendItem<'static>> {
@@ -17,98 +19,81 @@ pub(super) fn build_default_legend_items() -> Vec<LegendItem<'static>> {
 
     let mapping_entries = collect_mapping_entries(&mapping_root);
 
-    let other = vec![
-        LegendItem::new(
-            "line_tree_row",
-            Category::NaturalPoi,
-            [[("natural", "tree_row")].into()],
-            with_landcover("farmland", 17)
-                .with_feature(
-                    "feature_lines",
-                    legend_feature_data_builder()
-                        .with("type", "tree_row")
-                        .with_line_string(17)
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "barrier_other",
-            Category::Other,
-            [[("barrier", "*")].into()],
-            with_landcover("meadow", 17)
-                .with_feature(
-                    "barrierways",
-                    legend_feature_data_builder()
-                        .with("type", "")
-                        .with_line_string(17)
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "barrier_city_wall",
-            Category::Other,
-            [[("barrier", "city_wall")].into()],
-            with_landcover("residential", 17)
-                .with_feature(
-                    "barrierways",
-                    legend_feature_data_builder()
-                        .with("type", "city_wall")
-                        .with_line_string(17)
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "barrier_hedge",
-            Category::Other,
-            [[("barrier", "hedge")].into()],
-            with_landcover("residential", 19)
-                .with_feature(
-                    "barrierways",
-                    legend_feature_data_builder()
-                        .with("type", "hedge")
-                        .with_line_string(19)
-                        .build(),
-                )
-                .build(),
-            19,
-        ),
-        LegendItem::new(
-            "line_weir",
-            Category::Water,
-            [[("waterway", "weir")].into()],
-            with_landcover("water", 17) // TODO there is no water actually
-                .with_feature(
-                    "feature_lines",
-                    legend_feature_data_builder()
-                        .with("type", "weir")
-                        .with_line_string(17)
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "line_dam",
-            Category::Water,
-            [[("waterway", "dam")].into()],
-            with_landcover("water", 17) // TODO there is no water actually
-                .with_feature(
-                    "feature_lines",
-                    legend_feature_data_builder()
-                        .with("type", "dam")
-                        .with_line_string(17)
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-    ];
+    let lines = (&[
+        &["cutline"] as &[&str],
+        &["pipeline"],
+        &["weir"],
+        &["dam"],
+        &["tree_row"],
+        &["earth_bank"],
+        &["dyke"],
+        &["embankment"],
+        &["gully"],
+        &["cliff"],
+        &["runway", "taxiway", "parking_position", "taxilane"],
+        &["city_wall"],
+        &["hedge"],
+        &["ditch", "fence", "retaining_wall", "wall"],
+        &["line"],
+        &["minor_line"],
+        &[
+            "cable_car",
+            "chair_lift",
+            "drag_lift",
+            "gondola",
+            "goods",
+            "j-bar",
+            "magic_carpet",
+            "mixed_lift",
+            "platter",
+            "rope_tow",
+            "t-bar",
+            "zip_line",
+        ],
+    ])
+        .into_iter()
+        .map(|types| {
+            let zoom = match types[0] {
+                "cutline" => 15,
+                "hedge" => 18,
+                _ => 17,
+            };
+
+            LegendItem::new(
+                format!("line_{}", types[0]).leak(),
+                Category::Communications,
+                types
+                    .iter()
+                    .map(|typ| {
+                        let mut tags = IndexMap::new();
+
+                        for entry in &mapping_entries {
+                            if entry.table == "feature_lines" && entry.value == *typ {
+                                let value = leak_str(&entry.value);
+                                let key = leak_str(&entry.key);
+
+                                tags.insert(key, value);
+                            }
+                        }
+
+                        tags
+                    })
+                    .collect::<Vec<_>>(),
+                with_landcover("meadow", zoom)
+                    .with_feature(
+                        "feature_lines",
+                        legend_feature_data_builder()
+                            .with("name", if types[0] == "cable_car" { "Abc" } else { "" }) // NOTE only aerialways have name
+                            .with("type", types[0])
+                            .with("class", "highway")
+                            .with("tags", HashMap::new())
+                            .with_line_string(zoom)
+                            .build(),
+                    )
+                    .build(),
+                zoom,
+            )
+        });
 
     let roads = (&[
         &["motorway", "trunk"] as &[&str],
@@ -198,6 +183,6 @@ pub(super) fn build_default_legend_items() -> Vec<LegendItem<'static>> {
         .chain(roads)
         .chain(tracks)
         .chain(visibilities)
-        .chain(other)
+        .chain(lines)
         .collect()
 }

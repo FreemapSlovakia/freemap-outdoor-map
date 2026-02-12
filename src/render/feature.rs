@@ -144,6 +144,8 @@ impl Feature {
                         expected: "Geometry",
                     })? {
                     LegendValue::Geometry(geometry) => Ok(geometry.clone()),
+                    LegendValue::LineString(ls) => Ok(Geometry::LineString(ls.clone())),
+                    LegendValue::Point(pt) => Ok(Geometry::Point(pt.clone())),
                     other => Err(WrongTypeError::new(
                         GEOMETRY_COLUMN,
                         "Geometry",

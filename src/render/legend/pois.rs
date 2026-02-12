@@ -54,20 +54,19 @@ pub fn pois(
     }
 
     for entry in mapping_entries {
-        if entry.table == "pois" || entry.table == "sports" {
-            if feature_alias_catchall.contains(entry.key.as_str())
-                || feature_alias_values
-                    .get(entry.key.as_str())
-                    .is_some_and(|values| values.contains(entry.value.as_str()))
-            {
-                continue;
-            }
-
-            let value = leak_str(&entry.value);
-            let key = leak_str(&entry.key);
-
-            poi_tags.entry(value).or_default().push((key, value));
+        if entry.table != "pois" && entry.table != "sports"
+            || feature_alias_catchall.contains(entry.key.as_str())
+            || feature_alias_values
+                .get(entry.key.as_str())
+                .is_some_and(|values| values.contains(entry.value.as_str()))
+        {
+            continue;
         }
+
+        let value = leak_str(&entry.value);
+        let key = leak_str(&entry.key);
+
+        poi_tags.entry(value).or_default().push((key, value));
     }
 
     let mut poi_groups: IndexMap<

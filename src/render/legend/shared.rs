@@ -22,12 +22,12 @@ impl LegendFeatureDataBuilder {
             "geometry",
             LineString::new(vec![
                 Coord {
-                    x: -80.0 * factor,
-                    y: -20.0 * factor,
-                },
-                Coord {
                     x: 80.0 * factor,
                     y: 20.0 * factor,
+                },
+                Coord {
+                    x: -80.0 * factor,
+                    y: -20.0 * factor,
                 },
             ]),
         )

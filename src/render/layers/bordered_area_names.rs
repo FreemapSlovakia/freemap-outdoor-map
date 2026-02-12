@@ -19,7 +19,7 @@ use postgres::Client;
 pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
     let _span = tracy_client::span!("protected_area_names::render");
 
-    let rows = ctx.legend_features("landcovers", || {
+    let rows = ctx.legend_features("landcover_names", || {
         let sql = "
             SELECT
                 name,
