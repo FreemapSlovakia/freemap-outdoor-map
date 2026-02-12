@@ -1,8 +1,3 @@
-use std::collections::{HashMap, HashSet};
-
-use geo::Point;
-use indexmap::IndexMap;
-
 use crate::render::{
     layers::{Category, POI_ORDER, POIS},
     legend::{
@@ -11,6 +6,9 @@ use crate::render::{
         shared::{build_tags_map, leak_str, legend_feature_data_builder, with_landcover},
     },
 };
+use geo::Point;
+use indexmap::IndexMap;
+use std::collections::{HashMap, HashSet};
 
 pub fn pois(
     mapping_root: &mapping::MappingRoot,
@@ -107,10 +105,60 @@ pub fn pois(
                 format!("poi_{visual_key}").leak(),
                 category,
                 tags,
-                build_poi_data(repr_typ, 19),
+                build_poi_data(repr_typ, 19, HashMap::<String, Option<String>>::new()),
                 19,
             )
         })
+        .chain(
+            [
+                (("drinkable", "yes"), ("drinking_water", "yes")),
+                (("drinkable", "no"), ("drinking_water", "no")),
+                (("hot", "yes"), ("natural", "hot_spring")),
+                (
+                    ("water_characteristic", "mineral"),
+                    ("water_characteristic", "mineral"),
+                ),
+                (("refitted", "yes"), ("refitted", "yes")),
+                (("intermittent", "yes"), ("intermittent", "yes")),
+            ]
+            .map(|((prop_name, prop_value), (tag_key, tag_value))| {
+                LegendItem::new(
+                    format!("poi_spring_{tag_key}_{tag_value}").leak(),
+                    Category::Water,
+                    {
+                        let mut tags = vec![
+                            [
+                                (
+                                    "natural",
+                                    if tag_value == "hot_spring" {
+                                        "hot_spring"
+                                    } else {
+                                        "spring"
+                                    },
+                                ),
+                                (tag_key, tag_value),
+                            ]
+                            .into(),
+                        ];
+
+                        if prop_name == "intermittent" {
+                            tags.push([("natural", "spring"), ("seasonal", "yes")].into());
+                        }
+
+                        tags
+                    },
+                    build_poi_data(
+                        "spring",
+                        19,
+                        HashMap::<String, Option<String>>::from([(
+                            prop_name.to_string(),
+                            Some(prop_value.to_string()),
+                        )]),
+                    ),
+                    19,
+                )
+            }),
+        )
         .collect()
 }
 
@@ -183,7 +231,11 @@ fn build_poi_tags(
     build_tags_map(tags)
 }
 
-fn build_poi_data(typ: &'static str, zoom: u8) -> LegendItemData {
+fn build_poi_data(
+    typ: &'static str,
+    zoom: u8,
+    extra: HashMap<String, Option<String>>,
+) -> LegendItemData {
     let factor = (19.0 - zoom as f64).exp2();
 
     with_landcover("wood", zoom)
@@ -192,7 +244,7 @@ fn build_poi_data(typ: &'static str, zoom: u8) -> LegendItemData {
             legend_feature_data_builder()
                 .with("type", typ)
                 .with("name", "Abc")
-                .with("extra", HashMap::<String, Option<String>>::new())
+                .with("extra", extra)
                 .with("geometry", Point::new(0.0, factor * -2.0))
                 .build(),
         )

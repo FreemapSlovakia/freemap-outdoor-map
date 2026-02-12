@@ -1,7 +1,3 @@
-use std::collections::HashMap;
-
-use indexmap::IndexMap;
-
 use crate::render::{
     LegendValue,
     layers::Category,
@@ -10,6 +6,8 @@ use crate::render::{
         shared::{LegendFeatureDataBuilder, legend_feature_data_builder, with_landcover},
     },
 };
+use indexmap::IndexMap;
+use std::collections::HashMap;
 
 pub fn roads() -> Vec<LegendItem<'static>> {
     (&[

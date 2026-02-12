@@ -1,5 +1,6 @@
 mod ctx_ext;
 mod default;
+mod feature_lines;
 mod landcovers;
 mod mapping;
 mod pois;

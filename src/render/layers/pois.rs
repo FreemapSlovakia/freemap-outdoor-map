@@ -154,11 +154,11 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
             ]),
             ..Extra::default()
         }),
-        (14, 15, Y, N, Water, "historic_mine", Extra { icon: Some("disused_mine"), ..Extra::default() }),
-        (14, 15, Y, N, Water, "adit", Extra { icon: Some("mine"), ..Extra::default() }),
-        (14, 15, Y, N, Water, "mineshaft", Extra { icon: Some("mine"), ..Extra::default() }),
-        (14, 15, Y, N, Water, "disused_adit", Extra { icon: Some("disused_mine"), ..Extra::default() }),
-        (14, 15, Y, N, Water, "disused_mineshaft", Extra { icon: Some("disused_mine"), ..Extra::default() }),
+        (14, 15, Y, N, Poi, "historic_mine", Extra { icon: Some("disused_mine"), ..Extra::default() }),
+        (14, 15, Y, N, Poi, "adit", Extra { icon: Some("mine"), ..Extra::default() }),
+        (14, 15, Y, N, Poi, "mineshaft", Extra { icon: Some("mine"), ..Extra::default() }),
+        (14, 15, Y, N, Poi, "disused_adit", Extra { icon: Some("disused_mine"), ..Extra::default() }),
+        (14, 15, Y, N, Poi, "disused_mineshaft", Extra { icon: Some("disused_mine"), ..Extra::default() }),
         (14, 15, Y, N, Accomodation, "hotel", Extra {
             replacements: build_replacements(&[(r"^[Hh]otel\b *", "")]),
             ..Extra::default()
@@ -348,7 +348,7 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (17, 18, N, N, Poi, "cross", Extra::default()), // NOTE cross is also on lower zoom
         (17, 18, N, N, Poi, "wayside_cross", Extra { icon: Some("cross"), ..Extra::default() }), // NOTE cross is also on lower zoom
         (17, 18, N, N, Water, "tree_shrine", Extra { icon: Some("cross"), ..Extra::default() }), // NOTE cross is also on lower zoom
-        (17, NN, N, N, Water, "firepit", Extra::default()),
+        (17, NN, N, N, Poi, "firepit", Extra::default()),
         (17, NN, N, N, Water, "toilets", Extra::default()),
         (17, NN, N, N, Poi, "bench", Extra::default()),
         (17, 18, N, N, Poi, "beehive", Extra::default()),

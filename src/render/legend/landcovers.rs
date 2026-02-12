@@ -1,7 +1,3 @@
-use std::collections::HashMap;
-
-use indexmap::IndexMap;
-
 use crate::render::{
     layers::{Category, PAINT_DEFS},
     legend::{
@@ -13,6 +9,8 @@ use crate::render::{
         },
     },
 };
+use indexmap::IndexMap;
+use std::collections::HashMap;
 
 pub fn landcovers(mapping_entries: &[MappingEntry]) -> Vec<LegendItem<'static>> {
     let mut landcover_tags = HashMap::<&'static str, &'static str>::new();
