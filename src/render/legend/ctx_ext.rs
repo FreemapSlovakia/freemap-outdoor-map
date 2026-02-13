@@ -9,7 +9,7 @@ impl Ctx<'_> {
     ) -> Result<Vec<Feature>, postgres::Error> {
         let _span = tracy_client::span!("legend_features");
 
-        let Some(ref legend) = self.legend else {
+        let Some(legend) = self.legend else {
             return Ok(cb()?.into_iter().map(|row| row.into()).collect());
         };
 

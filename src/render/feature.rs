@@ -145,7 +145,7 @@ impl Feature {
                     })? {
                     LegendValue::Geometry(geometry) => Ok(geometry.clone()),
                     LegendValue::LineString(ls) => Ok(Geometry::LineString(ls.clone())),
-                    LegendValue::Point(pt) => Ok(Geometry::Point(pt.clone())),
+                    LegendValue::Point(pt) => Ok(Geometry::Point(*pt)),
                     other => Err(WrongTypeError::new(
                         GEOMETRY_COLUMN,
                         "Geometry",
@@ -192,8 +192,8 @@ impl Feature {
                         field: GEOMETRY_COLUMN.to_string(),
                         expected: "Point",
                     })? {
-                    LegendValue::Point(point) => Ok(point.clone()),
-                    LegendValue::Geometry(Geometry::Point(point)) => Ok(point.clone()),
+                    LegendValue::Point(point) => Ok(*point),
+                    LegendValue::Geometry(Geometry::Point(point)) => Ok(*point),
                     other => {
                         Err(
                             WrongTypeError::new(GEOMETRY_COLUMN, "Point", legend_value_type(other))

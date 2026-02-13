@@ -10,7 +10,7 @@ use indexmap::IndexMap;
 use std::collections::HashMap;
 
 pub fn feature_lines(mapping_entries: &[MappingEntry]) -> Vec<LegendItem<'static>> {
-    (&[
+    [
         &["cutline"] as &[&str],
         &["pipeline"],
         &["weir"],
@@ -41,49 +41,49 @@ pub fn feature_lines(mapping_entries: &[MappingEntry]) -> Vec<LegendItem<'static
             "t-bar",
             "zip_line",
         ],
-    ])
-        .into_iter()
-        .map(|types| {
-            let zoom = match types[0] {
-                "cutline" => 15,
-                "hedge" => 18,
-                _ => 17,
-            };
+    ]
+    .iter()
+    .map(|types| {
+        let zoom = match types[0] {
+            "cutline" => 15,
+            "hedge" => 18,
+            _ => 17,
+        };
 
-            LegendItem::new(
-                format!("line_{}", types[0]).leak(),
-                Category::Communications,
-                types
-                    .iter()
-                    .map(|typ| {
-                        let mut tags = IndexMap::new();
+        LegendItem::new(
+            format!("line_{}", types[0]).leak(),
+            Category::Communications,
+            types
+                .iter()
+                .map(|typ| {
+                    let mut tags = IndexMap::new();
 
-                        for entry in mapping_entries {
-                            if entry.table == "feature_lines" && entry.value == *typ {
-                                let value = leak_str(&entry.value);
-                                let key = leak_str(&entry.key);
+                    for entry in mapping_entries {
+                        if entry.table == "feature_lines" && entry.value == *typ {
+                            let value = leak_str(&entry.value);
+                            let key = leak_str(&entry.key);
 
-                                tags.insert(key, value);
-                            }
+                            tags.insert(key, value);
                         }
+                    }
 
-                        tags
-                    })
-                    .collect::<Vec<_>>(),
-                with_landcover("meadow", zoom)
-                    .with_feature(
-                        "feature_lines",
-                        legend_feature_data_builder()
-                            .with("name", if types[0] == "cable_car" { "Abc" } else { "" }) // NOTE only aerialways have name
-                            .with("type", types[0])
-                            .with("class", "highway")
-                            .with("tags", HashMap::new())
-                            .with_line_string(zoom, false)
-                            .build(),
-                    )
-                    .build(),
-                zoom,
-            )
-        })
-        .collect()
+                    tags
+                })
+                .collect::<Vec<_>>(),
+            with_landcover("meadow", zoom)
+                .with_feature(
+                    "feature_lines",
+                    legend_feature_data_builder()
+                        .with("name", if types[0] == "cable_car" { "Abc" } else { "" }) // NOTE only aerialways have name
+                        .with("type", types[0])
+                        .with("class", "highway")
+                        .with("tags", HashMap::new())
+                        .with_line_string(zoom, false)
+                        .build(),
+                )
+                .build(),
+            zoom,
+        )
+    })
+    .collect()
 }
