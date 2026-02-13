@@ -7,7 +7,7 @@ pub enum Category {
     Railway,
     Landcover,
     Borders,
-    Accomodation,
+    Accommodation,
     NaturalPoi,
     GastroPoi,
     Water,

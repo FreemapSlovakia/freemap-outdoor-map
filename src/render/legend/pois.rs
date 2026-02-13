@@ -250,7 +250,7 @@ fn build_poi_data(
         Category::Railway => "residential",
         Category::Landcover => "",
         Category::Borders => "",
-        Category::Accomodation => "residential",
+        Category::Accommodation => "residential",
         Category::NaturalPoi => "wood",
         Category::GastroPoi => "commercial",
         Category::Water => "meadow",

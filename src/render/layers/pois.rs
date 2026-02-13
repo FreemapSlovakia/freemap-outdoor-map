@@ -159,27 +159,27 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (14, 15, Y, N, Poi, "mineshaft", Extra { icon: Some("mine"), ..Extra::default() }),
         (14, 15, Y, N, Poi, "disused_adit", Extra { icon: Some("disused_mine"), ..Extra::default() }),
         (14, 15, Y, N, Poi, "disused_mineshaft", Extra { icon: Some("disused_mine"), ..Extra::default() }),
-        (14, 15, Y, N, Accomodation, "hotel", Extra {
+        (14, 15, Y, N, Accommodation, "hotel", Extra {
             replacements: build_replacements(&[(r"^[Hh]otel\b *", "")]),
             ..Extra::default()
         }),
-        (14, 15, Y, N, Accomodation, "chalet", Extra {
+        (14, 15, Y, N, Accommodation, "chalet", Extra {
             replacements: build_replacements(&[
                 (r"^[Cc]hata\b *", ""),
                 (r"\b[Cc]hata$", "ch."),
             ]),
             ..Extra::default()
         }),
-        (14, 15, Y, N, Accomodation, "hostel", Extra::default()),
-        (14, 15, Y, N, Accomodation, "motel", Extra {
+        (14, 15, Y, N, Accommodation, "hostel", Extra::default()),
+        (14, 15, Y, N, Accommodation, "motel", Extra {
             replacements: build_replacements(&[(r"^[Mm]otel\b *", "")]),
             ..Extra::default()
         }),
-        (14, 15, Y, N, Accomodation, "guest_house", Extra::default()),
-        (14, 15, Y, N, Accomodation, "apartment", Extra::default()),
-        (14, 15, Y, N, Accomodation, "wilderness_hut", Extra::default()),
-        (14, 15, Y, N, Accomodation, "alpine_hut", Extra::default()),
-        (14, 15, Y, N, Accomodation, "camp_site", Extra::default()),
+        (14, 15, Y, N, Accommodation, "guest_house", Extra::default()),
+        (14, 15, Y, N, Accommodation, "apartment", Extra::default()),
+        (14, 15, Y, N, Accommodation, "wilderness_hut", Extra::default()),
+        (14, 15, Y, N, Accommodation, "alpine_hut", Extra::default()),
+        (14, 15, Y, N, Accommodation, "camp_site", Extra::default()),
         (14, 15, N, N, Poi, "attraction", Extra::default()),
         (14, 15, N, N, Institution, "hospital", Extra {
             replacements: build_replacements(&[(r"^[Nn]emocnica\b", "Nem.")]),
@@ -237,13 +237,13 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
             ..Extra::default()
         }),
         (15, 16, N, N, Institution, "office", Extra::default()),           // information=office
-        (15, 16, N, N, Accomodation, "hunting_stand", Extra::default()),
-        (15, 16, Y, N, Accomodation, "shelter", Extra::default()),
-        (15, 16, Y, N, Accomodation, "lean_to", Extra::default()),
-        (15, 16, Y, N, Accomodation, "public_transport", Extra::default()),
-        (15, 16, Y, N, Accomodation, "picnic_shelter", Extra::default()),
-        (15, 16, Y, N, Accomodation, "basic_hut", Extra::default()),
-        (15, 16, Y, N, Accomodation, "weather_shelter", Extra::default()),
+        (15, 16, N, N, Accommodation, "hunting_stand", Extra::default()),
+        (15, 16, Y, N, Accommodation, "shelter", Extra::default()),
+        (15, 16, Y, N, Accommodation, "lean_to", Extra::default()),
+        (15, 16, Y, N, Accommodation, "public_transport", Extra::default()),
+        (15, 16, Y, N, Accommodation, "picnic_shelter", Extra::default()),
+        (15, 16, Y, N, Accommodation, "basic_hut", Extra::default()),
+        (15, 16, Y, N, Accommodation, "weather_shelter", Extra::default()),
         (15, 16, N, N, Institution, "pharmacy", Extra {
             replacements: build_replacements(&[(r"^[Ll]ekáreň\b *", "")]),
             ..Extra::default()
