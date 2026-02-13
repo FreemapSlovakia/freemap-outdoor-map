@@ -263,6 +263,78 @@ pub(super) fn build_default_legend_items() -> Vec<LegendItem<'static>> {
                 .build(),
             17,
         ),
+        LegendItem::new(
+            "building",
+            crate::render::layers::Category::Borders,
+            [[("building", "*")].into()],
+            legend_item_data_builder()
+                .with_feature(
+                    "buildings",
+                    legend_feature_data_builder()
+                        .with("type", "yes")
+                        .with("geometry", polygon(false, 17))
+                        .build(),
+                )
+                .build(),
+            17,
+        ),
+        LegendItem::new(
+            "building_disused",
+            crate::render::layers::Category::Borders,
+            [
+                [("building", "disused")].into(),
+                [("building", "*"), ("disused", "yes")].into(),
+                [("disused:building", "*")].into(),
+            ],
+            legend_item_data_builder()
+                .with_feature(
+                    "buildings",
+                    legend_feature_data_builder()
+                        .with("type", "disused")
+                        .with("geometry", polygon(false, 17))
+                        .build(),
+                )
+                .build(),
+            17,
+        ),
+        LegendItem::new(
+            "building_abandoned",
+            crate::render::layers::Category::Borders,
+            [
+                [("building", "abandoned")].into(),
+                [("building", "*"), ("abandoned", "yes")].into(),
+                [("abandoned:building", "*")].into(),
+            ],
+            legend_item_data_builder()
+                .with_feature(
+                    "buildings",
+                    legend_feature_data_builder()
+                        .with("type", "abandoned")
+                        .with("geometry", polygon(false, 17))
+                        .build(),
+                )
+                .build(),
+            17,
+        ),
+        LegendItem::new(
+            "building_ruins",
+            crate::render::layers::Category::Borders,
+            [
+                [("building", "ruins")].into(),
+                [("building", "*"), ("ruins", "yes")].into(),
+                [("ruins:building", "*")].into(),
+            ],
+            legend_item_data_builder()
+                .with_feature(
+                    "buildings",
+                    legend_feature_data_builder()
+                        .with("type", "ruins")
+                        .with("geometry", polygon(false, 17))
+                        .build(),
+                )
+                .build(),
+            17,
+        ),
     ]);
 
     poi_items

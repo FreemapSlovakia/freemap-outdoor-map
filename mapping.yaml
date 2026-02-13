@@ -13,6 +13,7 @@ areas:
     - barrier
 tags:
   include:
+    - abandoned
     - access
     - covered
     - denotation
@@ -20,22 +21,23 @@ tags:
     - drinking_water
     - ele
     - fee
+    - generator:method
+    - generator:source
     - icao
     - intermittent
     - location
-    - protected
+    - plant:method
+    - plant:source
     - protect_class
+    - protected
     - ref
     - refitted
+    - ruins
     - seasonal
     - shelter_type
     - tower:type
     - water_characteristic
     - wetland
-    - plant:source
-    - plant:method
-    - generator:source
-    - generator:method
   include_regex:
     - ^(disused|abandoned|ruins|demolished|removed|destroyed|was):(leisure|natural|amenity|highway)
 generalized_tables:
@@ -334,10 +336,35 @@ tables:
         type: string
         key: name
       - name: type
-        type: mapping_value
+        type: expression
+        args:
+          expression: |
+            "building" in tags && "abandoned" in tags && get(tags, "abandoned") == "yes" ? "abandoned:" + get(tags, "building") :
+            "building" in tags && "disused" in tags && get(tags, "disused") == "yes" ? "disused:" + get(tags, "building") :
+            "building" in tags && "ruins" in tags && get(tags, "ruins") == "yes" ? "ruins:" + get(tags, "building") :
+            "disused:building" in tags ? "disused:" + get(tags, "disused:building") :
+            "abandoned:building" in tags ? "abandoned:" + get(tags, "abandoned:building") :
+            "ruins:building" in tags ? "ruins:" + get(tags, "ruins:building") :
+            get(tags, "building")
     type: polygon
+    filters:
+      reject:
+        building:
+          - "no"
+        disused:building:
+          - "no"
+        abandoned:building:
+          - "no"
+        ruins:building:
+          - "no"
     mapping:
       building:
+        - __any__
+      disused:building:
+        - __any__
+      abandoned:building:
+        - __any__
+      ruins:building:
         - __any__
 
   shops:
