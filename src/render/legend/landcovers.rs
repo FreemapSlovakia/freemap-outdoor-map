@@ -37,11 +37,13 @@ pub fn landcovers(mapping_entries: &[MappingEntry]) -> Vec<LegendItem<'static>> 
 
             let id_typ = types[0];
 
+            let skew = !matches!(id_typ, "silo" | "parking");
+
             LegendItem::new(
                 format!("landcover_{id_typ}").leak(),
                 Category::Landcover,
                 tags,
-                build_landcover_data(id_typ, 19),
+                build_landcover_data(id_typ, skew, 19),
                 19,
             )
         })
@@ -69,14 +71,14 @@ fn build_landcover_tags(
     build_tags_map(tags)
 }
 
-fn build_landcover_data(typ: &'static str, zoom: u8) -> LegendItemData {
+fn build_landcover_data(typ: &'static str, skew: bool, zoom: u8) -> LegendItemData {
     legend_item_data_builder()
         .with_feature(
             "landcovers",
             legend_feature_data_builder()
                 .with("type", typ)
                 .with("name", "Abc")
-                .with("geometry", polygon(true, zoom))
+                .with("geometry", polygon(skew, zoom))
                 .build(),
         )
         .build()

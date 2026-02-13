@@ -82,11 +82,11 @@ pub fn legend_render_request(id: &str, scale: f64) -> Option<RenderRequest> {
     let bbox = Rect::new(
         Coord {
             x: -8.0 * zoom_factor,
-            y: -4.0 * zoom_factor,
+            y: -3.5 * zoom_factor,
         },
         Coord {
             x: 8.0 * zoom_factor,
-            y: 4.0 * zoom_factor,
+            y: 3.5 * zoom_factor,
         },
     );
 

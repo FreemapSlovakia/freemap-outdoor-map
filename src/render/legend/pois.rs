@@ -105,7 +105,12 @@ pub fn pois(
                 format!("poi_{visual_key}").leak(),
                 category,
                 tags,
-                build_poi_data(repr_typ, 19, HashMap::<String, Option<String>>::new()),
+                build_poi_data(
+                    repr_typ,
+                    19,
+                    HashMap::<String, Option<String>>::new(),
+                    category,
+                ),
                 19,
             )
         })
@@ -154,6 +159,7 @@ pub fn pois(
                             prop_name.to_string(),
                             Some(prop_value.to_string()),
                         )]),
+                        Category::Water,
                     ),
                     19,
                 )
@@ -235,10 +241,27 @@ fn build_poi_data(
     typ: &'static str,
     zoom: u8,
     extra: HashMap<String, Option<String>>,
+    category: Category,
 ) -> LegendItemData {
     let factor = (19.0 - zoom as f64).exp2();
 
-    with_landcover("wood", zoom)
+    let bg = match category {
+        Category::RoadsAndPaths => "meadow",
+        Category::Railway => "residential",
+        Category::Landcover => "",
+        Category::Borders => "",
+        Category::Accomodation => "residential",
+        Category::NaturalPoi => "wood",
+        Category::GastroPoi => "commercial",
+        Category::Water => "meadow",
+        Category::Institution => "residential",
+        Category::Sport => "pitch",
+        Category::Poi => "residential",
+        Category::Terrain => "wood",
+        Category::Other => "residential",
+    };
+
+    with_landcover(bg, zoom)
         .with_feature(
             "pois",
             legend_feature_data_builder()
