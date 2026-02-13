@@ -32,6 +32,10 @@ tags:
     - tower:type
     - water_characteristic
     - wetland
+    - plant:source
+    - plant:method
+    - generator:source
+    - generator:method
   include_regex:
     - ^(disused|abandoned|ruins|demolished|removed|destroyed|was):(leisure|natural|amenity|highway)
 generalized_tables:
@@ -296,20 +300,17 @@ tables:
         mapping:
           natural:
             - bare_rock
-            - bay # TODO can also be a node
             - beach
             - blockfield
             - fell
-            - fjord # TODO can also be a node or way
             - glacier
             - grassland
             - heath
             - moor
-            - peninsula # TODO can also be a node
             - sand
             - scree
             - scrub
-            - shingle # TODO
+            - shingle
             - wetland
             - wood
       tourism:
@@ -508,9 +509,10 @@ tables:
       natural:
         - cliff
         - earth_bank
+        - fjord # also in area/node
         - gully
         - ridge
-        - strait # TODO can be also node or area
+        - strait # also in area/node
         - tree_row
         - valley
       power:
@@ -803,7 +805,7 @@ tables:
                 - watering_place
                 - weighbridge
                 - workshop
-          # TODO only gate, lift_gate and swing_gate is renderred now
+          # only gate, lift_gate and swing_gate is renderred now
           barrier:
             mapping:
               barrier:
@@ -931,18 +933,22 @@ tables:
             mapping:
               natural:
                 - arch
+                - bay
                 - birds_nest
+                - cape
                 - cave_entrance
-                - cape # can only be a node
+                - fjord # also a way
                 - geyser
                 - hot_spring
                 - peak
+                - peninsula
                 - rock
                 - saddle
                 - shrub
                 - sinkhole
                 - spring
                 - stone
+                - strait # also as way
                 - tree
           power:
             mapping:
@@ -1142,11 +1148,13 @@ tables:
         type: string
         key: name
       - name: source
-        type: string
-        key: generator:source # TODO also plant:source
+        type: expression
+        args:
+          expression: 'tags.power == "plant" ? get(tags, "plant:source") ?? "" : tags.power == "generator" ? get(tags, "generator:source") ?? "" : ""'
       - name: method
-        type: string
-        key: generator:method # TODO also plant:method
+        type: expression
+        args:
+          expression: 'tags.power == "plant" ? get(tags, "plant:method") ?? "" : tags.power == "generator" ? get(tags, "generator:method") ?? "" : ""'
     type: geometry
     type_mappings:
       points:
