@@ -309,7 +309,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                         ],
                         "light_rail" => vec![
                             IndexMap::from([("railway", "light_rail")]),
-                            IndexMap::from([("railway", "rail"), ("service", "!main")]),
+                            IndexMap::from([("railway", "rail"), ("service", "≠main")]),
                         ],
                         _ => vec![IndexMap::from([("railway", *typ)])],
                     })

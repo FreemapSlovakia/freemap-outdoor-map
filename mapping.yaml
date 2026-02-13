@@ -255,7 +255,6 @@ tables:
             - logging
             - meadow
             - military
-            - military # TODO maybe as overlay layer
             - orchard
             - plant_nursery
             - plantation

@@ -82,12 +82,15 @@ pub fn render(
     // osm_landcovers (landcovers)
     layers::landcover::render(ctx, client, svg_repo).with_layer("landcover")?;
 
-    // osm_feature_lines (feature_lines)
-    let feature_line_rows =
+    let feature_line_rows = if zoom >= 11 {
+        // osm_feature_lines (feature_lines)
         layers::feature_lines::query(ctx, client).map_err(|err| RenderError {
             layer: "feature_lines_query",
             source: err.into(),
-        })?;
+        })?
+    } else {
+        vec![]
+    };
 
     if zoom >= 13 {
         layers::feature_lines::render(ctx, 1, &feature_line_rows, svg_repo, None)

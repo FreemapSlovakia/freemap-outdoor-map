@@ -170,6 +170,99 @@ pub(super) fn build_default_legend_items() -> Vec<LegendItem<'static>> {
                 .build(),
             17,
         ),
+        LegendItem::new(
+            "country_borders",
+            crate::render::layers::Category::Borders,
+            [[
+                ("type", "boundary"),
+                ("boundary", "administrative"),
+                ("admin_level", "2"),
+            ]
+            .into()],
+            legend_item_data_builder()
+                .with_feature(
+                    "country_borders",
+                    legend_feature_data_builder()
+                        .with("geometry", polygon(true, 17))
+                        .build(),
+                )
+                .build(),
+            17,
+        ),
+        LegendItem::new(
+            "military_areas",
+            crate::render::layers::Category::Borders,
+            [[("landuse", "military")].into()],
+            legend_item_data_builder()
+                .with_feature(
+                    "military_areas",
+                    legend_feature_data_builder()
+                        .with("geometry", polygon(true, 17))
+                        .build(),
+                )
+                .build(),
+            17,
+        ),
+        LegendItem::new(
+            "nature_reserve",
+            crate::render::layers::Category::Borders,
+            [
+                [("leisure", "nature_reserve")].into(),
+                [("boundary", "protected_area"), ("protect_class", "≠2")].into(),
+            ],
+            legend_item_data_builder()
+                .with_feature(
+                    "protected_areas",
+                    legend_feature_data_builder()
+                        .with("type", "nature_reserve")
+                        .with("name", "Abc")
+                        .with("protect_class", "")
+                        .with("geometry", polygon(true, 17))
+                        .build(),
+                )
+                .build(),
+            17,
+        ),
+        LegendItem::new(
+            "national_park",
+            crate::render::layers::Category::Borders,
+            [
+                [("boundary", "national_park")].into(),
+                [("boundary", "protected_area"), ("protect_class", "2")].into(),
+            ],
+            legend_item_data_builder()
+                .with_feature(
+                    "protected_areas",
+                    legend_feature_data_builder()
+                        .with("type", "national_park")
+                        .with("name", "Abc")
+                        .with("protect_class", "")
+                        .with("geometry", polygon(true, 10))
+                        .build(),
+                )
+                .build(),
+            10,
+        ),
+        LegendItem::new(
+            "national_park_zoom",
+            crate::render::layers::Category::Borders,
+            [
+                [("boundary", "national_park")].into(),
+                [("boundary", "protected_area"), ("protect_class", "2")].into(),
+            ],
+            legend_item_data_builder()
+                .with_feature(
+                    "protected_areas",
+                    legend_feature_data_builder()
+                        .with("type", "national_park")
+                        .with("name", "")
+                        .with("protect_class", "")
+                        .with("geometry", polygon(true, 17))
+                        .build(),
+                )
+                .build(),
+            17,
+        ),
     ]);
 
     poi_items

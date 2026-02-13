@@ -31,7 +31,9 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         #[cfg_attr(any(), rustfmt::skip)]
         let sql = &format!("
             SELECT
-                type, COALESCE(tags->'protect_class', '') AS protect_class, geometry
+                type,
+                COALESCE(tags->'protect_class', '') AS protect_class,
+                geometry
             FROM
                 osm_landcovers
             WHERE
@@ -95,28 +97,28 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         ""
     };
 
-    // NOTE we do ST_Intersection to prevent memory error for very long borders on bigger zooms
-
-    #[cfg_attr(any(), rustfmt::skip)]
-    let sql = &format!("
-        SELECT
-            type,
-            COALESCE(tags->'protect_class', '') AS protect_class,
-            ST_Intersection(
-                geometry,
-                ST_Expand(ST_MakeEnvelope($6, $7, $8, $9, 3857), 50000)
-            ) AS geometry
-        FROM
-            osm_landcovers
-        WHERE
-            type IN ('national_park', 'protected_area', 'leisure', 'nature_reserve') AND
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            {w}
-        ");
-
     let snap = (26f64 - ctx.zoom as f64).exp2();
 
     let rows = ctx.legend_features("protected_areas", || {
+        // NOTE we do ST_Intersection to prevent memory error for very long borders on bigger zooms
+
+        #[cfg_attr(any(), rustfmt::skip)]
+        let sql = &format!("
+            SELECT
+                type,
+                COALESCE(tags->'protect_class', '') AS protect_class,
+                ST_Intersection(
+                    geometry,
+                    ST_Expand(ST_MakeEnvelope($6, $7, $8, $9, 3857), 50000)
+                ) AS geometry
+            FROM
+                osm_landcovers
+            WHERE
+                type IN ('national_park', 'protected_area', 'leisure', 'nature_reserve') AND
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+                {w}
+        ");
+
         client.query(
             sql,
             &ctx.bbox_query_params(Some(10.0))
@@ -166,6 +168,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             context.set_source_color(colors::PROTECTED);
             context.set_dash(&[], 0.0);
             context.set_line_width(wb * 0.75);
+            context.set_line_cap(cairo::LineCap::Square);
             context.set_line_join(cairo::LineJoin::Round);
             path_geometry(context, projected);
             context.stroke()?;

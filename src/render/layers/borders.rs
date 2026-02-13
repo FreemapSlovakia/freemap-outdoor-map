@@ -37,6 +37,7 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         } else {
             6.0
         });
+        ctx.context.set_line_cap(cairo::LineCap::Square);
         ctx.context.set_line_join(cairo::LineJoin::Round);
         path_geometry(context, &geometry);
         ctx.context.stroke()?;

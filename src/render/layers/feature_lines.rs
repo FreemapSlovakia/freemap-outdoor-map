@@ -15,7 +15,52 @@ use postgres::Client;
 
 pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
     ctx.legend_features("feature_lines", || {
-        // TODO filter type by zoom to optimize
+        let mut types = vec![];
+
+        if ctx.zoom >= 11 {
+            types.extend(["runway", "taxiway", "parking_position", "taxilane"]);
+        }
+
+        if ctx.zoom >= 12 {
+            types.extend([
+                "cable_car",
+                "chair_lift",
+                "drag_lift",
+                "gondola",
+                "goods",
+                "j-bar",
+                "magic_carpet",
+                "mixed_lift",
+                "platter",
+                "rope_tow",
+                "t-bar",
+                "zip_line",
+                "pipeline",
+            ]);
+        }
+
+        if ctx.zoom >= 12 {
+            types.extend(["cutline", "weir", "dam", "tree_row", "line"]);
+        }
+
+        if ctx.zoom >= 14 {
+            types.push("minor_line");
+        }
+
+        if ctx.zoom >= 15 {
+            types.extend(["earth_bank", "dyke", "embankment", "gully", "cliff"]);
+        }
+
+        if ctx.zoom >= 16 {
+            types.extend([
+                "city_wall",
+                "hedge",
+                "ditch",
+                "fence",
+                "retaining_wall",
+                "wall",
+            ]);
+        }
 
         let sql = "
             SELECT
@@ -25,10 +70,15 @@ pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::E
             FROM
                 osm_feature_lines
             WHERE
+                type = ANY($6)
+                AND
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
         ";
 
-        client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())
+        client.query(
+            sql,
+            &ctx.bbox_query_params(Some(8.0)).push(types).as_params(),
+        )
     })
 }
 

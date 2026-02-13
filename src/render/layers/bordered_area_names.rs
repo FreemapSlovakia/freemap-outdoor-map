@@ -19,7 +19,7 @@ use postgres::Client;
 pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
     let _span = tracy_client::span!("protected_area_names::render");
 
-    let rows = ctx.legend_features("landcover_names", || {
+    let rows = ctx.legend_features("protected_areas", || {
         let sql = "
             SELECT
                 name,
@@ -56,7 +56,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         )?;
     }
 
-    let rows = ctx.legend_features("protected_area_names", || {
+    let rows = ctx.legend_features("protected_areas", || {
         let sql = "
             SELECT
                 type,
@@ -95,7 +95,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         text_options.color = match row.get_string("type")? {
             "national_park" | "protected_area" => colors::PROTECTED,
             "winter_sports" => colors::WATER,
-            _ => colors::BLACK,
+            _ => continue,
         };
 
         let name = row.get_string("name")?;
