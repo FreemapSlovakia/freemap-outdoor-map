@@ -129,9 +129,13 @@ where
 }
 
 pub fn path_line_string(context: &Context, line_string: &LineString) {
+    let len = line_string.0.len();
+
     for (i, p) in line_string.into_iter().enumerate() {
         if i == 0 {
             context.move_to(p.x, p.y);
+        } else if i == len - 1 && &line_string.0[0] == p {
+            context.close_path();
         } else {
             context.line_to(p.x, p.y);
         }
