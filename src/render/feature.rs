@@ -1,9 +1,10 @@
-use std::collections::HashMap;
-
-use geo::{Geometry, LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon};
+use geo::{
+    Centroid, Geometry, LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon,
+};
 use geo_postgis::FromPostgis;
 use postgis::ewkb::GeometryT as EwkbGeometry;
 use postgres::Row;
+use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
 pub enum LegendValue {
@@ -194,6 +195,9 @@ impl Feature {
                     })? {
                     LegendValue::Point(point) => Ok(*point),
                     LegendValue::Geometry(Geometry::Point(point)) => Ok(*point),
+                    LegendValue::Geometry(Geometry::Polygon(polygon)) => Ok(polygon
+                        .centroid()
+                        .ok_or(WrongTypeError::new(GEOMETRY_COLUMN, "Point", "Geometry"))?),
                     other => {
                         Err(
                             WrongTypeError::new(GEOMETRY_COLUMN, "Point", legend_value_type(other))

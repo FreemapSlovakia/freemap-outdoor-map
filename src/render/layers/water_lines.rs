@@ -70,12 +70,17 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             context.set_dash(if tmp { &[6.0, 3.0] } else { &[] }, 0.0);
 
             let (width, smooth) = match (typ, zoom) {
-                ("river", ..=8) => (1.5f64.powf(zoom as f64 - 8.0), 0.0),
-                ("river", 9) => (1.5, 0.0),
-                ("river", 10..=11) => (2.2, 0.0),
-                ("river", 12..) => (2.2, 0.5),
-                (_, 12..) if typ != "river" => (if zoom == 12 { 1.0 } else { 1.2 }, 0.5),
-                _ => (0.0, 0.0), // TODO panic?
+                ("river" | "canal", ..=8) => (1.5f64.powf(zoom as f64 - 8.0), 0.0),
+                ("river" | "canal", 9) => (1.5, 0.0),
+                ("river" | "canal", 10..=11) => (2.2, 0.0),
+                ("river" | "canal", 12..) => (2.2, 0.5),
+                (
+                    "canoe_pass" | "ditch" | "drain" | "fish_pass" | "rapids" | "ressurised"
+                    | "stream" | "tidal_channel",
+                    12..,
+                ) => (if zoom == 12 { 1.0 } else { 1.2 }, 0.5),
+
+                _ => continue,
             };
 
             if glow {
@@ -84,7 +89,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
                     context.set_source_rgba(1.0, 1.0, 1.0, if tunnel { 0.8 } else { 0.5 });
 
-                    context.set_line_width(if typ == "river" {
+                    context.set_line_width(if matches!(typ, "river" | "canal") {
                         3.4
                     } else if zoom == 12 {
                         2.0

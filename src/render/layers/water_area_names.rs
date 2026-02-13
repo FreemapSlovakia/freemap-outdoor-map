@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use crate::render::{
     collision::Collision,
     colors,
@@ -8,9 +10,14 @@ use crate::render::{
     },
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
+    regex_replacer::{Replacement, replace},
 };
 use pangocairo::pango::Style;
 use postgres::Client;
+use regex::Regex;
+
+static REPLACEMENTS: LazyLock<Vec<Replacement>> =
+    LazyLock::new(|| vec![(Regex::new("[Vv]odná [Nn]ádrž").expect("regex"), "v. n.")]);
 
 pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
     let _span = tracy_client::span!("water_area_names::render");
@@ -25,10 +32,10 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         ..TextOptions::default()
     };
 
-    let rows = ctx.legend_features("water_area_names", || {
+    let rows = ctx.legend_features("water_areas", || {
         let sql = "
             SELECT
-                REGEXP_REPLACE(osm_waterareas.name, '[Vv]odná [Nn]ádrž\\M', 'v. n.') AS name,
+                name,
                 ST_PointOnSurface(osm_waterareas.geometry) AS geometry
             FROM
                 osm_waterareas
@@ -53,7 +60,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
             ctx.context,
             Some(collision),
             &row.get_point()?.project_to_tile(&ctx.tile_projector),
-            row.get_string("name")?,
+            &replace(row.get_string("name")?, &REPLACEMENTS),
             &text_options,
         )?;
     }

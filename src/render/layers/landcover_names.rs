@@ -21,14 +21,14 @@ use std::sync::LazyLock;
 static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
     vec![
         (
-            Regex::new(r"[Čč]istička odpadových vôd").expect("regex"),
+            Regex::new("[Čč]istička odpadových vôd").expect("regex"),
             "ČOV",
         ),
         (
-            Regex::new(r"[Pp]oľnohospodárske družstvo").expect("regex"),
+            Regex::new("[Pp]oľnohospodárske družstvo").expect("regex"),
             "PD",
         ),
-        (Regex::new(r"[Nn]ámestie").expect("regex"), "nám. "),
+        (Regex::new("[Nn]ámestie").expect("regex"), "nám. "),
     ]
 });
 

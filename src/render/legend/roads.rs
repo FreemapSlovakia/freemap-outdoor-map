@@ -3,7 +3,10 @@ use crate::render::{
     layers::Category,
     legend::{
         LegendItem,
-        shared::{LegendFeatureDataBuilder, legend_feature_data_builder, with_landcover},
+        shared::{
+            LegendFeatureDataBuilder, legend_feature_data_builder, legend_item_data_builder,
+            with_landcover,
+        },
     },
 };
 use indexmap::IndexMap;
@@ -33,7 +36,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
     .map(|(i, types)| {
         LegendItem::new(
             format!("road_{}", types[0]).leak(),
-            Category::Communications,
+            Category::RoadsAndPaths,
             types
                 .iter()
                 .flat_map(|typ| {
@@ -81,7 +84,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                         .collect::<String>()
                 )
                 .leak(),
-                Category::Communications,
+                Category::RoadsAndPaths,
                 vec![{
                     let mut map = IndexMap::from([("highway", "*")]);
                     map.extend(tags.iter().copied());
@@ -132,7 +135,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
     .chain([
         LegendItem::new(
             "path_bike_foot",
-            Category::Communications,
+            Category::RoadsAndPaths,
             vec![
                 [
                     ("highway", "path"),
@@ -155,7 +158,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
         ),
         LegendItem::new(
             "road_construction",
-            Category::Communications,
+            Category::RoadsAndPaths,
             vec![[("highway", "construction")].into()],
             with_landcover("residential", 17)
                 .with_feature(
@@ -169,7 +172,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
         ),
         LegendItem::new(
             "route_hiking",
-            Category::Communications,
+            Category::RoadsAndPaths,
             vec![
                 [("type", "route"), ("route", "hiking"), ("network", "rwn")].into(),
                 [("type", "route"), ("route", "hiking"), ("network", "nwn")].into(),
@@ -186,7 +189,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
         ),
         LegendItem::new(
             "route_hiking_local",
-            Category::Communications,
+            Category::RoadsAndPaths,
             vec![[("type", "route"), ("route", "hiking"), ("network", "lwn")].into()],
             with_route(
                 route_builder(17, false)
@@ -199,7 +202,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
         ),
         LegendItem::new(
             "route_bicycle",
-            Category::Communications,
+            Category::RoadsAndPaths,
             vec![[("type", "route"), ("route", "bicycle"), ("network", "lwn")].into()],
             with_route(
                 route_builder(17, true)
@@ -212,7 +215,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
         ),
         LegendItem::new(
             "route_ski",
-            Category::Communications,
+            Category::RoadsAndPaths,
             vec![[("type", "route"), ("route", "ski")].into()],
             with_route(
                 route_builder(17, true)
@@ -225,7 +228,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
         ),
         LegendItem::new(
             "route_horse",
-            Category::Communications,
+            Category::RoadsAndPaths,
             vec![[("type", "route"), ("route", "horse")].into()],
             with_route(
                 route_builder(17, false)
@@ -242,7 +245,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
 
         LegendItem::new(
             format!("road_track_{grade}").leak(),
-            Category::Communications,
+            Category::RoadsAndPaths,
             vec![[("highway", "track"), ("tracktype", grade)].into()],
             with_landcover("wood", 17)
                 .with_feature(
@@ -263,7 +266,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
             .map(|(i, visibility)| {
                 LegendItem::new(
                     format!("trail_visibility_{visibility}").leak(),
-                    Category::Communications,
+                    Category::RoadsAndPaths,
                     vec![[("trail_visibility", visibility)].into()],
                     with_landcover("wood", 17)
                         .with_feature(
@@ -347,6 +350,20 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     road_builder("rail", 17)
                         .with("class", "railway")
                         .with("tunnel", 1i16)
+                        .build(),
+                )
+                .build(),
+            17,
+        ),
+        LegendItem::new(
+            "water_slide",
+            Category::Other,
+            vec![[("attraction", "water_slide")].into()],
+            legend_item_data_builder()
+                .with_feature(
+                    "roads",
+                    road_builder("water_slide", 17)
+                        .with("class", "attraction")
                         .build(),
                 )
                 .build(),

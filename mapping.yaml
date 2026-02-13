@@ -59,11 +59,11 @@ generalized_tables:
     tolerance: 50
   waterways_gen0:
     source: waterways_gen1
-    sql_filter: type='river'
+    sql_filter: type='river' OR type='canal'
     tolerance: 200
   waterways_gen1:
     source: waterways
-    sql_filter: type='river'
+    sql_filter: type='river' OR type='canal'
     tolerance: 50
   landcovers_gen1:
     source: landcovers
@@ -430,11 +430,19 @@ tables:
     type: linestring
     mapping:
       waterway:
-        - river
         - canal
-        - stream
-        - drain
+        - canoe_pass
         - ditch
+        - drain
+        - fairway
+        - fish_pass
+        - flowline
+        - link
+        - rapids
+        - ressurised
+        - river
+        - stream
+        - tidal_channel
 
   feature_lines:
     columns:
@@ -973,9 +981,12 @@ tables:
           waterway:
             mapping:
               waterway:
+                - boatyard
+                - dock
+                - dam
                 - waterfall
                 - weir
-                - dam
+                - rapids
 
   sports:
     multi_values: [sport]
@@ -1133,17 +1144,19 @@ tables:
         key: name
       - name: source
         type: string
-        key: generator:source
+        key: generator:source # TODO also plant:source
       - name: method
         type: string
-        key: generator:method
+        key: generator:method # TODO also plant:method
     type: geometry
     type_mappings:
       points:
         power:
+          - plant
           - generator
       polygons:
         power:
+          - plant
           - generator
 
   place_of_worships:

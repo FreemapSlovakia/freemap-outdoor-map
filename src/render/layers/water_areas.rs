@@ -22,8 +22,8 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         #[cfg_attr(any(), rustfmt::skip)]
         let sql = format!("
             SELECT
-                type,
-                geometry, COALESCE(intermittent OR seasonal, false) AS tmp
+                geometry,
+                COALESCE(intermittent OR seasonal, false) AS tmp
             FROM
                 osm_waterareas{table_suffix}
             WHERE

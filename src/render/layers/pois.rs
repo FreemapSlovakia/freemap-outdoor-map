@@ -349,7 +349,7 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (17, 18, N, N, Poi, "wayside_cross", Extra { icon: Some("cross"), ..Extra::default() }), // NOTE cross is also on lower zoom
         (17, 18, N, N, Water, "tree_shrine", Extra { icon: Some("cross"), ..Extra::default() }), // NOTE cross is also on lower zoom
         (17, NN, N, N, Poi, "firepit", Extra::default()),
-        (17, NN, N, N, Water, "toilets", Extra::default()),
+        (17, NN, N, N, Poi, "toilets", Extra::default()),
         (17, NN, N, N, Poi, "bench", Extra::default()),
         (17, 18, N, N, Poi, "beehive", Extra::default()),
         (17, 18, N, N, Poi, "apiary", Extra { icon: Some("beehive"), ..Extra::default() }),

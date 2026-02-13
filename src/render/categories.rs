@@ -3,7 +3,7 @@ use serde::Serialize;
 #[derive(Copy, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Category {
-    Communications,
+    RoadsAndPaths,
     Railway,
     Landcover,
     Borders,

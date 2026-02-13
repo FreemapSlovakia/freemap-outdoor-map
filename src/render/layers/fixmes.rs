@@ -48,7 +48,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         paint(&row.get_point()?.project_to_tile(&ctx.tile_projector).0)?;
     }
 
-    let rows = ctx.legend_features("fixmes", || {
+    let rows = ctx.legend_features("fixmes_line", || {
         let sql = "
             SELECT * FROM (
                 SELECT geometry, fixme FROM osm_feature_lines

@@ -17,8 +17,10 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
             SELECT
                 geometry FROM osm_power_generators
             WHERE
-                source = 'solar' AND geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
-            ORDER BY osm_id
+                source = 'solar' AND
+                geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
+            ORDER BY
+                osm_id
         ";
 
         client.query(sql, &ctx.bbox_query_params(None).as_params())

@@ -19,7 +19,8 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         #[cfg_attr(any(), rustfmt::skip)]
         let sql = format!("
             SELECT
-                geometry, type
+                geometry,
+                type
             FROM
                 osm_pois
             WHERE
