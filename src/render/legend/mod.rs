@@ -90,7 +90,7 @@ pub fn legend_render_request(id: &str, scale: f64) -> Option<RenderRequest> {
         },
     );
 
-    let mut render_request = RenderRequest::new(bbox, zoom, scale, ImageFormat::Jpeg);
+    let mut render_request = RenderRequest::new(bbox, zoom, scale, ImageFormat::Png);
 
     render_request.legend = Some(legend_item_data);
 

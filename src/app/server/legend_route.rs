@@ -45,7 +45,7 @@ pub(crate) async fn get(
 
     Response::builder()
         .status(StatusCode::OK)
-        .header("Content-Type", "image/jpeg")
+        .header("Content-Type", "image/png")
         .body(Body::from(rendered))
         .expect("body should be built")
 }

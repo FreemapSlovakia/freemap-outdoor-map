@@ -71,10 +71,6 @@ pub fn render(
 
     if request.legend.is_none() {
         layers::sea::render(ctx, client).with_layer("sea")?;
-    } else {
-        // TODO configurable background, even transparent
-        context.set_source_rgb(1.0, 1.0, 1.0);
-        context.paint().expect("paint");
     }
 
     ctx.context.push_group();

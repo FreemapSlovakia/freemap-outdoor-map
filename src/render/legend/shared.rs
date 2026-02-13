@@ -89,7 +89,7 @@ pub(super) fn polygon(skew: bool, zoom: u8) -> Polygon {
     let ssy = if skew { 1.0 } else { 0.0 };
 
     let xx = 12.0;
-    let yy = 6.0;
+    let yy = 5.0;
 
     Polygon::new(
         LineString::new(vec![
