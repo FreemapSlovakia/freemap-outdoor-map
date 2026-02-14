@@ -134,7 +134,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         .iter()
         .filter_map(|row| {
             let geom = match row.get_geometry() {
-                Ok(geom) => geom.project_to_tile(&ctx.tile_projector),
+                Ok(geom) => geom,
                 Err(err) => {
                     return match err {
                         crate::render::FeatureError::GeomError(GeomError::GeomIsEmpty) => None,
