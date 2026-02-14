@@ -1,5 +1,5 @@
 use crate::render::{
-    FeatureError,
+    FeatureError, GeomError,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{
@@ -132,9 +132,18 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
     let geometries: Vec<_> = rows
         .iter()
-        .map(|row| {
-            let geom = row.get_geometry()?;
-            Ok((geom.project_to_tile(&ctx.tile_projector), geom, row))
+        .filter_map(|row| {
+            let geom = match row.get_geometry() {
+                Ok(geom) => geom.project_to_tile(&ctx.tile_projector),
+                Err(err) => {
+                    return match err {
+                        crate::render::FeatureError::GeomError(GeomError::GeomIsEmpty) => None,
+                        _ => Some(Err(err)),
+                    };
+                }
+            };
+
+            Some(Ok((geom.project_to_tile(&ctx.tile_projector), geom, row)))
         })
         .collect::<Result<Vec<_>, FeatureError>>()?;
 
