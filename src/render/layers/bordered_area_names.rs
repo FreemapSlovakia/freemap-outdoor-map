@@ -65,7 +65,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
             FROM
                 osm_landcovers
             WHERE
-                type IN ('national_park', 'winter_sports') OR (type = 'protected_area' AND tags->'protect_class' = '2') AND
+                (type IN ('national_park', 'winter_sports') OR (type = 'protected_area' AND tags->'protect_class' = '2')) AND
                 name <> '' AND
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
             ORDER BY
