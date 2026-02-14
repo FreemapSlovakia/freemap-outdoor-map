@@ -1,4 +1,5 @@
 use crate::render::{
+    GeomError,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::path_geom::path_geometry,
@@ -49,7 +50,13 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     })?;
 
     for row in rows {
-        let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
+        let geom = match row.get_geometry() {
+            Ok(geom) => geom.project_to_tile(&ctx.tile_projector),
+            Err(err) => match err {
+                crate::render::FeatureError::GeomError(GeomError::GeomIsEmpty) => continue, // NOTE sea is often empty
+                _ => Err(err)?,
+            },
+        };
 
         path_geometry(context, &geom);
 
