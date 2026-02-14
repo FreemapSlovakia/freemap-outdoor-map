@@ -2,7 +2,7 @@ use crate::app::{
     cli::Cli, server::start_server, tile_invalidation,
     tile_processing_worker::TileProcessingWorker, tile_processor::TileProcessingConfig,
 };
-use crate::render::RenderWorkerPool;
+use crate::render::{RenderWorkerPool, set_mapping_path};
 use clap::Parser;
 use dotenvy::dotenv;
 use geo::{Coord, Geometry, MapCoordsInPlace};
@@ -30,6 +30,7 @@ pub(crate) fn start() {
     tracy_client::Client::start();
 
     let cli = Cli::parse();
+    set_mapping_path(cli.mapping_path.clone());
 
     let render_worker_pool = {
         let connection_pool = r2d2::Pool::builder()

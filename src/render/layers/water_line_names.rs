@@ -8,7 +8,7 @@ use crate::render::{
         text_on_line::{Align, Distribution, Repeat, TextOnLineOptions, draw_text_on_line},
     },
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_geometry},
+    projectable::TileProjectable,
     regex_replacer::{Replacement, replace},
 };
 use pangocairo::pango::Style;
@@ -26,8 +26,14 @@ static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
 pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
     let _span = tracy_client::span!("water_line_names::render");
 
-    let sql = format!(
-        "
+    let rows = ctx.legend_features("water_lines", || {
+        let w = if ctx.zoom < 14 {
+            "AND type = 'river'"
+        } else {
+            ""
+        };
+
+        let sql = format!("
             WITH merged AS (
                 SELECT
                     ST_LineMerge(ST_Collect(ST_Segmentize(ST_Simplify(geometry, 24), 200))) AS geometry,
@@ -39,7 +45,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
                 WHERE
                     name <> '' AND
                     geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-                    {}
+                    {w}
                 GROUP BY
                     name,
                     type
@@ -53,15 +59,10 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
             ORDER BY
                 type <> 'river',
                 osm_id
-        ",
-        if ctx.zoom < 14 {
-            "AND type = 'river'"
-        } else {
-            ""
-        }
-    );
+        ");
 
-    let rows = client.query(&sql, &ctx.bbox_query_params(Some(2048.0)).as_params())?;
+        client.query(&sql, &ctx.bbox_query_params(Some(2048.0)).as_params())
+    })?;
 
     let mut options = TextOnLineOptions {
         flo: FontAndLayoutOptions {
@@ -75,27 +76,19 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
     };
 
     for row in rows {
-        let Some(geom) = geometry_geometry(&row) else {
-            continue;
-        };
+        let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
 
-        let geom = geom.project_to_tile(&ctx.tile_projector);
-
-        let typ: &str = row.get("type");
+        let typ = row.get_string("type")?;
 
         options.distribution = Distribution::Align {
             align: Align::Center,
             repeat: Repeat::Spaced(if typ == "river" { 400.0 } else { 300.0 }),
         };
 
+        let name = replace(row.get_string("name")?, &REPLACEMENTS);
+
         walk_geometry_line_strings(&geom, &mut |geom| {
-            let _drawn = draw_text_on_line(
-                ctx.context,
-                geom,
-                &replace(row.get("name"), &REPLACEMENTS),
-                Some(collision),
-                &options,
-            )?;
+            let _drawn = draw_text_on_line(ctx.context, geom, &name, Some(collision), &options)?;
 
             cairo::Result::Ok(())
         })?;

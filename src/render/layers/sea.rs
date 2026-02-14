@@ -3,7 +3,7 @@ use crate::render::{
     ctx::Ctx,
     draw::path_geom::path_geometry,
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_geometry},
+    projectable::TileProjectable,
 };
 use postgres::Client;
 
@@ -19,36 +19,37 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
     let zoom = ctx.zoom;
 
-    let sql = format!(
-        "
-        SELECT
-            ST_Intersection(ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5), ST_Buffer(geometry, $6)) AS geometry
-        FROM
-            {}
-        WHERE
-            geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
-        ",
-        match zoom {
+    let rows = ctx.legend_features("sea", || {
+        let table = match zoom {
             ..=7 => "land_z5_7",
             8..=10 => "land_z8_10",
             11..=13 => "land_z11_13",
             14.. => "land_z14_plus",
-        }
-    );
-
-    let rows = client.query(
-        &sql,
-        &ctx.bbox_query_params(Some(2.0))
-            .push((20.0 - zoom as f64).exp2() / 25.0)
-            .as_params(),
-    )?;
-
-    for row in rows {
-        let Some(geom) = geometry_geometry(&row) else {
-            continue;
         };
 
-        let geom = geom.project_to_tile(&ctx.tile_projector);
+        #[cfg_attr(any(), rustfmt::skip)]
+        let sql = format!("
+            SELECT
+                ST_Intersection(
+                    ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5),
+                    ST_Buffer(geometry, $6)
+                ) AS geometry
+            FROM
+                {table}
+            WHERE
+                geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
+        ");
+
+        client.query(
+            &sql,
+            &ctx.bbox_query_params(Some(2.0))
+                .push((20.0 - zoom as f64).exp2() / 25.0)
+                .as_params(),
+        )
+    })?;
+
+    for row in rows {
+        let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
 
         path_geometry(context, &geom);
 

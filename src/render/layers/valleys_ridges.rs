@@ -1,4 +1,5 @@
 use crate::render::{
+    Feature,
     collision::Collision,
     colors,
     ctx::Ctx,
@@ -7,12 +8,12 @@ use crate::render::{
         text_on_line::{Align, Distribution, Repeat, TextOnLineOptions, draw_text_on_line},
     },
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_line_string},
+    projectable::TileProjectable,
     regex_replacer::{Replacement, replace},
 };
 use geo::ChaikinSmoothing;
 use pangocairo::pango::Style;
-use postgres::{Client, Row};
+use postgres::Client;
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -38,13 +39,13 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
     let collision = &mut Collision::new(Some(context));
 
-    let mut render_rows = |rows: Vec<Row>| -> cairo::Result<()> {
+    let mut render_rows = |rows: Vec<Feature>| -> LayerRenderResult {
         for row in rows {
-            let name = replace(row.get("name"), &REPLACEMENTS);
+            let name = replace(row.get_string("name")?, &REPLACEMENTS);
 
-            let geom = geometry_line_string(&row).project_to_tile(&ctx.tile_projector);
+            let geom = row.get_line_string()?.project_to_tile(&ctx.tile_projector);
 
-            let offset_factor: f64 = row.get("offset_factor");
+            let offset_factor = row.get_f64("offset_factor")?;
 
             let mut options = TextOnLineOptions {
                 flo: FontAndLayoutOptions {
@@ -85,37 +86,48 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
     context.push_group();
 
-    let sql = format!(
-        "
-        SELECT
-            geometry,
-            name,
-            LEAST(1.2, ST_Length(geometry) / 5000) AS offset_factor
-        FROM
-            osm_feature_lines
-        WHERE
-            type = 'valley' AND
-            name <> '' AND
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ORDER BY
-            ST_Length(geometry) {}
-        ",
-        if ctx.zoom > 14 { "ASC" } else { "DESC" }
-    );
+    let rows = ctx.legend_features("valleys_ridges", || {
+        let dir = if ctx.zoom > 14 { "ASC" } else { "DESC" };
 
-    render_rows(client.query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params())?)?;
+        #[cfg_attr(any(), rustfmt::skip)]
+        let sql = format!("
+            SELECT
+                geometry,
+                name,
+                LEAST(1.2, ST_Length(geometry) / 5000) AS offset_factor
+            FROM
+                osm_feature_lines
+            WHERE
+                type = 'valley' AND
+                name <> '' AND
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            ORDER BY
+                ST_Length(geometry) {dir}
+        ");
 
-    let sql = "
-        SELECT
-            geometry, name, 0::double precision AS offset_factor
-        FROM
-            osm_feature_lines
-        WHERE
-            type = 'ridge' AND name <> '' AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ORDER BY
-            ST_Length(geometry) DESC";
+        client.query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params())
+    })?;
 
-    render_rows(client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())?)?;
+    render_rows(rows)?;
+
+    let rows = ctx.legend_features("valleys_ridges", || {
+        let sql = "
+            SELECT
+                geometry, name, 0::double precision AS offset_factor
+            FROM
+                osm_feature_lines
+            WHERE
+                type = 'ridge' AND
+                name <> '' AND
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            ORDER BY
+                ST_Length(geometry) DESC
+        ";
+
+        client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())
+    })?;
+
+    render_rows(rows)?;
 
     context.pop_group_to_source()?;
 

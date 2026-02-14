@@ -1,4 +1,4 @@
-use crate::render::svg_repo::SvgRepoError;
+use crate::render::{FeatureError, GeomError, svg_repo::SvgRepoError};
 use std::fmt;
 use thiserror::Error;
 
@@ -21,6 +21,9 @@ pub enum LayerRenderError {
 
     #[error("Cairo borrow error: {0}")]
     CairoBorrow(#[from] cairo::BorrowError),
+
+    #[error("Feature error: {0}")]
+    FeatureError(#[from] FeatureError),
 }
 
 pub type LayerRenderResult = Result<(), LayerRenderError>;
@@ -73,5 +76,11 @@ impl From<postgres::Error> for LayerRenderError {
 impl From<geojson::Error> for LayerRenderError {
     fn from(err: geojson::Error) -> Self {
         Self::GeoJson(Box::new(err))
+    }
+}
+
+impl From<GeomError> for LayerRenderError {
+    fn from(err: GeomError) -> Self {
+        Self::FeatureError(err.into())
     }
 }

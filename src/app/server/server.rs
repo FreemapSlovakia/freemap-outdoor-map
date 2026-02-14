@@ -3,7 +3,7 @@ use crate::{
         server::{
             app_state::AppState,
             export_route::{self, ExportState},
-            tile_route, wmts_route,
+            legend_route, tile_route, wmts_route,
         },
         tile_processing_worker::TileProcessingWorker,
     },
@@ -52,7 +52,15 @@ pub async fn start_server(
                 .delete(export_route::delete),
         )
         .route("/{zoom}/{x}/{y}", get(tile_route::get))
+        .route("/legend", get(legend_route::get_metadata))
+        .route("/legend/{id}", get(legend_route::get))
         .with_state(app_state)
+        // .layer(
+        //     CorsLayer::new()
+        //         .allow_origin(Any)
+        //         .allow_methods(Any)
+        //         .allow_headers(Any),
+        // )
         .layer(ConcurrencyLimitLayer::new(max_concurrent_connections));
 
     let listener = tokio::net::TcpListener::bind(addr)

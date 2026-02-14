@@ -1,4 +1,5 @@
 use crate::render::{
+    FeatureError,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{
@@ -7,7 +8,7 @@ use crate::render::{
         path_geom::{path_geometry, path_line_string_with_offset, walk_geometry_line_strings},
     },
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_geometry},
+    projectable::TileProjectable,
     svg_repo::SvgRepo,
 };
 use postgres::Client;
@@ -17,25 +18,45 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
     let zoom = ctx.zoom;
 
-    let sql = &format!(
-        "SELECT type, protect_class, geometry FROM osm_protected_areas WHERE geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) {}",
-        if zoom < 12 {
-            " AND NOT (type = 'nature_reserve' OR type = 'protected_area' AND protect_class <> '2')"
+    let rows = ctx.legend_features("protected_areas", || {
+        let extra_where = if zoom < 12 {
+            " AND NOT (
+                type = 'nature_reserve' OR
+                type = 'protected_area' AND tags->'protect_class' <> '2'
+            )"
         } else {
             ""
-        }
-    );
+        };
 
-    let rows = &client.query(sql, &ctx.bbox_query_params(Some(10.0)).as_params())?;
+        #[cfg_attr(any(), rustfmt::skip)]
+        let sql = &format!("
+            SELECT
+                type,
+                COALESCE(tags->'protect_class', '') AS protect_class,
+                geometry
+            FROM
+                osm_landcovers
+            WHERE
+                type IN ('national_park', 'protected_area', 'leisure', 'nature_reserve') AND
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+                {extra_where}
+            ");
+
+        client.query(sql, &ctx.bbox_query_params(Some(10.0)).as_params())
+    })?;
 
     let tile_projector = &ctx.tile_projector;
 
     let geometries: Vec<_> = rows
         .iter()
-        .filter_map(|row| {
-            geometry_geometry(row).map(|geom| (geom.project_to_tile(tile_projector), geom, row))
+        .map(|row| {
+            Ok((
+                row.get_geometry()?.project_to_tile(tile_projector),
+                row.get_geometry()?,
+                row,
+            ))
         })
-        .collect();
+        .collect::<Result<Vec<_>, FeatureError>>()?;
 
     let context = ctx.context;
 
@@ -44,8 +65,8 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         context.save()?;
 
         for (projected, unprojected, row) in &geometries {
-            let typ: &str = row.get("type");
-            let protect_class: &str = row.get("protect_class");
+            let typ = row.get_string("type")?;
+            let protect_class = row.get_string("protect_class")?;
 
             if typ == "national_park" || typ == "protected_area" && protect_class == "2" {
                 context.push_group();
@@ -70,51 +91,57 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         context.restore()?;
     }
 
-    // NOTE we do ST_Intersection to prevent memory error for very long borders on bigger zooms
-
-    let sql = &format!(
-        "
-        SELECT
-            type,
-            protect_class,
-            ST_Intersection(geometry, ST_Expand(ST_MakeEnvelope($6, $7, $8, $9, 3857), 50000)) AS geometry
-        FROM
-            osm_protected_areas
-        WHERE
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            {}
-        ",
-        if zoom < 12 {
-            " AND NOT (type = 'nature_reserve' OR type = 'protected_area' AND protect_class <> '2')"
-        } else {
-            ""
-        }
-    );
+    let w = if zoom < 12 {
+        " AND NOT (type = 'nature_reserve' OR type = 'protected_area' AND tags->'protect_class' <> '2')"
+    } else {
+        ""
+    };
 
     let snap = (26f64 - ctx.zoom as f64).exp2();
 
-    let rows = &client.query(
-        sql,
-        &ctx.bbox_query_params(Some(10.0))
-            .push(((ctx.bbox.min().x - snap) / snap).floor() * snap)
-            .push(((ctx.bbox.min().y - snap) / snap).floor() * snap)
-            .push(((ctx.bbox.max().x + snap) / snap).ceil() * snap)
-            .push(((ctx.bbox.max().y + snap) / snap).ceil() * snap)
-            .as_params(),
-    )?;
+    let rows = ctx.legend_features("protected_areas", || {
+        // NOTE we do ST_Intersection to prevent memory error for very long borders on bigger zooms
+
+        #[cfg_attr(any(), rustfmt::skip)]
+        let sql = &format!("
+            SELECT
+                type,
+                COALESCE(tags->'protect_class', '') AS protect_class,
+                ST_Intersection(
+                    geometry,
+                    ST_Expand(ST_MakeEnvelope($6, $7, $8, $9, 3857), 50000)
+                ) AS geometry
+            FROM
+                osm_landcovers
+            WHERE
+                type IN ('national_park', 'protected_area', 'leisure', 'nature_reserve') AND
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+                {w}
+        ");
+
+        client.query(
+            sql,
+            &ctx.bbox_query_params(Some(10.0))
+                .push(((ctx.bbox.min().x - snap) / snap).floor() * snap)
+                .push(((ctx.bbox.min().y - snap) / snap).floor() * snap)
+                .push(((ctx.bbox.max().x + snap) / snap).ceil() * snap)
+                .push(((ctx.bbox.max().y + snap) / snap).ceil() * snap)
+                .as_params(),
+        )
+    })?;
 
     let geometries: Vec<_> = rows
         .iter()
-        .filter_map(|row| {
-            geometry_geometry(row)
-                .map(|geom| (geom.project_to_tile(&ctx.tile_projector), geom, row))
+        .map(|row| {
+            let geom = row.get_geometry()?;
+            Ok((geom.project_to_tile(&ctx.tile_projector), geom, row))
         })
-        .collect();
+        .collect::<Result<Vec<_>, FeatureError>>()?;
 
     // border
     for (projected, _, row) in &geometries {
-        let typ: &str = row.get("type");
-        let protect_class: &str = row.get("protect_class");
+        let typ = row.get_string("type")?;
+        let protect_class = row.get_string("protect_class")?;
 
         if typ == "nature_reserve" || typ == "protected_area" && protect_class != "2" {
             let sample = svg_repo.get("protected_area")?;
@@ -128,8 +155,8 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     context.push_group();
 
     for (projected, _, row) in &geometries {
-        let typ: &str = row.get("type");
-        let protect_class: &str = row.get("protect_class");
+        let typ = row.get_string("type")?;
+        let protect_class = row.get_string("protect_class")?;
 
         if typ == "national_park" || typ == "protected_area" && protect_class == "2" {
             let wb = if zoom > 10 {
@@ -141,6 +168,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             context.set_source_color(colors::PROTECTED);
             context.set_dash(&[], 0.0);
             context.set_line_width(wb * 0.75);
+            context.set_line_cap(cairo::LineCap::Square);
             context.set_line_join(cairo::LineJoin::Round);
             path_geometry(context, projected);
             context.stroke()?;

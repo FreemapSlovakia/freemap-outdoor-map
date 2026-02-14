@@ -13,6 +13,7 @@ areas:
     - barrier
 tags:
   include:
+    - abandoned
     - access
     - covered
     - denotation
@@ -20,16 +21,25 @@ tags:
     - drinking_water
     - ele
     - fee
+    - generator:method
+    - generator:source
     - icao
     - intermittent
+    - location
+    - plant:method
+    - plant:source
+    - protect_class
     - protected
     - ref
     - refitted
+    - ruins
     - seasonal
     - shelter_type
     - tower:type
     - water_characteristic
     - wetland
+  include_regex:
+    - ^(disused|abandoned|ruins|demolished|removed|destroyed|was):(leisure|natural|amenity|highway)
 generalized_tables:
   waterareas_gen1:
     source: waterareas
@@ -55,11 +65,11 @@ generalized_tables:
     tolerance: 50
   waterways_gen0:
     source: waterways_gen1
-    sql_filter: type='river'
+    sql_filter: type='river' OR type='canal'
     tolerance: 200
   waterways_gen1:
     source: waterways
-    sql_filter: type='river'
+    sql_filter: type='river' OR type='canal'
     tolerance: 50
   landcovers_gen1:
     source: landcovers
@@ -193,18 +203,10 @@ tables:
         type: hstore_tags
         args:
           include:
+            - protect_class
             - wetland
     type: polygon
     mappings:
-      man_made:
-        mapping:
-          man_made:
-            - clearcut
-            - bunker_silo
-            - silo
-            - storage_tank
-            - wastewater_plant
-            - bridge
       amenity:
         mapping:
           amenity:
@@ -215,44 +217,16 @@ tables:
             - parking
             - hospital
             - grave_yard
-      leisure:
+      boundary:
         mapping:
-          leisure:
-            - park
-            - garden
-            - playground
-            - golf_course
-            - sports_centre # TODO
-            - pitch
-            - stadium
-            - dog_park # TODO
-            - track
-      tourism:
+          boundary:
+            - national_park
+            - protected_area
+      highway:
         mapping:
-          tourism:
-            - zoo
-            - theme_park
-      natural:
-        mapping:
-          natural:
-            - bare_rock
-            - bay # TODO can also be a node
-            - beach
-            - blockfield
-            - fell
-            - fjord # TODO can also be a node or way
-            - glacier
-            - grassland
-            - heath
-            - moor
-            - peninsula # TODO can also be a node
-            - sand
-            - scree
-            - scrub
-            - shingle # TODO
-            - wetland # TODO as overlay layer
-            - wood
-
+          highway:
+            - pedestrian
+            - footway
       landuse:
         mapping:
           landuse:
@@ -287,9 +261,7 @@ tables:
             - logging
             - meadow
             - military
-            - military # TODO maybe as overlay layer
             - orchard
-            - park
             - plant_nursery
             - plantation
             - quarry
@@ -300,17 +272,54 @@ tables:
             - reservoir_watershed
             - residential
             - retail
-            - school
             - shrubs
             - village_green
             - vineyard
             - winter_sports
-            - wood
-      highway:
+      leisure:
         mapping:
-          highway:
-            - pedestrian
-            - footway
+          leisure:
+            - dog_park
+            - garden
+            - golf_course
+            - nature_reserve
+            - park
+            - pitch
+            - playground
+            - sports_centre
+            - stadium
+            - track
+      man_made:
+        mapping:
+          man_made:
+            - clearcut
+            - bunker_silo
+            - silo
+            - storage_tank
+            - wastewater_plant
+            - bridge
+      natural:
+        mapping:
+          natural:
+            - bare_rock
+            - beach
+            - blockfield
+            - fell
+            - glacier
+            - grassland
+            - heath
+            - moor
+            - sand
+            - scree
+            - scrub
+            - shingle
+            - wetland
+            - wood
+      tourism:
+        mapping:
+          tourism:
+            - zoo
+            - theme_park
       waterway:
         mapping:
           waterway:
@@ -327,10 +336,35 @@ tables:
         type: string
         key: name
       - name: type
-        type: mapping_value
+        type: expression
+        args:
+          expression: |
+            "building" in tags && "abandoned" in tags && get(tags, "abandoned") == "yes" ? "abandoned:" + get(tags, "building") :
+            "building" in tags && "disused" in tags && get(tags, "disused") == "yes" ? "disused:" + get(tags, "building") :
+            "building" in tags && "ruins" in tags && get(tags, "ruins") == "yes" ? "ruins:" + get(tags, "building") :
+            "disused:building" in tags ? "disused:" + get(tags, "disused:building") :
+            "abandoned:building" in tags ? "abandoned:" + get(tags, "abandoned:building") :
+            "ruins:building" in tags ? "ruins:" + get(tags, "ruins:building") :
+            get(tags, "building")
     type: polygon
+    filters:
+      reject:
+        building:
+          - "no"
+        disused:building:
+          - "no"
+        abandoned:building:
+          - "no"
+        ruins:building:
+          - "no"
     mapping:
       building:
+        - __any__
+      disused:building:
+        - __any__
+      abandoned:building:
+        - __any__
+      ruins:building:
         - __any__
 
   shops:
@@ -400,23 +434,6 @@ tables:
       place:
         - __any__
 
-  aeroways:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: name
-        type: string
-        key: name
-      - name: type
-        type: mapping_value
-    type: linestring
-    mapping:
-      aeroway:
-        - runway
-        - taxiway
-
   waterways:
     columns:
       - name: osm_id
@@ -440,27 +457,19 @@ tables:
     type: linestring
     mapping:
       waterway:
-        - river
         - canal
-        - stream
-        - drain
+        - canoe_pass
         - ditch
-
-  barrierways:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: name
-        type: string
-        key: name
-      - name: type
-        type: mapping_value
-    type: linestring
-    mapping:
-      barrier:
-        - __any__
+        - drain
+        - fairway
+        - fish_pass
+        - flowline
+        - link
+        - rapids
+        - ressurised
+        - river
+        - stream
+        - tidal_channel
 
   feature_lines:
     columns:
@@ -476,6 +485,11 @@ tables:
         aliases:
           ford:
             __any__: ford
+      - name: tags
+        type: hstore_tags
+        args:
+          include:
+            - location
       - name: fixme
         type: string
         key: fixme
@@ -485,22 +499,47 @@ tables:
           - "no"
     type: linestring
     mapping:
+      aeroway:
+        - parking_position
+        - runway
+        - taxilane
+        - taxiway
+      aerialway:
+        - cable_car
+        - chair_lift
+        - drag_lift
+        - gondola
+        - goods
+        - j-bar
+        - magic_carpet
+        - mixed_lift
+        - platter
+        - rope_tow
+        - t-bar
+        - zip_line
       barrier:
-        - ditch # TODO
+        - city_wall
+        - ditch
+        - fence
+        - hedge
+        - retaining_wall
+        - wall
       ford:
         - __any__
       man_made:
         - cutline
-        - embankment
         - dyke
+        - embankment
+        - pipeline
       millitary:
         - trench
       natural:
         - cliff
         - earth_bank
+        - fjord # also in area/node
         - gully
-        - ridge # TODO
-        - strait # TODO can be also node or area
+        - ridge
+        - strait # also in area/node
         - tree_row
         - valley
       power:
@@ -510,52 +549,7 @@ tables:
         - dam
         - weir
 
-  pipelines:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: name
-        type: string
-        key: name
-      - name: location
-        type: string
-        key: location
-      - name: substance
-        type: string # TODO
-        key: substance
-    type: linestring
-    mapping:
-      man_made:
-        - pipeline
-
-  # TODO merge to landcover
-  protected_areas:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: name
-        type: string
-        key: name
-      - name: type
-        type: mapping_value
-      - name: protect_class
-        type: string
-        key: protect_class
-      - name: area
-        type: webmerc_area
-    type: polygon
-    mapping:
-      boundary:
-        - national_park
-        - protected_area
-      leisure:
-        - nature_reserve
-
-  features:
+  pois:
     multi_values: [sport, amenity]
     columns:
       - name: osm_id
@@ -579,11 +573,15 @@ tables:
           ford:
             __any__: ford
           historic:
-            mine: disused_mine
+            mine: historic_mine
+            bunker: historic_bunker
           mountain_pass:
             yes: mountain_pass
           power:
             tower: power_tower
+          leisure:
+            miniature_golf: leisure_miniature_golf
+            horse_riding: leisure_horse_riding
       - name: tags
         type: hstore_tags
         args:
@@ -753,7 +751,6 @@ tables:
                 - nameplate
                 - nightclub
                 - nursing_home
-                - office
                 - parcel_locker
                 - parking
                 - parking_entrance
@@ -835,7 +832,7 @@ tables:
                 - watering_place
                 - weighbridge
                 - workshop
-          # TODO only gate, lift_gate and swing_gate is renderred now
+          # only gate, lift_gate and swing_gate is renderred now
           barrier:
             mapping:
               barrier:
@@ -910,6 +907,7 @@ tables:
                 - wayside_shrine
           information:
             mapping:
+              # TODO filter only tourism=information
               information:
                 - guidepost
                 - board
@@ -919,9 +917,9 @@ tables:
           leisure:
             mapping:
               leisure:
-                - beach_resort # TODO
+                - beach_resort
                 - bird_hide
-                - dog_park # TODO
+                - dog_park
                 - firepit
                 - golf_course
                 - horse_riding
@@ -929,7 +927,7 @@ tables:
                 - outdoor_seating
                 - picnic_table
                 - playground
-                - resort # TODO
+                - resort
                 - sauna
                 - water_park
           man_made:
@@ -943,7 +941,6 @@ tables:
                 - cross
                 - forester's_lodge
                 - ice_house # TODO
-                - mine
                 - mineshaft
                 - pumping_station
                 - reservoir_covered
@@ -963,18 +960,22 @@ tables:
             mapping:
               natural:
                 - arch
+                - bay
                 - birds_nest
+                - cape
                 - cave_entrance
-                - cape # can only be a node
+                - fjord # also a way
                 - geyser
                 - hot_spring
                 - peak
+                - peninsula
                 - rock
                 - saddle
                 - shrub
                 - sinkhole
                 - spring
                 - stone
+                - strait # also as way
                 - tree
           power:
             mapping:
@@ -998,13 +999,10 @@ tables:
                 - attraction
                 - camp_site
                 - caravan_site
-                - castle
                 - chalet
                 - guest_house
                 - hostel
                 - hotel
-                - memorial
-                - monument
                 - motel
                 - museum
                 - picnic_site
@@ -1015,125 +1013,158 @@ tables:
           waterway:
             mapping:
               waterway:
+                - boatyard
+                - dock
+                - dam
                 - waterfall
                 - weir
-                - dam
-          sport:
-            mapping:
-              sport:
-                - 10pin
-                - 9pin
-                - aikido
-                - american_football
-                - archery
-                - athletics
-                - badminton
-                - baseball
-                - basketball
-                - beachvolleyball
-                - biathlon
-                - billiards
-                - bmx
-                - boules
-                - bowls
-                - boxing
-                - bullfighting
-                - calisthenics
-                - canoe
-                - chess
-                - climbing
-                - climbing_adventure
-                - cricket
-                - cricket_nets
-                - croquet
-                - crossfit
-                - cycling
-                - darts
-                - disc_golf
-                - dog_agility
-                - dog_racing
-                - dog_training
-                - equestrian
-                - fencing
-                - field_hockey
-                - fishing
-                - fitness
-                - five-a-side
-                - football
-                - free_flying
-                - futsal
-                - gaelic_games
-                - golf
-                - gymnastics
-                - handball
-                - hockey
-                - horse_racing
-                - horse_riding
-                - ice_hockey
-                - ice_skating
-                - ice_stock
-                - judo
-                - karate
-                - karting
-                - kitesurfing
-                - korfball
-                - laser_tag
-                - long_jump
-                - martial_arts
-                - mini_tennis
-                - miniature_golf
-                - model_aerodrome
-                - motocross
-                - motor
-                - mtb
-                - multi
-                - netball
-                - orienteering
-                - paddle_tennis
-                - padel
-                - paintball
-                - paragliding
-                - parkour
-                - pelota
-                - petanque
-                - pickleball
-                - pilates
-                - racquet
-                - rc_car
-                - roller_skating
-                - rowing
-                - rugby
-                - rugby_league
-                - rugby_union
-                - running
-                - sailing
-                - scuba_diving
-                - shooting
-                - skateboard
-                - skating
-                - ski
-                - ski_jumping
-                - skiing
-                - skittles
-                - snooker
-                - soccer
-                - squash
-                - surfing
-                - swimming
-                - table_soccer
-                - table_tennis
-                - taekwondo
-                - team_handball
-                - tennis
-                - toboggan
-                - trampoline
-                - ultralight_aviation
-                - via_ferrata
-                - volleyball
-                - wakeboarding
-                - water_ski
-                - weightlifting
-                - yoga
+                - rapids
+
+  sports:
+    multi_values: [sport]
+    columns:
+      - name: osm_id
+        type: id
+      - name: geometry
+        type: geometry
+        geometry_transform: point_on_surface
+      - name: name
+        type: string
+        key: name
+      - name: type
+        type: mapping_value
+      - name: tags
+        type: hstore_tags
+        args:
+          include:
+            - access
+    filters:
+      filter: |
+        !("shop" in tags) &&
+        (
+          !(
+            "club" in tags ||
+            any(keys(tags), { # matches "^(disused|abandoned|ruins|demolished|removed|destroyed|was):(leisure|natural|amenity|highway)" })
+          ) ||
+          any(["leisure", "natural", "amenity", "highway"], # in tags)
+        )
+    type: point_or_polygon
+    mapping:
+      sport:
+        - 10pin
+        - 9pin
+        - aikido
+        - american_football
+        - archery
+        - athletics
+        - badminton
+        - baseball
+        - basketball
+        - beachvolleyball
+        - biathlon
+        - billiards
+        - bmx
+        - boules
+        - bowls
+        - boxing
+        - bullfighting
+        - calisthenics
+        - canoe
+        - chess
+        - climbing
+        - climbing_adventure
+        - cricket
+        - cricket_nets
+        - croquet
+        - crossfit
+        - cycling
+        - darts
+        - disc_golf
+        - dog_agility
+        - dog_racing
+        - dog_training
+        - equestrian
+        - fencing
+        - field_hockey
+        - fishing
+        - fitness
+        - five-a-side
+        - football
+        - free_flying
+        - futsal
+        - gaelic_games
+        - golf
+        - gymnastics
+        - handball
+        - hockey
+        - horse_racing
+        - horse_riding
+        - ice_hockey
+        - ice_skating
+        - ice_stock
+        - judo
+        - karate
+        - karting
+        - kitesurfing
+        - korfball
+        - laser_tag
+        - long_jump
+        - martial_arts
+        - mini_tennis
+        - miniature_golf
+        - model_aerodrome
+        - motocross
+        - motor
+        - mtb
+        - multi
+        - netball
+        - orienteering
+        - paddle_tennis
+        - padel
+        - paintball
+        - paragliding
+        - parkour
+        - pelota
+        - petanque
+        - pickleball
+        - pilates
+        - racquet
+        - rc_car
+        - roller_skating
+        - rowing
+        - rugby
+        - rugby_league
+        - rugby_union
+        - running
+        - sailing
+        - scuba_diving
+        - shooting
+        - skateboard
+        - skating
+        - ski
+        - ski_jumping
+        - skiing
+        - skittles
+        - snooker
+        - soccer
+        - squash
+        - surfing
+        - swimming
+        - table_soccer
+        - table_tennis
+        - taekwondo
+        - team_handball
+        - tennis
+        - toboggan
+        - trampoline
+        - ultralight_aviation
+        - via_ferrata
+        - volleyball
+        - wakeboarding
+        - water_ski
+        - weightlifting
+        - yoga
+
   power_generators:
     columns:
       - name: osm_id
@@ -1144,18 +1175,22 @@ tables:
         type: string
         key: name
       - name: source
-        type: string
-        key: generator:source
+        type: expression
+        args:
+          expression: 'tags.power == "plant" ? get(tags, "plant:source") ?? "" : tags.power == "generator" ? get(tags, "generator:source") ?? "" : ""'
       - name: method
-        type: string
-        key: generator:method
+        type: expression
+        args:
+          expression: 'tags.power == "plant" ? get(tags, "plant:method") ?? "" : tags.power == "generator" ? get(tags, "generator:method") ?? "" : ""'
     type: geometry
     type_mappings:
       points:
         power:
+          - plant
           - generator
       polygons:
         power:
+          - plant
           - generator
 
   place_of_worships:
@@ -1178,25 +1213,6 @@ tables:
     mapping:
       amenity:
         - place_of_worship
-
-  aerialways:
-    columns:
-      - name: osm_id
-        type: id
-      - name: geometry
-        type: geometry
-      - name: type
-        type: mapping_value
-      - name: name
-        type: string
-        key: name
-      - name: ref
-        type: string
-        key: ref
-    type: linestring
-    mapping:
-      aerialway:
-        - __any__
 
   roads:
     columns:

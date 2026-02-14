@@ -7,10 +7,12 @@ use crate::render::{
         create_pango_layout::FontAndLayoutOptions,
         text::{TextOptions, draw_text},
     },
+    feature::{GEOMETRY_COLUMN, WrongTypeError},
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_point},
+    projectable::TileProjectable,
     regex_replacer::{Replacement, replace},
 };
+use geo::{Centroid, Geometry};
 use pangocairo::pango::Style;
 use postgres::Client;
 use regex::Regex;
@@ -19,21 +21,21 @@ use std::sync::LazyLock;
 static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
     vec![
         (
-            Regex::new(r"[Čč]istička odpadových vôd").expect("regex"),
+            Regex::new("[Čč]istička odpadových vôd").expect("regex"),
             "ČOV",
         ),
         (
-            Regex::new(r"[Pp]oľnohospodárske družstvo").expect("regex"),
+            Regex::new("[Pp]oľnohospodárske družstvo").expect("regex"),
             "PD",
         ),
-        (Regex::new(r"[Nn]ámestie").expect("regex"), "nám. "),
+        (Regex::new("[Nn]ámestie").expect("regex"), "nám. "),
     ]
 });
 
 pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
     let _span = tracy_client::span!("landcover_names::render");
 
-    let rows = {
+    let rows = ctx.legend_features("landcovers", || {
         let z_order_case = build_landcover_z_order_case("type");
 
         // TODO include types (`type IN`), don't exclude (`type NOT IN`)
@@ -50,21 +52,21 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
                 FROM
                     osm_landcovers
                 WHERE
-                    type NOT IN ('zoo', 'theme_park', 'winter_sports') AND
+                    type NOT IN ('zoo', 'theme_park', 'winter_sports', 'national_park', 'protected_area') AND
                     name <> '' AND
                     area >= $6 AND
                     geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
             )
             SELECT
                 name,
-                type IN ('forest', 'wood', 'scrub', 'heath', 'grassland', 'scree', 'blockfield', 'meadow', 'fell', 'wetland') AS natural,
+                type,
                 ST_PointOnSurface(geometry) AS geometry
             FROM
                 main
             ORDER BY
                 {z_order_case} DESC,
                 osm_id
-            ",
+        "
         );
 
         client.query(
@@ -72,8 +74,8 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
             &ctx.bbox_query_params(Some(512.0))
                 .push(2_400_000.0f32 / (2.0f32 * (ctx.zoom as f32 - 10.0)).exp2())
                 .as_params(),
-        )?
-    };
+        )
+    })?;
 
     let mut text_options = TextOptions {
         flo: FontAndLayoutOptions {
@@ -85,7 +87,21 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
     };
 
     for row in rows {
-        let natural: bool = row.get("natural");
+        let typ = row.get_string("type")?;
+
+        let natural = matches!(
+            typ,
+            "forest"
+                | "wood"
+                | "scrub"
+                | "heath"
+                | "grassland"
+                | "scree"
+                | "blockfield"
+                | "meadow"
+                | "fell"
+                | "wetland"
+        );
 
         text_options.flo.style = if natural {
             Style::Italic
@@ -99,11 +115,28 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
             colors::AREA_LABEL
         };
 
+        let g = match row.get_geometry()? {
+            Geometry::Point(point) => point,
+            Geometry::Polygon(polygon) => polygon.centroid().expect("centroid"),
+            Geometry::MultiPolygon(mp) => mp.centroid().expect("centroid"),
+            _ => {
+                return Err(
+                    crate::render::layer_render_error::LayerRenderError::FeatureError(
+                        crate::render::FeatureError::WrongTypeError(WrongTypeError::new(
+                            GEOMETRY_COLUMN,
+                            "Point, Polygon or Multipolygon",
+                            "?",
+                        )),
+                    ),
+                );
+            }
+        };
+
         draw_text(
             ctx.context,
             Some(collision),
-            &geometry_point(&row).project_to_tile(&ctx.tile_projector),
-            &replace(row.get("name"), &REPLACEMENTS),
+            &g.project_to_tile(&ctx.tile_projector),
+            &replace(row.get_string("name")?, &REPLACEMENTS),
             &text_options,
         )?;
     }

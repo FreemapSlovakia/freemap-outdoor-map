@@ -3,34 +3,32 @@ use crate::render::{
     ctx::Ctx,
     draw::path_geom::path_geometry,
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_geometry},
+    projectable::TileProjectable,
 };
 use postgres::Client;
 
 pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let _span = tracy_client::span!("borders::render");
 
-    let sql = "
-        SELECT
-            geometry
-        FROM
-            osm_country_members
-        WHERE
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-    ";
+    let rows = ctx.legend_features("country_borders", || {
+        let sql = "
+            SELECT
+                geometry
+            FROM
+                osm_country_members
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ";
 
-    let rows = client.query(sql, &ctx.bbox_query_params(Some(10.0)).as_params())?;
+        client.query(sql, &ctx.bbox_query_params(Some(10.0)).as_params())
+    })?;
 
     ctx.context.push_group();
 
     let context = ctx.context;
 
     for row in rows {
-        let Some(geometry) =
-            geometry_geometry(&row).map(|geom| geom.project_to_tile(&ctx.tile_projector))
-        else {
-            continue;
-        };
+        let geometry = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
 
         ctx.context.set_dash(&[], 0.0);
         ctx.context.set_source_color(colors::ADMIN_BORDER);
@@ -39,6 +37,7 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         } else {
             6.0
         });
+        ctx.context.set_line_cap(cairo::LineCap::Square);
         ctx.context.set_line_join(cairo::LineJoin::Round);
         path_geometry(context, &geometry);
         ctx.context.stroke()?;

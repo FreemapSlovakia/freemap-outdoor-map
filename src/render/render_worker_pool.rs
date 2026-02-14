@@ -79,7 +79,7 @@ impl RenderWorkerPool {
                                 &request,
                                 &mut client,
                                 &mut svg_repo,
-                                &mut hillshading_datasets,
+                                hillshading_datasets.as_mut(),
                                 mask_geometry.as_ref(),
                             )
                             .map_err(ReError::from)

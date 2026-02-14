@@ -3,7 +3,7 @@ use crate::render::{
     ctx::Ctx,
     draw::{hatch::hatch_geometry, path_geom::path_geometry},
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_geometry},
+    projectable::TileProjectable,
 };
 use postgres::Client;
 
@@ -12,26 +12,26 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
     let zoom = ctx.zoom;
 
-    let table_suffix = match zoom {
-        ..=9 => "_gen0",
-        10..=11 => "_gen1",
-        12.. => "",
-    };
+    let rows = ctx.legend_features("water_areas", || {
+        let table_suffix = match zoom {
+            ..=9 => "_gen0",
+            10..=11 => "_gen1",
+            12.. => "",
+        };
 
-    let rows = client.query(
-        &format!(
-            "
+        #[cfg_attr(any(), rustfmt::skip)]
+        let sql = format!("
             SELECT
-                type,
-                geometry, COALESCE(intermittent OR seasonal, false) AS tmp
+                geometry,
+                COALESCE(intermittent OR seasonal, false) AS tmp
             FROM
                 osm_waterareas{table_suffix}
             WHERE
                 geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
-            "
-        ),
-        &ctx.bbox_query_params(None).as_params(),
-    )?;
+        ");
+
+        client.query(&sql, &ctx.bbox_query_params(None).as_params())
+    })?;
 
     let context = ctx.context;
 
@@ -40,13 +40,11 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     context.save()?;
 
     for row in rows {
-        let Some(geom) = geometry_geometry(&row) else {
-            continue;
-        };
+        let geom = row.get_geometry()?;
 
         let projected = geom.project_to_tile(tile_projector);
 
-        let tmp: bool = row.get("tmp");
+        let tmp: bool = row.get_bool("tmp")?;
 
         if tmp {
             context.push_group();

@@ -26,14 +26,14 @@ pub fn render(
     request: &RenderRequest,
     client: &mut postgres::Client,
     svg_repo: &mut SvgRepo,
-    hillshading_datasets: &mut Option<HillshadingDatasets>,
+    hillshading_datasets: Option<&mut HillshadingDatasets>,
     mask_geometry: Option<&Geometry>,
 ) -> Result<Vec<u8>, RenderError> {
     let _span = tracy_client::span!("render_tile");
 
     let size = bbox_size_in_pixels(request.bbox, request.zoom as f64);
 
-    let mut render = |surface: &Surface| {
+    let render = |surface: &Surface| {
         layers::render(
             surface,
             request,

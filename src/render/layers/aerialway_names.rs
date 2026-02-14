@@ -7,27 +7,30 @@ use crate::render::{
         text_on_line::{Align, Distribution, Repeat, TextOnLineOptions, draw_text_on_line},
     },
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_line_string},
+    projectable::TileProjectable,
 };
 use postgres::Client;
 
 pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
     let _span = tracy_client::span!("aerialway_names::render");
 
-    let sql = "
-        SELECT
-            geometry,
-            name
-        FROM
-            osm_aerialways
-        WHERE
-            name <> '' AND
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ORDER BY
-            osm_id
-    ";
+    let rows = ctx.legend_features("feature_lines", || {
+        let sql = "
+            SELECT
+                geometry,
+                name
+            FROM
+                osm_feature_lines
+            WHERE
+                name <> '' AND
+                type IN ('cable_car', 'chair_lift', 'drag_lift', 'gondola', 'goods', 'j-bar', 'magic_carpet', 'mixed_lift', 'platter', 'rope_tow', 't-bar', 'zip_line') AND
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            ORDER BY
+                osm_id
+        ";
 
-    let rows = client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())?;
+        client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())
+    })?;
 
     let options = TextOnLineOptions {
         distribution: Distribution::Align {
@@ -39,9 +42,9 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
     };
 
     for row in rows {
-        let name: &str = row.get("name");
+        let name = row.get_string("name")?;
 
-        let geom = geometry_line_string(&row).project_to_tile(&ctx.tile_projector);
+        let geom = row.get_line_string()?.project_to_tile(&ctx.tile_projector);
 
         let geom = offset_line_string(&geom, 10.0);
 

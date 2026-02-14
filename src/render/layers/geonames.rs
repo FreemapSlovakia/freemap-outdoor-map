@@ -6,7 +6,7 @@ use crate::render::{
         text_on_line::{Distribution, TextOnLineOptions, draw_text_on_line},
     },
     layer_render_error::LayerRenderResult,
-    projectable::{TileProjectable, geometry_line_string},
+    projectable::TileProjectable,
 };
 use pangocairo::pango::Style;
 use postgres::Client;
@@ -14,17 +14,21 @@ use postgres::Client;
 pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     let _span = tracy_client::span!("geonames::render");
 
-    let sql = "
-        SELECT
-            name,
-            geometry FROM geonames_smooth
-        WHERE
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ORDER BY
-            ogc_fid
-    ";
+    let rows = ctx.legend_features("geonames", || {
+        let sql = "
+            SELECT
+                name,
+                geometry
+            FROM
+                geonames_smooth
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            ORDER BY
+                ogc_fid
+        ";
 
-    let rows = client.query(sql, &ctx.bbox_query_params(Some(20.0)).as_params())?;
+        client.query(sql, &ctx.bbox_query_params(Some(20.0)).as_params())
+    })?;
 
     let options = TextOnLineOptions {
         flo: FontAndLayoutOptions {
@@ -46,9 +50,9 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
     context.push_group();
 
     for row in rows {
-        let name: &str = row.get("name");
+        let name = row.get_string("name")?;
 
-        let geom = geometry_line_string(&row).project_to_tile(&ctx.tile_projector);
+        let geom = row.get_line_string()?.project_to_tile(&ctx.tile_projector);
 
         let mut options = options;
 

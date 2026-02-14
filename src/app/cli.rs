@@ -85,4 +85,8 @@ pub struct Cli {
     /// Tile index file
     #[arg(long, env = "MAPRENDER_INDEX")]
     pub index: Option<PathBuf>,
+
+    /// Path to the imposm mapping YAML.
+    #[arg(long, env = "MAPRENDER_MAPPING_PATH", default_value = "mapping.yaml")]
+    pub mapping_path: PathBuf,
 }

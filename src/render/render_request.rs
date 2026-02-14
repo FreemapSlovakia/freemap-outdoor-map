@@ -1,4 +1,4 @@
-use crate::render::{image_format::ImageFormat, layers::RouteTypes};
+use crate::render::{image_format::ImageFormat, layers::RouteTypes, legend::LegendItemData};
 use geo::Rect;
 use geojson::Feature;
 
@@ -12,6 +12,7 @@ pub struct RenderRequest {
     pub contours: bool,
     pub route_types: RouteTypes,
     pub featues: Option<Vec<Feature>>,
+    pub legend: Option<LegendItemData>,
 }
 
 impl RenderRequest {
@@ -25,6 +26,7 @@ impl RenderRequest {
             contours: true,
             route_types: RouteTypes::all(),
             featues: None,
+            legend: None,
         }
     }
 }
