@@ -18,7 +18,6 @@ use geo::Geometry;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::sync::broadcast;
 use tower::limit::ConcurrencyLimitLayer;
-use tower_http::cors::{Any, CorsLayer};
 
 pub async fn start_server(
     render_worker_pool: Arc<RenderWorkerPool>,
@@ -56,12 +55,12 @@ pub async fn start_server(
         .route("/legend", get(legend_route::get_metadata))
         .route("/legend/{id}", get(legend_route::get))
         .with_state(app_state)
-        .layer(
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any),
-        )
+        // .layer(
+        //     CorsLayer::new()
+        //         .allow_origin(Any)
+        //         .allow_methods(Any)
+        //         .allow_headers(Any),
+        // )
         .layer(ConcurrencyLimitLayer::new(max_concurrent_connections));
 
     let listener = tokio::net::TcpListener::bind(addr)
