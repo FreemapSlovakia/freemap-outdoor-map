@@ -144,6 +144,9 @@ tables:
       - name: ref
         type: string
         key: ref
+      - name: operator
+        type: string
+        key: operator
       - name: colour
         type: string
         key: colour
