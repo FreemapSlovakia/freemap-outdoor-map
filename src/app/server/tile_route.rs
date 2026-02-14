@@ -88,7 +88,7 @@ pub(crate) async fn serve_tile(
                 }
                 Err(err) => {
                     if err.kind() != std::io::ErrorKind::NotFound {
-                        eprintln!("read tile failed: {err}");
+                        eprintln!("Read tile {coord}@{scale} failed: {err}");
                     }
                 }
             }
@@ -104,7 +104,7 @@ pub(crate) async fn serve_tile(
     let rendered = match state.render_worker_pool.render(render_request).await {
         Ok(rendered) => rendered,
         Err(err) => {
-            eprintln!("render failed: {err}");
+            eprintln!("Render tile {coord}@{scale} failed: {err}");
 
             return Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
@@ -119,7 +119,7 @@ pub(crate) async fn serve_tile(
             .save_tile(rendered.clone(), coord, scale, render_started_at)
             .await
     {
-        eprintln!("enqueue tile save failed: {err}");
+        eprintln!("Enqueue tile {coord}@{scale} save failed: {err}");
     }
 
     Response::builder()
