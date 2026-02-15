@@ -38,10 +38,11 @@ pub fn roads() -> Vec<LegendItem<'static>> {
             types
                 .iter()
                 .flat_map(|typ| {
-                    if *typ == "raceway" {
+                    if *typ == "platform" {
                         vec![
-                            IndexMap::from([("highway", "raceway")]),
-                            IndexMap::from([("leisure", "track")]),
+                            IndexMap::from([("highway", "platform")]),
+                            IndexMap::from([("railway", "platform")]),
+                            IndexMap::from([("public_transport", "platform")]),
                         ]
                     } else {
                         vec![IndexMap::from([("highway", *typ)])]
@@ -251,6 +252,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     tags.push([("highway", "service")].into());
                 } else if grade == "grade2" {
                     tags.push([("highway", "raceway")].into());
+                    tags.push([("leisure", "track")].into());
                 }
 
                 tags
