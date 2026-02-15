@@ -418,6 +418,13 @@
     },
     {
       "key": "building",
+      "value": "ship",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/building.svg",
+      "description": "[features] Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17. [buildings] Rendered from zoom 13. Label (name) from zoom 17. Rendered only when name present."
+    },
+    {
+      "key": "building",
       "value": "synagogue",
       "object_types": ["node", "area"],
       "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/synagogue.svg",
@@ -582,6 +589,13 @@
       "object_types": ["node", "area"],
       "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/ruins.svg",
       "description": "[features] Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "historic",
+      "value": "ship",
+      "object_types": ["node", "area"],
+      "icon_url": "",
+      "description": "[features] ."
     },
     {
       "key": "historic",
@@ -1176,6 +1190,13 @@
       "value": "ski",
       "object_types": ["relation"],
       "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14."
+    },
+    {
+      "key": "seamark:type",
+      "value": "hulk",
+      "object_types": ["area"],
+      "icon_url": "",
+      "description": "[features]"
     },
     {
       "key": "shelter_type",
