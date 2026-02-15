@@ -19,7 +19,6 @@ pub fn roads() -> Vec<LegendItem<'static>> {
         &["secondary", "primary_link", ""],
         &["tertiary", "tertiary_link", "secondary_link"],
         &["residential", "unclassified", "living_street", "road"],
-        &["service"],
         &["footway", "pedestrian"],
         &["platform"],
         &["steps"],
@@ -29,7 +28,6 @@ pub fn roads() -> Vec<LegendItem<'static>> {
         &["bridleway"],
         &["via_ferrata"],
         &["track"],
-        // &["raceway"],
     ]
     .iter()
     .enumerate()
@@ -249,7 +247,9 @@ pub fn roads() -> Vec<LegendItem<'static>> {
             {
                 let mut tags = vec![[("highway", "track"), ("tracktype", grade)].into()];
 
-                if grade == "grade2" {
+                if grade == "grade1" {
+                    tags.push([("highway", "service")].into());
+                } else if grade == "grade2" {
                     tags.push([("highway", "raceway")].into());
                 }
 
