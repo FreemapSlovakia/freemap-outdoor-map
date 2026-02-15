@@ -18,6 +18,7 @@ use geo::Geometry;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::sync::broadcast;
 use tower::limit::ConcurrencyLimitLayer;
+use tower_http::cors::{Any, CorsLayer};
 
 pub async fn start_server(
     render_worker_pool: Arc<RenderWorkerPool>,
@@ -42,7 +43,7 @@ pub async fn start_server(
         allowed_scales: Arc::new(allowed_scales),
     };
 
-    let router = Router::new()
+    let mut router = Router::new()
         .route("/service", get(wmts_route::service_handler))
         .route(
             "/export",
@@ -54,14 +55,16 @@ pub async fn start_server(
         .route("/{zoom}/{x}/{y}", get(tile_route::get))
         .route("/legend", get(legend_route::get_metadata))
         .route("/legend/{id}", get(legend_route::get))
-        .with_state(app_state)
-        // .layer(
-        //     CorsLayer::new()
-        //         .allow_origin(Any)
-        //         .allow_methods(Any)
-        //         .allow_headers(Any),
-        // )
-        .layer(ConcurrencyLimitLayer::new(max_concurrent_connections));
+        .with_state(app_state);
+
+    router = router.layer(
+        CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any),
+    );
+
+    router = router.layer(ConcurrencyLimitLayer::new(max_concurrent_connections));
 
     let listener = tokio::net::TcpListener::bind(addr)
         .await

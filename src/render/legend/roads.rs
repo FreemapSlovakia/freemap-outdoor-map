@@ -29,7 +29,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
         &["bridleway"],
         &["via_ferrata"],
         &["track"],
-        &["raceway"],
+        // &["raceway"],
     ]
     .iter()
     .enumerate()
@@ -246,7 +246,15 @@ pub fn roads() -> Vec<LegendItem<'static>> {
         LegendItem::new(
             format!("road_track_{grade}").leak(),
             Category::RoadsAndPaths,
-            vec![[("highway", "track"), ("tracktype", grade)].into()],
+            {
+                let mut tags = vec![[("highway", "track"), ("tracktype", grade)].into()];
+
+                if grade == "grade2" {
+                    tags.push([("highway", "raceway")].into());
+                }
+
+                tags
+            },
             with_landcover("wood", 17)
                 .with_feature(
                     "roads",

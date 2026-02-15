@@ -89,4 +89,13 @@ pub struct Cli {
     /// Path to the imposm mapping YAML.
     #[arg(long, env = "MAPRENDER_MAPPING_PATH", default_value = "mapping.yaml")]
     pub mapping_path: PathBuf,
+
+    /// Enable cors
+    #[arg(
+        long,
+        env = "MAPRENDER_CORS",
+        default_value_t = false,
+        action = clap::ArgAction::Set
+    )]
+    pub cors: bool,
 }
