@@ -165,6 +165,21 @@ pub fn pois(
                 )
             }),
         )
+        .chain([LegendItem::new(
+            "private_poi",
+            Category::Other,
+            [[("access", "private")].into(), [("access", "no")].into()],
+            build_poi_data(
+                "picnic_shelter",
+                19,
+                HashMap::<String, Option<String>>::from([(
+                    "access".into(),
+                    Some("private".into()),
+                )]),
+                Category::Water,
+            ),
+            19,
+        )])
         .collect()
 }
 
@@ -208,6 +223,9 @@ fn build_poi_tags(
             "tree_protected" => {
                 override_key = Some("tree");
                 tags.push(("protected", "yes"));
+            }
+            "tree" => {
+                tags.push(("denotation", "natural_monument"));
             }
             "generator_wind" => {
                 tags.push(("power", "generator"));

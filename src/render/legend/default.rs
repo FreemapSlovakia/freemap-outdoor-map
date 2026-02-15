@@ -353,6 +353,36 @@ pub(super) fn build_default_legend_items() -> Vec<LegendItem<'static>> {
                 .build(),
             17,
         ),
+        LegendItem::new(
+            "simple_tree",
+            Category::NaturalPoi,
+            [[("natural", "tree")].into()],
+            legend_item_data_builder()
+                .with_feature(
+                    "trees",
+                    legend_feature_data_builder()
+                        .with("type", "tree")
+                        .with("geometry", Point::new(0.0, 0.0))
+                        .build(),
+                )
+                .build(),
+            17,
+        ),
+        LegendItem::new(
+            "simple_shrub",
+            Category::NaturalPoi,
+            [[("natural", "shrub")].into()],
+            legend_item_data_builder()
+                .with_feature(
+                    "trees",
+                    legend_feature_data_builder()
+                        .with("type", "shrub")
+                        .with("geometry", Point::new(0.0, 0.0))
+                        .build(),
+                )
+                .build(),
+            17,
+        ),
     ]);
 
     poi_items
