@@ -31,6 +31,7 @@ pub async fn start_server(
     max_concurrent_connections: usize,
     addr: SocketAddr,
     mut shutdown_rx: broadcast::Receiver<()>,
+    cors: bool,
 ) {
     let app_state = AppState {
         render_worker_pool,
@@ -57,12 +58,14 @@ pub async fn start_server(
         .route("/legend/{id}", get(legend_route::get))
         .with_state(app_state);
 
-    router = router.layer(
-        CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any),
-    );
+    if cors {
+        router = router.layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        );
+    }
 
     router = router.layer(ConcurrencyLimitLayer::new(max_concurrent_connections));
 

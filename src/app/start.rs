@@ -138,6 +138,7 @@ pub(crate) fn start() {
         cli.max_concurrent_connections,
         SocketAddr::from((cli.host, cli.port)),
         shutdown_tx.subscribe(),
+        cli.cors,
     ));
 
     shutdown_tile_workers(&tile_invalidation_watcher, &tile_processing_worker);
