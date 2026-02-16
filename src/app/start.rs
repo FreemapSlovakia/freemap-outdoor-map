@@ -1,6 +1,9 @@
 use crate::app::{
-    cli::Cli, server::start_server, tile_invalidation,
-    tile_processing_worker::TileProcessingWorker, tile_processor::TileProcessingConfig,
+    cli::Cli,
+    server::{ServerOptions, start_server},
+    tile_invalidation,
+    tile_processing_worker::TileProcessingWorker,
+    tile_processor::TileProcessingConfig,
 };
 use crate::render::{RenderWorkerPool, set_mapping_path};
 use clap::Parser;
@@ -14,7 +17,6 @@ use std::{
     cell::Cell,
     fs::File,
     io::BufReader,
-    net::SocketAddr,
     path::Path,
     str::FromStr,
     sync::{Arc, Mutex},
@@ -129,16 +131,20 @@ pub(crate) fn start() {
 
     rt.block_on(start_server(
         render_worker_pool.clone(),
-        cli.tile_cache_base_path.clone(),
         tile_processing_worker_for_server,
-        cli.serve_cached,
-        cli.max_zoom,
-        limits_geometry,
-        cli.allowed_scales.clone(),
-        cli.max_concurrent_connections,
-        SocketAddr::from((cli.host, cli.port)),
         shutdown_tx.subscribe(),
-        cli.cors,
+        ServerOptions {
+            serve_cached: cli.serve_cached,
+            max_zoom: cli.max_zoom,
+            tile_cache_base_path: cli.tile_cache_base_path,
+            allowed_scales: cli.allowed_scales,
+            render: cli.render.iter().copied().collect(),
+            max_concurrent_connections: cli.max_concurrent_connections,
+            host: cli.host,
+            port: cli.port,
+            cors: cli.cors,
+            limits_geometry,
+        },
     ));
 
     shutdown_tile_workers(&tile_invalidation_watcher, &tile_processing_worker);

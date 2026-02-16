@@ -5,7 +5,6 @@ pub(crate) use landcover::PAINT_DEFS;
 pub use layers::RenderError;
 pub use layers::render;
 pub use pois::{POI_ORDER, POIS};
-pub use routes::RouteTypes;
 
 mod aerialway_names;
 mod blur_edges;

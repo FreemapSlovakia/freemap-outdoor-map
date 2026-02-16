@@ -12,6 +12,7 @@ use crate::render::{ImageFormat, RenderRequest};
 use geo::{Coord, Rect};
 use indexmap::IndexMap;
 use serde::Serialize;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::sync::OnceLock;
@@ -90,7 +91,8 @@ pub fn legend_render_request(id: &str, scale: f64) -> Option<RenderRequest> {
         },
     );
 
-    let mut render_request = RenderRequest::new(bbox, zoom, scale, ImageFormat::Png);
+    let mut render_request =
+        RenderRequest::new(bbox, zoom, scale, ImageFormat::Png, HashSet::new());
 
     render_request.legend = Some(legend_item_data);
 

@@ -1,6 +1,8 @@
 use clap::Parser;
 use std::{net::Ipv4Addr, path::PathBuf};
 
+use crate::render::RenderLayer;
+
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
 pub struct Cli {
@@ -98,4 +100,13 @@ pub struct Cli {
         action = clap::ArgAction::Set
     )]
     pub cors: bool,
+
+    #[arg(
+        long,
+        env = "MAPRENDER_RENDER",
+        value_enum,
+        value_delimiter = ',',
+        num_args = 1..,
+    )]
+    pub render: Vec<RenderLayer>,
 }

@@ -1,3 +1,4 @@
+use crate::render::RenderLayer;
 use crate::render::{
     ImageFormat, collision::Collision, ctx::Ctx, layer_render_error::LayerRenderError, layers,
     layers::hillshading_datasets::HillshadingDatasets, projectable::TileProjector,
@@ -116,7 +117,7 @@ pub fn render(
             2,
             &feature_line_rows,
             svg_repo,
-            if request.shading {
+            if request.render.contains(&RenderLayer::Shading) {
                 hillshading_datasets.as_deref_mut()
             } else {
                 None
@@ -147,15 +148,16 @@ pub fn render(
             .with_layer("feature_lines 3")?;
     }
 
-    if (request.shading || request.contours)
+    if (request.render.contains(&RenderLayer::Shading)
+        || request.render.contains(&RenderLayer::Contours))
         && let Some(hillshading_datasets) = hillshading_datasets.as_deref_mut()
     {
         layers::shading_and_contours::render(
             ctx,
             client,
             hillshading_datasets,
-            request.shading,
-            request.contours,
+            request.render.contains(&RenderLayer::Shading),
+            request.render.contains(&RenderLayer::Contours),
         )
         .with_layer("shading_and_contours")?;
     }
@@ -196,18 +198,18 @@ pub fn render(
         layers::military_areas::render(ctx, client).with_layer("military_areas")?;
     }
 
-    if zoom >= 8 {
+    if zoom >= 8 && request.render.contains(&RenderLayer::CountryBorders) {
         // osm_country_members (country_borders)
         layers::borders::render(ctx, client).with_layer("borders")?;
     }
 
     if zoom >= 9 {
         // osm_routes, osm_route_members (routes)
-        layers::routes::render_marking(ctx, client, &request.route_types, svg_repo)
+        layers::routes::render_marking(ctx, client, &request.render, svg_repo)
             .with_layer("routes")?;
     }
 
-    if (9..=11).contains(&zoom) {
+    if (9..=11).contains(&zoom) && request.render.contains(&RenderLayer::Geonames) {
         // geonames_smooth (geonames)
         layers::geonames::render(ctx, client).with_layer("geonames")?;
     }
@@ -272,7 +274,7 @@ pub fn render(
 
     if zoom >= 14 {
         // osm_routes, osm_route_members (routes)
-        layers::routes::render_labels(ctx, client, &request.route_types, collision)
+        layers::routes::render_labels(ctx, client, &request.render, collision)
             .with_layer("routes")?;
     }
 
@@ -301,7 +303,10 @@ pub fn render(
         layers::place_names::render(ctx, client, &mut None).with_layer("place_names")?;
     }
 
-    if ctx.legend.is_none() && matches!(request.format, ImageFormat::Jpeg | ImageFormat::Png) {
+    if ctx.legend.is_none()
+        && matches!(request.format, ImageFormat::Jpeg | ImageFormat::Png)
+        && let Some(mask_geometry) = mask_geometry
+    {
         layers::blur_edges::render(ctx, mask_geometry).with_layer("blur_edges")?;
     }
 
@@ -311,7 +316,7 @@ pub fn render(
         .map_err(LayerRenderError::from)
         .with_layer("top")?;
 
-    if zoom < 8 {
+    if zoom < 8 && request.render.contains(&RenderLayer::CountryNames) {
         // country_names_smooth (country_names)
         layers::country_names::render(ctx, client).with_layer("country_names")?;
     }

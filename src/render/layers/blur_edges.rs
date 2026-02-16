@@ -8,12 +8,8 @@ use image::{GrayImage, imageops};
 
 const BLUR_RADIUS_PX: f64 = 10.0;
 
-pub fn render(ctx: &Ctx, mask_geometry: Option<&Geometry>) -> LayerRenderResult {
+pub fn render(ctx: &Ctx, mask_polygon_merc: &Geometry) -> LayerRenderResult {
     let _span = tracy_client::span!("blur_edges::render");
-
-    let Some(mask_polygon_merc) = mask_geometry.cloned() else {
-        return Ok(());
-    };
 
     let context = ctx.context;
 
