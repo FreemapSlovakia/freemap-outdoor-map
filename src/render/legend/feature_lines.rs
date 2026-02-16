@@ -1,10 +1,6 @@
 use crate::render::{
     layers::Category,
-    legend::{
-        LegendItem,
-        mapping::MappingEntry,
-        shared::{leak_str, legend_feature_data_builder, with_landcover},
-    },
+    legend::{LegendItem, leak_str, mapping::MappingEntry},
 };
 use geo::Point;
 use indexmap::IndexMap;
@@ -63,55 +59,62 @@ pub fn feature_lines(mapping_entries: &[MappingEntry]) -> Vec<LegendItem<'static
                 _ => 17,
             };
 
-            LegendItem::new(
-                format!("line_{}", types[0]).leak(),
-                *category,
-                types
-                    .iter()
-                    .flat_map(|typ_| {
-                        let typ = if *typ_ == "pipeline_under" {
-                            "pipeline"
-                        } else {
-                            *typ_
-                        };
+            let mut item =
+                LegendItem::builder(format!("line_{}", types[0]).leak(), *category, zoom)
+                    .add_tag_set(|mut ts| {
+                        for tag_set in types.iter().flat_map(|typ_| {
+                            let typ = if *typ_ == "pipeline_under" {
+                                "pipeline"
+                            } else {
+                                *typ_
+                            };
 
-                        let mut tags = IndexMap::new();
+                            let mut tags = IndexMap::new();
 
-                        for entry in mapping_entries {
-                            if entry.table == "feature_lines" && entry.value == typ {
-                                let value = leak_str(&entry.value);
-                                let key = leak_str(&entry.key);
+                            for entry in mapping_entries {
+                                if entry.table == "feature_lines" && entry.value == typ {
+                                    let value = leak_str(&entry.value);
+                                    let key = leak_str(&entry.key);
 
-                                tags.insert(key, value);
+                                    tags.insert(key, value);
+                                }
                             }
-                        }
 
-                        let mut sets = vec![];
+                            let mut sets = vec![];
 
-                        if *typ_ == "pipeline_under" {
-                            tags.insert("location", "underwater");
+                            if *typ_ == "pipeline_under" {
+                                tags.insert("location", "underwater");
 
-                            let mut tags = tags.clone();
-                            tags.insert("location", "underground");
+                                let mut tags = tags.clone();
+                                tags.insert("location", "underground");
+                                sets.push(tags);
+                            }
+
                             sets.push(tags);
+
+                            if typ == "line" {
+                                sets.push([("power", "tower")].into());
+                            } else if typ == "minor_line" {
+                                sets.push([("power", "pole")].into());
+                            }
+
+                            sets
+                        }) {
+                            ts = ts.add_tags(|mut tb| {
+                                for (k, v) in &tag_set {
+                                    tb = tb.add(k, v);
+                                }
+                                tb
+                            });
                         }
 
-                        sets.push(tags);
-
-                        if typ == "line" {
-                            sets.push([("power", "tower")].into());
-                        } else if typ == "minor_line" {
-                            sets.push([("power", "pole")].into());
-                        }
-
-                        sets
+                        ts
                     })
-                    .collect::<Vec<_>>(),
-                {
-                    let mut b = with_landcover("meadow", zoom).with_feature(
-                        "feature_lines",
-                        legend_feature_data_builder()
-                            .with("name", if types[0] == "cable_car" { "Abc" } else { "" }) // NOTE only aerialways have name
+                    .add_feature("landcovers", |b| {
+                        b.with("type", "meadow").with("name", "").with_polygon(true)
+                    })
+                    .add_feature("feature_lines", |b| {
+                        b.with("name", if types[0] == "cable_car" { "Abc" } else { "" }) // NOTE only aerialways have name
                             .with(
                                 "type",
                                 if types[0] == "pipeline_under" {
@@ -129,32 +132,22 @@ pub fn feature_lines(mapping_entries: &[MappingEntry]) -> Vec<LegendItem<'static
                                     HashMap::new()
                                 },
                             )
-                            .with_line_string(zoom, false)
-                            .build(),
-                    );
+                            .with_line_string(false)
+                    });
 
-                    if types[0] == "line" {
-                        b = b.with_feature(
-                            "power_towers_poles",
-                            legend_feature_data_builder()
-                                .with("type", "power_tower")
-                                .with("geometry", Point::new(0.0, 0.0))
-                                .build(),
-                        );
-                    } else if types[0] == "minor_line" {
-                        b = b.with_feature(
-                            "power_towers_poles",
-                            legend_feature_data_builder()
-                                .with("type", "pole")
-                                .with("geometry", Point::new(0.0, 0.0))
-                                .build(),
-                        );
-                    }
+            if types[0] == "line" {
+                item = item.add_feature("power_towers_poles", |b| {
+                    b.with("type", "power_tower")
+                        .with("geometry", Point::new(0.0, 0.0))
+                });
+            } else if types[0] == "minor_line" {
+                item = item.add_feature("power_towers_poles", |b| {
+                    b.with("type", "pole")
+                        .with("geometry", Point::new(0.0, 0.0))
+                });
+            }
 
-                    b.build()
-                },
-                zoom,
-            )
+            item.build()
         })
         .collect()
 }

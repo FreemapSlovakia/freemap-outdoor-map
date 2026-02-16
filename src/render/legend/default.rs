@@ -2,12 +2,8 @@ use super::mapping;
 use super::{LegendItem, mapping_path};
 use crate::render::layers::Category;
 use crate::render::legend::feature_lines::feature_lines;
-use crate::render::legend::shared::{
-    legend_feature_data_builder, legend_item_data_builder, polygon,
-};
 use crate::render::legend::{landcovers::landcovers, pois::pois, roads::roads};
 use geo::Point;
-use indexmap::IndexMap;
 use mapping::collect_mapping_entries;
 use std::io::BufReader;
 
@@ -43,346 +39,187 @@ pub(super) fn build_default_legend_items() -> Vec<LegendItem<'static>> {
     ]
     .iter()
     .map(|types| {
-        LegendItem::new(
-            format!("river_{}", types[0]).leak(),
-            Category::Water,
-            types
-                .iter()
-                .map(|typ| IndexMap::from([("waterway", *typ)]))
-                .collect::<Vec<_>>(),
-            legend_item_data_builder()
-                .with_feature(
-                    "water_lines",
-                    legend_feature_data_builder()
-                        .with_line_string(17, false)
-                        .with("name", "Abc")
-                        .with("type", types[0])
-                        .with("tmp", false)
-                        .with("tunnel", false)
-                        .build(),
-                )
-                .build(),
-            17,
-        )
+        LegendItem::builder(format!("river_{}", types[0]).leak(), Category::Water, 17)
+            .add_tag_set(|mut ts| {
+                for typ in types.iter() {
+                    ts = ts.add_tags(|tags| tags.add("waterway", typ));
+                }
+                ts
+            })
+            .add_feature("water_lines", |b| {
+                b.with_line_string(false)
+                    .with("name", "Abc")
+                    .with("type", types[0])
+                    .with("tmp", false)
+                    .with("tunnel", false)
+            })
+            .build()
     })
     .chain([
-        LegendItem::new(
-            "waterway_tmp",
-            Category::Water,
-            [
-                [("waterway", "*"), ("intermittent", "yes")].into(),
-                [("waterway", "*"), ("seasonal", "yes")].into(),
-            ],
-            legend_item_data_builder()
-                .with_feature(
-                    "water_lines",
-                    legend_feature_data_builder()
-                        .with_line_string(17, false)
-                        .with("name", "Abc")
-                        .with("type", "stream")
-                        .with("tmp", true)
-                        .with("tunnel", false)
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "waterway_culvert",
-            Category::Water,
-            [[("tunnel", "culvert")].into()],
-            legend_item_data_builder()
-                .with_feature(
-                    "water_lines",
-                    legend_feature_data_builder()
-                        .with_line_string(17, false)
-                        .with("name", "Abc")
-                        .with("type", "stream")
-                        .with("tmp", false)
-                        .with("tunnel", true)
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "water_area",
-            Category::Water,
-            [[("natural", "water")].into()],
-            legend_item_data_builder()
-                .with_feature(
-                    "water_areas",
-                    legend_feature_data_builder()
-                        .with("geometry", polygon(true, 17))
-                        .with("name", "Abc")
-                        .with("tmp", false)
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "water_area_tmp",
-            Category::Water,
-            [
-                [("natural", "water"), ("intermittent", "yes")].into(),
-                [("natural", "water"), ("seasonal", "yes")].into(),
-            ],
-            legend_item_data_builder()
-                .with_feature(
-                    "water_areas",
-                    legend_feature_data_builder()
-                        .with("geometry", polygon(true, 17))
-                        .with("name", "Abc")
-                        .with("tmp", true)
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "solar_power_plants",
-            Category::Landcover,
-            [
-                [("power", "plant"), ("plant:source", "solar")].into(),
-                [("power", "generator"), ("generator:source", "solar")].into(),
-            ],
-            legend_item_data_builder()
-                .with_feature(
-                    "solar_power_plants",
-                    legend_feature_data_builder()
-                        .with("geometry", polygon(false, 17))
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "zoo",
-            Category::Landcover,
-            [
-                [("tourism", "zoo")].into(),
-                [("tourism", "theme_park")].into(),
-            ],
-            legend_item_data_builder()
-                .with_feature(
-                    "special_parks",
-                    legend_feature_data_builder()
-                        .with("geometry", polygon(true, 17))
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "country_borders",
-            Category::Borders,
-            [[
-                ("type", "boundary"),
-                ("boundary", "administrative"),
-                ("admin_level", "2"),
-            ]
-            .into()],
-            legend_item_data_builder()
-                .with_feature(
-                    "country_borders",
-                    legend_feature_data_builder()
-                        .with("geometry", polygon(true, 17))
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "military_areas",
-            Category::Borders,
-            [[("landuse", "military")].into()],
-            legend_item_data_builder()
-                .with_feature(
-                    "military_areas",
-                    legend_feature_data_builder()
-                        .with("geometry", polygon(true, 17))
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "nature_reserve",
-            Category::Borders,
-            [
-                [("leisure", "nature_reserve")].into(),
-                [("boundary", "protected_area"), ("protect_class", "≠2")].into(),
-            ],
-            legend_item_data_builder()
-                .with_feature(
-                    "protected_areas",
-                    legend_feature_data_builder()
-                        .with("type", "nature_reserve")
-                        .with("name", "Abc")
-                        .with("protect_class", "")
-                        .with("geometry", polygon(true, 17))
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "national_park",
-            Category::Borders,
-            [
-                [("boundary", "national_park")].into(),
-                [("boundary", "protected_area"), ("protect_class", "2")].into(),
-            ],
-            legend_item_data_builder()
-                .with_feature(
-                    "protected_areas",
-                    legend_feature_data_builder()
-                        .with("type", "national_park")
-                        .with("name", "Abc")
-                        .with("protect_class", "")
-                        .with("geometry", polygon(true, 10))
-                        .build(),
-                )
-                .build(),
-            10,
-        ),
-        LegendItem::new(
-            "national_park_zoom",
-            Category::Borders,
-            [
-                [("boundary", "national_park")].into(),
-                [("boundary", "protected_area"), ("protect_class", "2")].into(),
-            ],
-            legend_item_data_builder()
-                .with_feature(
-                    "protected_areas",
-                    legend_feature_data_builder()
-                        .with("type", "national_park")
-                        .with("name", "")
-                        .with("protect_class", "")
-                        .with("geometry", polygon(true, 17))
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "building",
-            Category::Other,
-            [[("building", "*")].into()],
-            legend_item_data_builder()
-                .with_feature(
-                    "buildings",
-                    legend_feature_data_builder()
-                        .with("type", "yes")
-                        .with("geometry", polygon(false, 17))
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "building_disused",
-            Category::Other,
-            [
-                [("building", "disused")].into(),
-                [("building", "*"), ("disused", "yes")].into(),
-                [("disused:building", "*")].into(),
-            ],
-            legend_item_data_builder()
-                .with_feature(
-                    "buildings",
-                    legend_feature_data_builder()
-                        .with("type", "disused")
-                        .with("geometry", polygon(false, 17))
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "building_abandoned",
-            Category::Other,
-            [
-                [("building", "abandoned")].into(),
-                [("building", "*"), ("abandoned", "yes")].into(),
-                [("abandoned:building", "*")].into(),
-            ],
-            legend_item_data_builder()
-                .with_feature(
-                    "buildings",
-                    legend_feature_data_builder()
-                        .with("type", "abandoned")
-                        .with("geometry", polygon(false, 17))
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "building_ruins",
-            Category::Other,
-            [
-                [("building", "ruins")].into(),
-                [("building", "*"), ("ruins", "yes")].into(),
-                [("ruins:building", "*")].into(),
-            ],
-            legend_item_data_builder()
-                .with_feature(
-                    "buildings",
-                    legend_feature_data_builder()
-                        .with("type", "ruins")
-                        .with("geometry", polygon(false, 17))
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "fixme",
-            Category::Other,
-            [[("fixme", "*")].into()],
-            legend_item_data_builder()
-                .with_feature(
-                    "fixmes",
-                    legend_feature_data_builder()
-                        .with("geometry", Point::new(0.0, 0.0))
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "simple_tree",
-            Category::NaturalPoi,
-            [[("natural", "tree")].into()],
-            legend_item_data_builder()
-                .with_feature(
-                    "trees",
-                    legend_feature_data_builder()
-                        .with("type", "tree")
-                        .with("geometry", Point::new(0.0, 0.0))
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "simple_shrub",
-            Category::NaturalPoi,
-            [[("natural", "shrub")].into()],
-            legend_item_data_builder()
-                .with_feature(
-                    "trees",
-                    legend_feature_data_builder()
-                        .with("type", "shrub")
-                        .with("geometry", Point::new(0.0, 0.0))
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
+        LegendItem::builder("waterway_tmp", Category::Water, 17)
+            .add_tag_set(|ts| {
+                ts.add_tags(|tags| tags.add("waterway", "*").add("intermittent", "yes"))
+                    .add_tags(|tags| tags.add("waterway", "*").add("seasonal", "yes"))
+            })
+            .add_feature("water_lines", |b| {
+                b.with_line_string(false)
+                    .with("name", "Abc")
+                    .with("type", "stream")
+                    .with("tmp", true)
+                    .with("tunnel", false)
+            })
+            .build(),
+        LegendItem::builder("waterway_culvert", Category::Water, 17)
+            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("tunnel", "culvert")))
+            .add_feature("water_lines", |b| {
+                b.with_line_string(false)
+                    .with("name", "Abc")
+                    .with("type", "stream")
+                    .with("tmp", false)
+                    .with("tunnel", true)
+            })
+            .build(),
+        LegendItem::builder("water_area", Category::Water, 17)
+            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("natural", "water")))
+            .add_feature("water_areas", |b| {
+                b.with_polygon(true).with("name", "Abc").with("tmp", false)
+            })
+            .build(),
+        LegendItem::builder("water_area_tmp", Category::Water, 17)
+            .add_tag_set(|ts| {
+                ts.add_tags(|tags| tags.add("natural", "water").add("intermittent", "yes"))
+                    .add_tags(|tags| tags.add("natural", "water").add("seasonal", "yes"))
+            })
+            .add_feature("water_areas", |b| {
+                b.with_polygon(true).with("name", "Abc").with("tmp", true)
+            })
+            .build(),
+        LegendItem::builder("solar_power_plants", Category::Landcover, 17)
+            .add_tag_set(|ts| {
+                ts.add_tags(|tags| tags.add("power", "plant").add("plant:source", "solar"))
+                    .add_tags(|tags| {
+                        tags.add("power", "generator")
+                            .add("generator:source", "solar")
+                    })
+            })
+            .add_feature("solar_power_plants", |b| b.with_polygon(false))
+            .build(),
+        LegendItem::builder("zoo", Category::Landcover, 17)
+            .add_tag_set(|ts| {
+                ts.add_tags(|tags| tags.add("tourism", "zoo"))
+                    .add_tags(|tags| tags.add("tourism", "theme_park"))
+            })
+            .add_feature("special_parks", |b| b.with_polygon(true))
+            .build(),
+        LegendItem::builder("country_borders", Category::Borders, 17)
+            .add_tag_set(|ts| {
+                ts.add_tags(|tags| {
+                    tags.add("type", "boundary")
+                        .add("boundary", "administrative")
+                        .add("admin_level", "2")
+                })
+            })
+            .add_feature("country_borders", |b| b.with_polygon(true))
+            .build(),
+        LegendItem::builder("military_areas", Category::Borders, 17)
+            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("landuse", "military")))
+            .add_feature("military_areas", |b| b.with_polygon(true))
+            .build(),
+        LegendItem::builder("nature_reserve", Category::Borders, 17)
+            .add_tag_set(|ts| {
+                ts.add_tags(|tags| tags.add("leisure", "nature_reserve"))
+                    .add_tags(|tags| {
+                        tags.add("boundary", "protected_area")
+                            .add("protect_class", "≠2")
+                    })
+            })
+            .add_feature("protected_areas", |b| {
+                b.with("type", "nature_reserve")
+                    .with("name", "Abc")
+                    .with("protect_class", "")
+                    .with_polygon(true)
+            })
+            .build(),
+        LegendItem::builder("national_park", Category::Borders, 10)
+            .add_tag_set(|ts| {
+                ts.add_tags(|tags| tags.add("boundary", "national_park"))
+                    .add_tags(|tags| {
+                        tags.add("boundary", "protected_area")
+                            .add("protect_class", "2")
+                    })
+            })
+            .add_feature("protected_areas", |b| {
+                b.with("type", "national_park")
+                    .with("name", "Abc")
+                    .with("protect_class", "")
+                    .with_polygon(true)
+            })
+            .build(),
+        LegendItem::builder("national_park_zoom", Category::Borders, 17)
+            .add_tag_set(|ts| {
+                ts.add_tags(|tags| tags.add("boundary", "national_park"))
+                    .add_tags(|tags| {
+                        tags.add("boundary", "protected_area")
+                            .add("protect_class", "2")
+                    })
+            })
+            .add_feature("protected_areas", |b| {
+                b.with("type", "national_park")
+                    .with("name", "")
+                    .with("protect_class", "")
+                    .with_polygon(true)
+            })
+            .build(),
+        LegendItem::builder("building", Category::Other, 17)
+            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("building", "*")))
+            .add_feature("buildings", |b| b.with("type", "yes").with_polygon(false))
+            .build(),
+        LegendItem::builder("building_disused", Category::Other, 17)
+            .add_tag_set(|ts| {
+                ts.add_tags(|tags| tags.add("building", "disused"))
+                    .add_tags(|tags| tags.add("building", "*").add("disused", "yes"))
+                    .add_tags(|tags| tags.add("disused:building", "*"))
+            })
+            .add_feature("buildings", |b| {
+                b.with("type", "disused").with_polygon(false)
+            })
+            .build(),
+        LegendItem::builder("building_abandoned", Category::Other, 17)
+            .add_tag_set(|ts| {
+                ts.add_tags(|tags| tags.add("building", "abandoned"))
+                    .add_tags(|tags| tags.add("building", "*").add("abandoned", "yes"))
+                    .add_tags(|tags| tags.add("abandoned:building", "*"))
+            })
+            .add_feature("buildings", |b| {
+                b.with("type", "abandoned").with_polygon(false)
+            })
+            .build(),
+        LegendItem::builder("building_ruins", Category::Other, 17)
+            .add_tag_set(|ts| {
+                ts.add_tags(|tags| tags.add("building", "ruins"))
+                    .add_tags(|tags| tags.add("building", "*").add("ruins", "yes"))
+                    .add_tags(|tags| tags.add("ruins:building", "*"))
+            })
+            .add_feature("buildings", |b| b.with("type", "ruins").with_polygon(false))
+            .build(),
+        LegendItem::builder("fixme", Category::Other, 17)
+            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("fixme", "*")))
+            .add_feature("fixmes", |b| b.with("geometry", Point::new(0.0, 0.0)))
+            .build(),
+        LegendItem::builder("simple_tree", Category::NaturalPoi, 17)
+            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("natural", "tree")))
+            .add_feature("trees", |b| {
+                b.with("type", "tree")
+                    .with("geometry", Point::new(0.0, 0.0))
+            })
+            .build(),
+        LegendItem::builder("simple_shrub", Category::NaturalPoi, 17)
+            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("natural", "shrub")))
+            .add_feature("trees", |b| {
+                b.with("type", "shrub")
+                    .with("geometry", Point::new(0.0, 0.0))
+            })
+            .build(),
     ]);
 
     poi_items

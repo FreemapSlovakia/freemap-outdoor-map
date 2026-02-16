@@ -1,9 +1,8 @@
 use crate::render::{
     layers::{Category, POI_ORDER, POIS},
     legend::{
-        LegendItem, LegendItemData,
+        LegendItem, LegendItemBuilder, build_tags_map, leak_str,
         mapping::{self, MappingEntry},
-        shared::{build_tags_map, leak_str, legend_feature_data_builder, with_landcover},
     },
 };
 use geo::Point;
@@ -67,14 +66,16 @@ pub fn pois(
         poi_tags.entry(value).or_default().push((key, value));
     }
 
-    let mut poi_groups: IndexMap<
+    type PoiGroups = IndexMap<
         &'static str,
         (
             Category,
             Vec<IndexMap<&'static str, &'static str>>,
             &'static str,
         ),
-    > = IndexMap::new();
+    >;
+
+    let mut poi_groups: PoiGroups = IndexMap::new();
 
     for typ in POI_ORDER.iter() {
         if *typ == "guidepost_noname" || typ.starts_with("peak") && typ.len() == 5 {
@@ -101,18 +102,20 @@ pub fn pois(
     poi_groups
         .into_iter()
         .map(|(visual_key, (category, tags, repr_typ))| {
-            LegendItem::new(
-                format!("poi_{visual_key}").leak(),
-                category,
-                tags,
-                build_poi_data(
-                    repr_typ,
-                    19,
-                    HashMap::<String, Option<String>>::new(),
-                    category,
-                ),
-                19,
-            )
+            LegendItem::builder(format!("poi_{visual_key}").leak(), category, 19)
+                .add_tag_set(|mut ts| {
+                    for tag_set in &tags {
+                        ts = ts.add_tags(|mut tb| {
+                            for (k, v) in tag_set {
+                                tb = tb.add(k, v);
+                            }
+                            tb
+                        });
+                    }
+                    ts
+                })
+                .add_poi(repr_typ, HashMap::new(), category)
+                .build()
         })
         .chain(
             [
@@ -127,59 +130,58 @@ pub fn pois(
                 (("intermittent", "yes"), ("intermittent", "yes")),
             ]
             .map(|((prop_name, prop_value), (tag_key, tag_value))| {
-                LegendItem::new(
+                LegendItem::builder(
                     format!("poi_spring_{tag_key}_{tag_value}").leak(),
                     Category::Water,
-                    {
-                        let mut tags = vec![
-                            [
-                                (
-                                    "natural",
-                                    if tag_value == "hot_spring" {
-                                        "hot_spring"
-                                    } else {
-                                        "spring"
-                                    },
-                                ),
-                                (tag_key, tag_value),
-                            ]
-                            .into(),
-                        ];
-
-                        if prop_name == "intermittent" {
-                            tags.push([("natural", "spring"), ("seasonal", "yes")].into());
-                        }
-
-                        tags
-                    },
-                    build_poi_data(
-                        "spring",
-                        19,
-                        HashMap::<String, Option<String>>::from([(
-                            prop_name.to_string(),
-                            Some(prop_value.to_string()),
-                        )]),
-                        Category::Water,
-                    ),
                     19,
                 )
+                .add_tag_set(|mut ts| {
+                    ts = ts.add_tags(|tags| {
+                        tags.add(
+                            "natural",
+                            if tag_value == "hot_spring" {
+                                "hot_spring"
+                            } else {
+                                "spring"
+                            },
+                        )
+                        .add(tag_key, tag_value)
+                    });
+
+                    if prop_name == "intermittent" {
+                        ts = ts
+                            .add_tags(|tags| tags.add("natural", "spring").add("seasonal", "yes"));
+                    }
+
+                    ts
+                })
+                .add_poi(
+                    "spring",
+                    HashMap::<String, Option<String>>::from([(
+                        prop_name.to_string(),
+                        Some(prop_value.to_string()),
+                    )]),
+                    Category::Water,
+                )
+                .build()
             }),
         )
-        .chain([LegendItem::new(
-            "private_poi",
-            Category::Other,
-            [[("access", "private")].into(), [("access", "no")].into()],
-            build_poi_data(
-                "picnic_shelter",
-                19,
-                HashMap::<String, Option<String>>::from([(
-                    "access".into(),
-                    Some("private".into()),
-                )]),
-                Category::Water,
-            ),
-            19,
-        )])
+        .chain([{
+            LegendItem::builder("private_poi", Category::Other, 19)
+                .add_tag_set(|ts| {
+                    ts.add_tags(|tags| tags.add("access", "private"))
+                        .add_tags(|tags| tags.add("access", "no"))
+                })
+                .add_poi(
+                    "picnic_shelter",
+                    HashMap::<String, Option<String>>::from([(
+                        "access".into(),
+                        Some("private".into()),
+                    )]),
+                    Category::Other,
+                )
+                .build()
+        }])
         .collect()
 }
 
@@ -255,39 +257,39 @@ fn build_poi_tags(
     build_tags_map(tags)
 }
 
-fn build_poi_data(
-    typ: &'static str,
-    zoom: u8,
-    extra: HashMap<String, Option<String>>,
-    category: Category,
-) -> LegendItemData {
-    let factor = (19.0 - zoom as f64).exp2();
+impl<'a> LegendItemBuilder<'a> {
+    fn add_poi(
+        self,
+        typ: &'static str,
+        extra: HashMap<String, Option<String>>,
+        category: Category,
+    ) -> Self {
+        let factor = (19.0 - self.zoom as f64).exp2();
 
-    let bg = match category {
-        Category::RoadsAndPaths => "meadow",
-        Category::Railway => "residential",
-        Category::Landcover => "",
-        Category::Borders => "",
-        Category::Accommodation => "residential",
-        Category::NaturalPoi => "wood",
-        Category::GastroPoi => "commercial",
-        Category::Water => "meadow",
-        Category::Institution => "residential",
-        Category::Sport => "pitch",
-        Category::Poi => "residential",
-        Category::Terrain => "wood",
-        Category::Other => "residential",
-    };
+        let bg = match category {
+            Category::RoadsAndPaths => "meadow",
+            Category::Railway => "residential",
+            Category::Landcover => "",
+            Category::Borders => "",
+            Category::Accommodation => "residential",
+            Category::NaturalPoi => "wood",
+            Category::GastroPoi => "commercial",
+            Category::Water => "meadow",
+            Category::Institution => "residential",
+            Category::Sport => "pitch",
+            Category::Poi => "residential",
+            Category::Terrain => "wood",
+            Category::Other => "residential",
+        };
 
-    with_landcover(bg, zoom)
-        .with_feature(
-            "pois",
-            legend_feature_data_builder()
-                .with("type", typ)
+        self.add_feature("landcovers", |b| {
+            b.with("type", bg).with("name", "").with_polygon(true)
+        })
+        .add_feature("pois", |b| {
+            b.with("type", typ)
                 .with("name", "Abc")
                 .with("extra", extra)
                 .with("geometry", Point::new(0.0, factor * -2.0))
-                .build(),
-        )
-        .build()
+        })
+    }
 }

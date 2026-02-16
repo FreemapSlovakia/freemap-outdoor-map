@@ -1,12 +1,8 @@
 use crate::render::{
     layers::{Category, PAINT_DEFS},
     legend::{
-        LegendItem, LegendItemData,
+        LegendItem, build_tags_map, leak_str,
         mapping::{MappingEntry, MappingKind},
-        shared::{
-            build_tags_map, leak_str, legend_feature_data_builder, legend_item_data_builder,
-            polygon,
-        },
     },
 };
 use indexmap::IndexMap;
@@ -39,13 +35,28 @@ pub fn landcovers(mapping_entries: &[MappingEntry]) -> Vec<LegendItem<'static>> 
 
             let skew = !matches!(id_typ, "silo" | "parking");
 
-            LegendItem::new(
+            LegendItem::builder(
                 format!("landcover_{id_typ}").leak(),
                 Category::Landcover,
-                tags,
-                build_landcover_data(id_typ, skew, 19),
                 19,
             )
+            .add_tag_set(|mut ts| {
+                for tag_set in &tags {
+                    ts = ts.add_tags(|mut tb| {
+                        for (k, v) in tag_set {
+                            tb = tb.add(k, v);
+                        }
+                        tb
+                    });
+                }
+                ts
+            })
+            .add_feature("landcovers", |b| {
+                b.with("type", id_typ)
+                    .with("name", "Abc")
+                    .with_polygon(skew)
+            })
+            .build()
         })
         .collect()
 }
@@ -69,17 +80,4 @@ fn build_landcover_tags(
     }
 
     build_tags_map(tags)
-}
-
-fn build_landcover_data(typ: &'static str, skew: bool, zoom: u8) -> LegendItemData {
-    legend_item_data_builder()
-        .with_feature(
-            "landcovers",
-            legend_feature_data_builder()
-                .with("type", typ)
-                .with("name", "Abc")
-                .with("geometry", polygon(skew, zoom))
-                .build(),
-        )
-        .build()
 }

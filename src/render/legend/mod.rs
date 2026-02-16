@@ -5,19 +5,16 @@ mod landcovers;
 mod mapping;
 mod pois;
 mod roads;
-mod shared;
 
 use crate::render::layers::Category;
-use crate::render::{ImageFormat, RenderRequest};
-use geo::{Coord, Rect};
+use crate::render::{ImageFormat, LegendValue, RenderRequest};
+use geo::{Coord, LineString, Polygon, Rect};
 use indexmap::IndexMap;
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::sync::OnceLock;
-
-pub(crate) use shared::LegendItemData;
 
 #[derive(Clone, Serialize)]
 pub struct LegendMeta<'a> {
@@ -26,29 +23,109 @@ pub struct LegendMeta<'a> {
     pub tags: Vec<IndexMap<&'a str, &'a str>>,
 }
 
-pub(super) struct LegendItem<'a> {
-    pub(super) meta: LegendMeta<'a>,
-    pub(super) zoom: u8,
-    pub(super) data: LegendItemData,
+pub struct LegendItem<'a> {
+    pub meta: LegendMeta<'a>,
+    pub data: LegendItemData,
+    pub zoom: u8,
+}
+
+pub struct LegendItemBuilder<'a> {
+    pub id: &'a str,
+    pub category: Category,
+    pub tags: Vec<IndexMap<&'a str, &'a str>>,
+    pub zoom: u8,
+    pub data: LegendItemData,
 }
 
 impl<'a> LegendItem<'a> {
-    pub(super) fn new(
-        id: &'static str,
-        category: Category,
-        tags: impl Into<Vec<IndexMap<&'static str, &'static str>>>,
-        data: LegendItemData,
-        zoom: u8,
-    ) -> Self {
-        Self {
-            meta: LegendMeta {
-                id,
-                category,
-                tags: tags.into(),
-            },
-            data,
+    pub fn builder(id: &'a str, category: Category, zoom: u8) -> LegendItemBuilder<'a> {
+        LegendItemBuilder {
+            id,
+            category,
+            tags: vec![],
             zoom,
+            data: HashMap::new(),
         }
+    }
+}
+
+impl<'a> LegendItemBuilder<'a> {
+    pub fn build(self) -> LegendItem<'a> {
+        LegendItem {
+            meta: LegendMeta {
+                id: self.id,
+                category: self.category,
+                tags: self.tags,
+            },
+            data: self.data,
+            zoom: self.zoom,
+        }
+    }
+
+    fn add_tag_set(
+        self,
+        cb: impl Fn(TagsSetBuilder<'a>) -> TagsSetBuilder<'a>,
+    ) -> LegendItemBuilder<'a> {
+        let tsb = cb(TagsSetBuilder { parent: self });
+
+        tsb.parent
+    }
+
+    fn add_feature(
+        mut self,
+        layer: impl Into<String>,
+        cb: impl FnOnce(PropsBuilder) -> PropsBuilder,
+    ) -> Self {
+        let props_builder = cb(PropsBuilder {
+            zoom: self.zoom,
+            props: HashMap::new(),
+        });
+
+        self.data
+            .entry(layer.into())
+            .or_default()
+            .push(props_builder.props);
+
+        self
+    }
+}
+
+pub struct TagsSetBuilder<'a> {
+    parent: LegendItemBuilder<'a>,
+}
+
+impl<'a> TagsSetBuilder<'a> {
+    fn add_tags(mut self, cb: impl Fn(TagsBuilder) -> TagsBuilder) -> TagsSetBuilder<'a> {
+        let tb = cb(TagsBuilder {
+            tags: IndexMap::new(),
+        });
+
+        self.parent.tags.push(tb.tags);
+
+        self
+    }
+}
+
+pub struct TagsBuilder<'a> {
+    tags: IndexMap<&'a str, &'a str>,
+}
+
+impl<'a> TagsBuilder<'a> {
+    pub fn add(mut self, key: &'a str, value: &'a str) -> Self {
+        self.tags.insert(key, value);
+        self
+    }
+}
+
+pub struct PropsBuilder {
+    zoom: u8,
+    props: HashMap<String, LegendValue>,
+}
+
+impl PropsBuilder {
+    pub fn with(mut self, key: impl Into<String>, value: impl Into<LegendValue>) -> Self {
+        self.props.insert(key.into(), value.into());
+        self
     }
 }
 
@@ -60,7 +137,7 @@ pub(crate) fn set_mapping_path(path: PathBuf) {
     }
 }
 
-pub(super) fn mapping_path() -> &'static PathBuf {
+pub fn mapping_path() -> &'static PathBuf {
     MAPPING_PATH
         .get()
         .expect("mapping path must be set before legend use")
@@ -97,4 +174,85 @@ pub fn legend_render_request(id: &str, scale: f64) -> Option<RenderRequest> {
     render_request.legend = Some(legend_item_data);
 
     Some(render_request)
+}
+
+impl PropsBuilder {
+    pub fn with_line_string(self, reverse: bool) -> Self {
+        let factor = (17.0 - self.zoom as f64).exp2();
+
+        let mut coords = vec![
+            Coord {
+                x: 80.0 * factor,
+                y: 20.0 * factor,
+            },
+            Coord {
+                x: -80.0 * factor,
+                y: -20.0 * factor,
+            },
+        ];
+
+        if reverse {
+            coords.reverse();
+        }
+
+        self.with("geometry", LineString::new(coords))
+    }
+
+    pub fn with_polygon(self, skew: bool) -> Self {
+        let factor = (19.0 - self.zoom as f64).exp2();
+
+        let ssx = if skew { 2.0 } else { 0.0 };
+        let ssy = if skew { 1.0 } else { 0.0 };
+
+        let xx = 12.0;
+        let yy = 5.0;
+
+        self.with(
+            "geometry",
+            Polygon::new(
+                LineString::new(vec![
+                    Coord {
+                        x: factor * -xx,
+                        y: factor * (-yy - ssy),
+                    },
+                    Coord {
+                        x: factor * (-xx - ssx),
+                        y: factor * yy,
+                    },
+                    Coord {
+                        x: factor * xx,
+                        y: factor * (yy + ssy),
+                    },
+                    Coord {
+                        x: factor * (xx + ssx),
+                        y: factor * -yy,
+                    },
+                    Coord {
+                        x: factor * -xx,
+                        y: factor * (-yy - ssy),
+                    },
+                ]),
+                vec![],
+            ),
+        )
+    }
+}
+
+pub type LegendItemData = HashMap<String, Vec<LegendFeatureData>>; // layer -> prop_map[]
+pub type LegendFeatureData = HashMap<String, LegendValue>;
+
+pub fn build_tags_map(
+    tags: Vec<(&'static str, &'static str)>,
+) -> IndexMap<&'static str, &'static str> {
+    let mut map = IndexMap::with_capacity(tags.len());
+
+    for (k, v) in tags {
+        map.insert(k, v);
+    }
+
+    map
+}
+
+pub fn leak_str(value: &str) -> &'static str {
+    value.to_string().leak()
 }
