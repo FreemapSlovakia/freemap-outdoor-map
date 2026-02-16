@@ -17,6 +17,7 @@ use axum::{
 use geo::Geometry;
 use std::{
     collections::HashSet,
+    io,
     net::{Ipv4Addr, SocketAddr},
     path::PathBuf,
     sync::Arc,
@@ -43,7 +44,7 @@ pub async fn start_server(
     tile_worker: Option<TileProcessingWorker>,
     mut shutdown_rx: Receiver<()>,
     options: ServerOptions,
-) {
+) -> io::Result<()> {
     let app_state = AppState {
         render_worker_pool,
         export_state: Arc::new(ExportState::new()),
@@ -83,14 +84,12 @@ pub async fn start_server(
         options.max_concurrent_connections,
     ));
 
-    let listener = tokio::net::TcpListener::bind(SocketAddr::from((options.host, options.port)))
-        .await
-        .expect("bind address");
+    let listener =
+        tokio::net::TcpListener::bind(SocketAddr::from((options.host, options.port))).await?;
 
     serve(listener, router)
         .with_graceful_shutdown(async move {
             let _ = shutdown_rx.recv().await;
         })
         .await
-        .expect("server");
 }

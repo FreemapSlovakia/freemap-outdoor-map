@@ -129,7 +129,7 @@ pub(crate) fn start() {
         }
     });
 
-    rt.block_on(start_server(
+    if let Err(err) = rt.block_on(start_server(
         render_worker_pool.clone(),
         tile_processing_worker_for_server,
         shutdown_tx.subscribe(),
@@ -145,7 +145,9 @@ pub(crate) fn start() {
             cors: cli.cors,
             limits_geometry,
         },
-    ));
+    )) {
+        eprintln!("Server stopped with error: {err}");
+    }
 
     shutdown_tile_workers(&tile_invalidation_watcher, &tile_processing_worker);
 
