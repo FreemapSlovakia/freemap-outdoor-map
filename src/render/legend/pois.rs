@@ -1,4 +1,5 @@
 use crate::render::{
+    LegendMode,
     layers::{Category, POI_ORDER, POIS},
     legend::{
         LegendItem, LegendItemData,
@@ -13,6 +14,7 @@ use std::collections::{HashMap, HashSet};
 pub fn pois(
     mapping_root: &mapping::MappingRoot,
     mapping_entries: &[MappingEntry],
+    mode: LegendMode,
 ) -> Vec<LegendItem<'static>> {
     let mut poi_tags: HashMap<&'static str, Vec<(&'static str, &'static str)>> = HashMap::new();
     let mut feature_alias_values: HashMap<&'static str, HashSet<&'static str>> = HashMap::new();
@@ -110,6 +112,7 @@ pub fn pois(
                     19,
                     HashMap::<String, Option<String>>::new(),
                     category,
+                    mode,
                 ),
                 19,
             )
@@ -160,6 +163,7 @@ pub fn pois(
                             Some(prop_value.to_string()),
                         )]),
                         Category::Water,
+                        mode,
                     ),
                     19,
                 )
@@ -177,6 +181,7 @@ pub fn pois(
                     Some("private".into()),
                 )]),
                 Category::Water,
+                mode,
             ),
             19,
         )])
@@ -260,6 +265,7 @@ fn build_poi_data(
     zoom: u8,
     extra: HashMap<String, Option<String>>,
     category: Category,
+    mode: LegendMode,
 ) -> LegendItemData {
     let factor = (19.0 - zoom as f64).exp2();
 
@@ -279,7 +285,7 @@ fn build_poi_data(
         Category::Other => "residential",
     };
 
-    with_landcover(bg, zoom)
+    with_landcover(bg, zoom, mode)
         .with_feature(
             "pois",
             legend_feature_data_builder()

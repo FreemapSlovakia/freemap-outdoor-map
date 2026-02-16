@@ -18,6 +18,14 @@ use std::sync::OnceLock;
 
 pub(crate) use shared::LegendItemData;
 
+use serde::Deserialize;
+
+#[derive(Deserialize, PartialEq, Clone, Copy)]
+pub enum LegendMode {
+    Normal,
+    TagInfo,
+}
+
 #[derive(Clone, Serialize)]
 pub struct LegendMeta<'a> {
     pub id: &'a str,
@@ -65,14 +73,23 @@ pub(super) fn mapping_path() -> &'static PathBuf {
         .expect("mapping path must be set before legend use")
 }
 
-static LEGEND_ITEMS: LazyLock<Vec<LegendItem>> = LazyLock::new(default::build_default_legend_items);
+static LEGEND_ITEMS: LazyLock<Vec<LegendItem>> =
+    LazyLock::new(|| default::build_legend_items(LegendMode::Normal));
+
+static LEGEND_ITEMS_FOR_TAGINFO: LazyLock<Vec<LegendItem>> =
+    LazyLock::new(|| default::build_legend_items(LegendMode::TagInfo));
 
 pub fn legend_metadata() -> Vec<LegendMeta<'static>> {
     LEGEND_ITEMS.iter().map(|item| item.meta.clone()).collect()
 }
 
-pub fn legend_render_request(id: &str, scale: f64) -> Option<RenderRequest> {
-    let (legend_item_data, zoom) = LEGEND_ITEMS
+pub fn legend_render_request(id: &str, scale: f64, mode: LegendMode) -> Option<RenderRequest> {
+    let items = match mode {
+        LegendMode::Normal => &LEGEND_ITEMS,
+        LegendMode::TagInfo => &LEGEND_ITEMS_FOR_TAGINFO,
+    };
+
+    let (legend_item_data, zoom) = items
         .iter()
         .find(|item| item.meta.id == id)
         .map(|item| (item.data.clone(), item.zoom))?;

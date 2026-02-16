@@ -1,4 +1,5 @@
 use crate::render::{
+    LegendMode,
     layers::Category,
     legend::{
         LegendItem,
@@ -10,7 +11,10 @@ use geo::Point;
 use indexmap::IndexMap;
 use std::collections::HashMap;
 
-pub fn feature_lines(mapping_entries: &[MappingEntry]) -> Vec<LegendItem<'static>> {
+pub fn feature_lines(
+    mapping_entries: &[MappingEntry],
+    mode: LegendMode,
+) -> Vec<LegendItem<'static>> {
     let groups: &[(&[&str], Category)] = &[
         (&["line"], Category::Other),
         (&["minor_line"], Category::Other),
@@ -108,7 +112,7 @@ pub fn feature_lines(mapping_entries: &[MappingEntry]) -> Vec<LegendItem<'static
                     })
                     .collect::<Vec<_>>(),
                 {
-                    let mut b = with_landcover("meadow", zoom).with_feature(
+                    let mut b = with_landcover("meadow", zoom, mode).with_feature(
                         "feature_lines",
                         legend_feature_data_builder()
                             .with("name", if types[0] == "cable_car" { "Abc" } else { "" }) // NOTE only aerialways have name

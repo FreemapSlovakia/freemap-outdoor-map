@@ -1,5 +1,5 @@
 use crate::render::{
-    LegendValue,
+    LegendMode, LegendValue,
     layers::Category,
     legend::{
         LegendItem,
@@ -12,7 +12,7 @@ use crate::render::{
 use indexmap::IndexMap;
 use std::collections::HashMap;
 
-pub fn roads() -> Vec<LegendItem<'static>> {
+pub fn roads(mode: LegendMode) -> Vec<LegendItem<'static>> {
     [
         &["motorway", "trunk"] as &[&str],
         &["primary", "motorway_link", "trunk_link"],
@@ -49,10 +49,12 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     }
                 })
                 .collect::<Vec<_>>(),
-            with_landcover(if i < 10 { "residential" } else { "wood" }, 17)
+            with_landcover(if i < 10 { "residential" } else { "wood" }, 17, mode)
                 .with_feature(
                     "roads",
-                    road_builder(types[0], 17).with("class", "highway").build(),
+                    road_builder(types[0], 17, mode)
+                        .with("class", "highway")
+                        .build(),
                 )
                 .build(),
             17,
@@ -90,7 +92,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     map
                 }],
                 {
-                    let mut b = road_builder(road_type, 17).with("class", "highway");
+                    let mut b = road_builder(road_type, 17, mode).with("class", "highway");
 
                     let mut no_foot = 0i32;
                     let mut no_bicycle = 0i32;
@@ -116,11 +118,11 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                         );
                     }
 
-                    with_landcover("wood", 17)
+                    with_landcover("wood", 17, mode)
                         .with_feature("roads", b.build())
                         .with_feature(
                             "road_access_restrictions",
-                            road_builder(road_type, 17)
+                            road_builder(road_type, 17, mode)
                                 .with("no_foot", no_foot)
                                 .with("no_bicycle", no_bicycle)
                                 .build(),
@@ -143,10 +145,10 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                 ]
                 .into(),
             ],
-            with_landcover("residential", 17)
+            with_landcover("residential", 17, mode)
                 .with_feature(
                     "roads",
-                    road_builder("path", 17)
+                    road_builder("path", 17, mode)
                         .with("class", "highway")
                         .with("foot", "designated")
                         .with("bicycle", "designated")
@@ -159,10 +161,10 @@ pub fn roads() -> Vec<LegendItem<'static>> {
             "road_construction",
             Category::RoadsAndPaths,
             vec![[("highway", "construction")].into()],
-            with_landcover("residential", 17)
+            with_landcover("residential", 17, mode)
                 .with_feature(
                     "roads",
-                    road_builder("construction", 17)
+                    road_builder("construction", 17, mode)
                         .with("class", "highway")
                         .build(),
                 )
@@ -183,6 +185,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     .with("off1", 1i32)
                     .with("h_red", 1i32)
                     .build(),
+                mode,
             ),
             17,
         ),
@@ -196,6 +199,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     .with("off1", 1i32)
                     .with("h_red_loc", 1i32)
                     .build(),
+                mode,
             ),
             17,
         ),
@@ -209,6 +213,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     .with("off2", 1i32)
                     .with("b_red", 1i32)
                     .build(),
+                mode,
             ),
             17,
         ),
@@ -222,6 +227,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     .with("off2", 1i32)
                     .with("s_red", 1i32)
                     .build(),
+                mode,
             ),
             17,
         ),
@@ -235,6 +241,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     .with("off1", 1i32)
                     .with("r_red", 1i32)
                     .build(),
+                mode,
             ),
             17,
         ),
@@ -257,10 +264,10 @@ pub fn roads() -> Vec<LegendItem<'static>> {
 
                 tags
             },
-            with_landcover("wood", 17)
+            with_landcover("wood", 17, mode)
                 .with_feature(
                     "roads",
-                    road_builder("track", 17)
+                    road_builder("track", 17, mode)
                         .with("class", "highway")
                         .with("tracktype", grade)
                         .build(),
@@ -278,10 +285,10 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     format!("trail_visibility_{visibility}").leak(),
                     Category::RoadsAndPaths,
                     vec![[("trail_visibility", visibility)].into()],
-                    with_landcover("wood", 17)
+                    with_landcover("wood", 17, mode)
                         .with_feature(
                             "roads",
-                            road_builder("path", 17)
+                            road_builder("path", 17, mode)
                                 .with("class", "highway")
                                 .with("trail_visibility", i as i32)
                                 .build(),
@@ -324,10 +331,12 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                         _ => vec![IndexMap::from([("railway", *typ)])],
                     })
                     .collect::<Vec<_>>(),
-                with_landcover("residential", 17)
+                with_landcover("residential", 17, mode)
                     .with_feature(
                         "roads",
-                        road_builder(types[0], 17).with("class", "railway").build(),
+                        road_builder(types[0], 17, mode)
+                            .with("class", "railway")
+                            .build(),
                     )
                     .build(),
                 17,
@@ -339,10 +348,10 @@ pub fn roads() -> Vec<LegendItem<'static>> {
             "railway_bridge",
             Category::Railway,
             vec![[("railway", "rail"), ("bridge", "yes")].into()],
-            with_landcover("residential", 17)
+            with_landcover("residential", 17, mode)
                 .with_feature(
                     "roads",
-                    road_builder("rail", 17)
+                    road_builder("rail", 17, mode)
                         .with("class", "railway")
                         .with("bridge", 1i16)
                         .build(),
@@ -354,10 +363,10 @@ pub fn roads() -> Vec<LegendItem<'static>> {
             "railway_tunnel",
             Category::Railway,
             vec![[("railway", "rail"), ("tunnel", "yes")].into()],
-            with_landcover("residential", 17)
+            with_landcover("residential", 17, mode)
                 .with_feature(
                     "roads",
-                    road_builder("rail", 17)
+                    road_builder("rail", 17, mode)
                         .with("class", "railway")
                         .with("tunnel", 1i16)
                         .build(),
@@ -372,7 +381,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
             legend_item_data_builder()
                 .with_feature(
                     "roads",
-                    road_builder("water_slide", 17)
+                    road_builder("water_slide", 17, mode)
                         .with("class", "attraction")
                         .build(),
                 )
@@ -385,11 +394,12 @@ pub fn roads() -> Vec<LegendItem<'static>> {
 
 fn with_route(
     rt: HashMap<String, LegendValue>,
+    mode: LegendMode,
 ) -> HashMap<String, Vec<HashMap<String, LegendValue>>> {
-    with_landcover("wood", 17)
+    with_landcover("wood", 17, mode)
         .with_feature(
             "roads",
-            road_builder("track", 17)
+            road_builder("track", 17, mode)
                 .with("name", "")
                 .with("class", "highway")
                 .with("tracktype", "grade3")
@@ -399,10 +409,17 @@ fn with_route(
         .build()
 }
 
-fn road_builder(typ: &'static str, zoom: u8) -> LegendFeatureDataBuilder {
+fn road_builder(typ: &'static str, zoom: u8, mode: LegendMode) -> LegendFeatureDataBuilder {
     legend_feature_data_builder()
         .with("type", typ)
-        .with("name", "Abc")
+        .with(
+            "name",
+            if mode == LegendMode::Normal {
+                "Abc"
+            } else {
+                ""
+            },
+        )
         .with("tracktype", "")
         .with("class", "")
         .with("service", "")

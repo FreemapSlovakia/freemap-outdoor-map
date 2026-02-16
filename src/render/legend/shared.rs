@@ -1,4 +1,4 @@
-use crate::render::LegendValue;
+use crate::render::{LegendMode, LegendValue};
 use geo::{Coord, LineString, Polygon};
 use indexmap::IndexMap;
 use std::collections::HashMap;
@@ -45,11 +45,7 @@ impl LegendFeatureDataBuilder {
 pub(super) struct LegendItemDataBuilder(pub(super) LegendItemData);
 
 impl LegendItemDataBuilder {
-    pub(super) fn with_layer(
-        mut self,
-        layer: impl Into<String>,
-        features: Vec<LegendFeatureData>,
-    ) -> Self {
+    fn with_layer(mut self, layer: impl Into<String>, features: Vec<LegendFeatureData>) -> Self {
         self.0.insert(layer.into(), features);
         self
     }
@@ -71,15 +67,25 @@ pub(super) fn legend_item_data_builder() -> LegendItemDataBuilder {
     LegendItemDataBuilder::default()
 }
 
-pub(super) fn with_landcover(typ: &'static str, zoom: u8) -> LegendItemDataBuilder {
-    legend_item_data_builder().with_feature(
-        "landcovers",
-        legend_feature_data_builder()
-            .with("type", typ)
-            .with("name", "")
-            .with("geometry", polygon(true, zoom))
-            .build(),
-    )
+pub(super) fn with_landcover(
+    typ: &'static str,
+    zoom: u8,
+    mode: LegendMode,
+) -> LegendItemDataBuilder {
+    let b = legend_item_data_builder();
+
+    if mode == LegendMode::Normal {
+        b.with_feature(
+            "landcovers",
+            legend_feature_data_builder()
+                .with("type", typ)
+                .with("name", "")
+                .with("geometry", polygon(true, zoom))
+                .build(),
+        )
+    } else {
+        b
+    }
 }
 
 pub(super) fn polygon(skew: bool, zoom: u8) -> Polygon {

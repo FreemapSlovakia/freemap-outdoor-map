@@ -1,5 +1,6 @@
 use super::mapping;
 use super::{LegendItem, mapping_path};
+use crate::render::LegendMode;
 use crate::render::layers::Category;
 use crate::render::legend::feature_lines::feature_lines;
 use crate::render::legend::shared::{
@@ -11,7 +12,7 @@ use indexmap::IndexMap;
 use mapping::collect_mapping_entries;
 use std::io::BufReader;
 
-pub(super) fn build_default_legend_items() -> Vec<LegendItem<'static>> {
+pub(super) fn build_legend_items(mode: LegendMode) -> Vec<LegendItem<'static>> {
     let mapping_root: mapping::MappingRoot = {
         let mapping_file = std::fs::File::open(mapping_path()).expect("read mapping.yaml");
 
@@ -20,13 +21,13 @@ pub(super) fn build_default_legend_items() -> Vec<LegendItem<'static>> {
 
     let mapping_entries = collect_mapping_entries(&mapping_root);
 
-    let poi_items = pois(&mapping_root, &mapping_entries);
+    let poi_items = pois(&mapping_root, &mapping_entries, mode);
 
-    let landcover_items = landcovers(&mapping_entries);
+    let landcover_items = landcovers(&mapping_entries, mode);
 
-    let roads = roads();
+    let roads = roads(mode);
 
-    let lines = feature_lines(&mapping_entries);
+    let lines = feature_lines(&mapping_entries, mode);
 
     let water = [
         &["river", "canal"] as &[&str],
