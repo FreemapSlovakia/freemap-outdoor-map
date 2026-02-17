@@ -9,7 +9,7 @@ pub fn roads(for_taginfo: bool) -> Vec<LegendItem<'static>> {
     [
         &["motorway", "trunk"] as &[&str],
         &["primary", "motorway_link", "trunk_link"],
-        &["secondary", "primary_link", ""],
+        &["secondary", "primary_link"],
         &["tertiary", "tertiary_link", "secondary_link"],
         &["residential", "unclassified", "living_street", "road"],
         &["footway", "pedestrian"],
@@ -34,11 +34,10 @@ pub fn roads(for_taginfo: bool) -> Vec<LegendItem<'static>> {
         .add_tag_set(|mut ts| {
             for typ in *types {
                 if *typ == "platform" {
-                    ts = ts.add_tags(|tags| {
-                        tags.add("highway", "platform")
-                            .add("railway", "platform")
-                            .add("public_transport", "platform")
-                    });
+                    ts = ts
+                        .add_tags(|tags| tags.add("highway", "platform"))
+                        .add_tags(|tags| tags.add("railway", "platform"))
+                        .add_tags(|tags| tags.add("public_transport", "platform"))
                 } else {
                     ts = ts.add_tags(|tags| tags.add("highway", typ));
                 }
