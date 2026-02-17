@@ -236,9 +236,15 @@
     {
       "key": "amenity",
       "value": "fountain",
-      "object_types": ["node", "area"],
+      "object_types": ["node"],
       "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/fountain.svg",
       "description": "Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17. [water_areas] Rendered from zoom 0. Label (name) from zoom 10."
+    },
+    {
+      "key": "amenity",
+      "value": "fountain",
+      "object_types": ["area"],
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/water_area?mode=taginfo"
     },
     {
       "key": "amenity",
@@ -288,6 +294,13 @@
       "object_types": ["node", "area"],
       "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/parking.svg",
       "description": "Rendered as icon. Icon from zoom 17. Label (name/ref) from zoom 19."
+    },
+    {
+      "key": "amenity",
+      "value": "parking",
+      "object_types": ["area"],
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_parking?mode=taginfo",
+      "description": ""
     },
     {
       "key": "amenity",
@@ -349,7 +362,8 @@
       "key": "amenity",
       "value": "swimming_pool",
       "object_types": ["area"],
-      "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10."
+      "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/water_area?mode=taginfo"
     },
     {
       "key": "amenity",
@@ -537,7 +551,7 @@
       "key": "boundary",
       "value": "national_park",
       "object_types": ["area", "relation"],
-      "description": "TODO",
+      "description": "",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/national_park?mode=taginfo"
     },
     {
@@ -599,10 +613,38 @@
       "description": "[routes] Rendered from zoom 9. Used for hiking/cycling/horse/ski routes to control which routes are rendered from what zoom and for hiking routes also style of the rendering."
     },
     {
+      "key": "network",
+      "value": "iwn",
+      "object_types": ["relation"],
+      "description": "[routes] Rendered from zoom 9.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/route_hiking?mode=taginfo"
+    },
+    {
+      "key": "network",
+      "value": "nwn",
+      "object_types": ["relation"],
+      "description": "[routes] Rendered from zoom 9.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/route_hiking?mode=taginfo"
+    },
+    {
+      "key": "network",
+      "value": "rwn",
+      "object_types": ["relation"],
+      "description": "[routes] Rendered from zoom 9.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/route_hiking?mode=taginfo"
+    },
+    {
+      "key": "network",
+      "value": "lwn",
+      "object_types": ["relation"],
+      "description": "[routes] Rendered from zoom 9.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/route_hiking_local?mode=taginfo"
+    },
+    {
       "key": "denotation",
       "value": "natural_monument",
       "object_types": ["node"],
-      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/tree_protected.svg",
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/tree.svg",
       "description": "Rendered as protected tree when natural=tree."
     },
     {
@@ -809,19 +851,36 @@
       "key": "landuse",
       "value": "basin",
       "object_types": ["area"],
-      "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10."
+      "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/water_area?mode=taginfo"
     },
     {
       "key": "landuse",
       "value": "forest",
       "object_types": ["area"],
-      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12."
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_forest?mode=taginfo"
+    },
+    {
+      "key": "landuse",
+      "value": "recreation_ground",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_recreation_ground?mode=taginfo"
     },
     {
       "key": "landuse",
       "value": "meadow",
       "object_types": ["area"],
-      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12."
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_meadow?mode=taginfo"
+    },
+    {
+      "key": "landuse",
+      "value": "village_green",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_meadow?mode=taginfo"
     },
     {
       "key": "landuse",
@@ -834,13 +893,43 @@
       "key": "landuse",
       "value": "reservoir",
       "object_types": ["area"],
-      "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10."
+      "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/water_area?mode=taginfo"
     },
     {
       "key": "landuse",
       "value": "wood",
       "object_types": ["area"],
-      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12."
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_forest?mode=taginfo"
+    },
+    {
+      "key": "landuse",
+      "value": "vineyard",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_vineyard?mode=taginfo"
+    },
+    {
+      "key": "landuse",
+      "value": "orchard",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_orchard?mode=taginfo"
+    },
+    {
+      "key": "leisure",
+      "value": "dog_park",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_dog_park?mode=taginfo"
+    },
+    {
+      "key": "natural",
+      "value": "beach",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_beach?mode=taginfo"
     },
     {
       "key": "leisure",
@@ -916,7 +1005,8 @@
       "key": "leisure",
       "value": "swimming_pool",
       "object_types": ["node", "area"],
-      "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10."
+      "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/water_area?mode=taginfo"
     },
     {
       "key": "leisure",
@@ -1087,9 +1177,10 @@
     },
     {
       "key": "natural",
-      "value": "blockfield",
+      "value": "glacier",
       "object_types": ["area"],
-      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12."
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_glacier?mode=taginfo"
     },
     {
       "key": "natural",
@@ -1102,19 +1193,29 @@
       "key": "natural",
       "value": "fell",
       "object_types": ["area"],
-      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12."
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_meadow?mode=taginfo"
     },
     {
       "key": "natural",
       "value": "grassland",
       "object_types": ["area"],
-      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12."
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_meadow?mode=taginfo"
+    },
+    {
+      "key": "landuse",
+      "value": "grass",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_meadow?mode=taginfo"
     },
     {
       "key": "natural",
       "value": "heath",
       "object_types": ["area"],
-      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12."
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_heath?mode=taginfo"
     },
     {
       "key": "natural",
@@ -1127,7 +1228,7 @@
       "key": "natural",
       "value": "ridge",
       "object_types": ["way"],
-      "description": "[valleys_ridges] Rendered from zoom 13. Label (name) from zoom 13."
+      "description": "[valleys_ridges] Rendered label (name) from zoom 13."
     },
     {
       "key": "natural",
@@ -1147,19 +1248,21 @@
       "key": "natural",
       "value": "scree",
       "object_types": ["area"],
-      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12."
+      "description": "Rendered from zoom 0. Label (name) from zoom 12."
     },
     {
       "key": "natural",
       "value": "scrub",
       "object_types": ["area"],
-      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12."
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_scrub?mode=taginfo"
     },
     {
       "key": "natural",
       "value": "shrub",
       "object_types": ["node", "area"],
-      "description": "[trees] Rendered from zoom 16."
+      "description": "[trees] Rendered from zoom 16.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/simple_shrub?mode=taginfo"
     },
     {
       "key": "natural",
@@ -1179,19 +1282,22 @@
       "key": "natural",
       "value": "hot_spring",
       "object_types": ["node", "area"],
-      "description": "Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+      "description": "Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/poi_spring_natural_hot_spring?mode=taginfo"
     },
     {
       "key": "natural",
       "value": "geyser",
       "object_types": ["node", "area"],
-      "description": "Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+      "description": "Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15.",
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/spring.svg"
     },
     {
       "key": "man_made",
       "value": "spring_box",
       "object_types": ["node", "area"],
-      "description": "Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15."
+      "description": "Rendered as icon. Icon from zoom 14. Label (name/ref) from zoom 15.",
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/spring.svg"
     },
     {
       "key": "natural",
@@ -1204,7 +1310,7 @@
       "key": "natural",
       "value": "tree",
       "object_types": ["node", "area"],
-      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/tree.svg",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/simple_tree?mode=taginfo",
       "description": "Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 15. [trees] Rendered from zoom 16."
     },
     {
@@ -1224,29 +1330,41 @@
       "key": "natural",
       "value": "water",
       "object_types": ["area"],
-      "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10."
+      "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/water_area?mode=taginfo"
     },
+
     {
       "key": "natural",
       "value": "wetland",
       "object_types": ["area"],
-      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12."
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_wetland?mode=taginfo"
     },
     {
       "key": "natural",
       "value": "wood",
       "object_types": ["area"],
-      "description": "[landcover] Rendered from zoom 0. Label (name) from zoom 12."
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_forest?mode=taginfo"
     },
     {
       "key": "osmc:symbol",
       "object_types": ["relation"],
-      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14. Only waycolor is used: red, blue, green, yellow, black, white, orange, violet, purple"
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14. Only waycolor is used: red, blue, green, yellow, black, white, orange, violet, purple",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/route_hiking?mode=taginfo"
     },
     {
       "key": "place",
       "object_types": ["node"],
       "description": "[place] Rendered from zoom 8. Label (name) from zoom 8. [locality] Rendered from zoom 15. Label (name) from zoom 15."
+    },
+    {
+      "key": "power",
+      "value": "plant",
+      "object_types": ["area"],
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/solar_power_plants?mode=taginfo",
+      "description": "Only solar powerp plants."
     },
     {
       "key": "power",
@@ -1259,19 +1377,29 @@
       "key": "power",
       "value": "line",
       "object_types": ["way"],
-      "description": "[power_lines] Rendered from zoom 13."
+      "description": "[power_lines] Rendered from zoom 13.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/line_line?mode=taginfo"
     },
     {
       "key": "power",
       "value": "minor_line",
       "object_types": ["way"],
-      "description": "[power_lines] Rendered from zoom 13."
+      "description": "[power_lines] Rendered from zoom 13.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/line_minor_line?mode=taginfo"
     },
     {
       "key": "power",
       "value": "tower",
       "object_types": ["node", "area"],
-      "description": "[power_lines] Rendered from zoom 13."
+      "description": "[power_lines] Rendered from zoom 13.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/line_line?mode=taginfo"
+    },
+    {
+      "key": "power",
+      "value": "pole",
+      "object_types": ["node", "area"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/line_minor_line?mode=taginfo"
     },
     {
       "key": "protected",
@@ -1291,21 +1419,21 @@
       "key": "railway",
       "value": "rail",
       "object_types": ["way"],
-      "description": "TODO",
+      "description": "",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/railway_rail?mode=taginfo"
     },
     {
       "key": "railway",
       "value": "light_rail",
       "object_types": ["way"],
-      "description": "TODO",
+      "description": "",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/railway_light_rail?mode=taginfo"
     },
     {
       "key": "railway",
       "value": "tram",
       "object_types": ["way"],
-      "description": "TODO",
+      "description": "",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/railway_light_rail?mode=taginfo"
     },
 
@@ -1313,42 +1441,42 @@
       "key": "railway",
       "value": "miniature",
       "object_types": ["way"],
-      "description": "TODO",
+      "description": "",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/railway_miniature?mode=taginfo"
     },
     {
       "key": "railway",
       "value": "monorail",
       "object_types": ["way"],
-      "description": "TODO",
+      "description": "",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/railway_miniature?mode=taginfo"
     },
     {
       "key": "railway",
       "value": "funicular",
       "object_types": ["way"],
-      "description": "TODO",
+      "description": "",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/railway_miniature?mode=taginfo"
     },
     {
       "key": "railway",
       "value": "narrow_gauge",
       "object_types": ["way"],
-      "description": "TODO",
+      "description": "",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/railway_miniature?mode=taginfo"
     },
     {
       "key": "railway",
       "value": "subway",
       "object_types": ["way"],
-      "description": "TODO",
+      "description": "",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/railway_miniature?mode=taginfo"
     },
     {
       "key": "railway",
       "value": "construction",
       "object_types": ["way"],
-      "description": "TODO",
+      "description": "",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/railway_construction?mode=taginfo"
     },
     {
@@ -1362,49 +1490,57 @@
       "key": "route",
       "value": "bicycle",
       "object_types": ["relation"],
-      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14."
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/route_bicycle?mode=taginfo"
     },
     {
       "key": "route",
       "value": "foot",
       "object_types": ["relation"],
-      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14."
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/route_hiking?mode=taginfo"
     },
     {
       "key": "route",
       "value": "hiking",
       "object_types": ["relation"],
-      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14."
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/route_hiking?mode=taginfo"
     },
     {
       "key": "route",
       "value": "horse",
       "object_types": ["relation"],
-      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14."
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/route_horse?mode=taginfo"
     },
     {
       "key": "route",
       "value": "mtb",
       "object_types": ["relation"],
-      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14."
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/route_bicycle?mode=taginfo"
     },
     {
       "key": "route",
       "value": "piste",
       "object_types": ["relation"],
-      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14."
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/route_ski?mode=taginfo"
     },
     {
       "key": "route",
       "value": "running",
       "object_types": ["relation"],
-      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14."
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/route_hiking_local?mode=taginfo"
     },
     {
       "key": "route",
       "value": "ski",
       "object_types": ["relation"],
-      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14."
+      "description": "[routes] Rendered from zoom 9. Label (name/ref) from zoom 14.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/route_ski?mode=taginfo"
     },
     {
       "key": "shelter_type",
@@ -1649,7 +1785,7 @@
       "value": "water_slide",
       "object_types": ["way"],
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/water_slide?mode=taginfo",
-      "description": "TODO"
+      "description": ""
     },
     {
       "key": "tourism",
@@ -1732,7 +1868,8 @@
       "key": "tourism",
       "value": "theme_park",
       "object_types": ["node", "area"],
-      "description": "[special_parks] Rendered from zoom 13. Label (name) from zoom 13."
+      "description": "[special_parks] Rendered from zoom 13. Label (name) from zoom 13.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/zoo?mode=taginfo"
     },
     {
       "key": "tourism",
@@ -1752,7 +1889,8 @@
       "key": "tourism",
       "value": "zoo",
       "object_types": ["node", "area"],
-      "description": "[special_parks] Rendered from zoom 13. Label (name) from zoom 13."
+      "description": "[special_parks] Rendered from zoom 13. Label (name) from zoom 13.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/zoo?mode=taginfo"
     },
     {
       "key": "tower:type",
@@ -1778,13 +1916,15 @@
     {
       "key": "vehicle",
       "object_types": ["way"],
-      "description": "Rendered from zoom 14."
+      "description": "Rendered from zoom 14. Forbidden access for cyclists is indicated.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_bicycle_no?mode=taginfo"
     },
     {
       "key": "waterway",
       "value": "canal",
       "object_types": ["way"],
-      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12."
+      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_river?mode=taginfo"
     },
     {
       "key": "waterway",
@@ -1797,31 +1937,71 @@
       "key": "waterway",
       "value": "ditch",
       "object_types": ["way"],
-      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12."
+      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_stream?mode=taginfo"
     },
     {
       "key": "waterway",
       "value": "drain",
       "object_types": ["way"],
-      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12."
+      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_stream?mode=taginfo"
+    },
+    {
+      "key": "waterway",
+      "value": "rapids",
+      "object_types": ["way"],
+      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_stream?mode=taginfo"
+    },
+    {
+      "key": "waterway",
+      "value": "tidal_channel",
+      "object_types": ["way"],
+      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_stream?mode=taginfo"
+    },
+    {
+      "key": "waterway",
+      "value": "pressurised",
+      "object_types": ["way"],
+      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_stream?mode=taginfo"
+    },
+    {
+      "key": "waterway",
+      "value": "canoe_pass",
+      "object_types": ["way"],
+      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_stream?mode=taginfo"
+    },
+    {
+      "key": "waterway",
+      "value": "fish_pass",
+      "object_types": ["way"],
+      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_stream?mode=taginfo"
     },
     {
       "key": "waterway",
       "value": "river",
       "object_types": ["way"],
-      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12."
+      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_river?mode=taginfo"
     },
     {
       "key": "waterway",
       "value": "riverbank",
       "object_types": ["area"],
-      "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10."
+      "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/water_area?mode=taginfo"
     },
     {
       "key": "waterway",
       "value": "stream",
       "object_types": ["way"],
-      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12."
+      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_stream?mode=taginfo"
     },
     {
       "key": "waterway",
@@ -1840,47 +2020,65 @@
     {
       "key": "intermittent",
       "object_types": ["area"],
-      "description": "Visually indicated on water areas."
+      "description": "Visually indicated on water areas.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/water_area_tmp?mode=taginfo"
     },
     {
       "key": "seasonal",
       "object_types": ["area"],
-      "description": "Visually indicated on water areas."
+      "description": "Visually indicated on water areas.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/water_area_tmp?mode=taginfo"
     },
     {
       "key": "intermittent",
       "object_types": ["node", "area"],
-      "description": "Visually indicated on spring icons."
+      "description": "Visually indicated on spring icons.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/poi_spring_intermittent_yes?mode=taginfo"
     },
     {
       "key": "seasonal",
       "object_types": ["node", "area"],
-      "description": "Visually indicated on spring icons."
+      "description": "Visually indicated on spring icons.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/poi_spring_intermittent_yes?mode=taginfo"
     },
     {
       "key": "intermittent",
       "object_types": ["way"],
-      "description": "[water_lines] Makes wayerway lines dashed."
+      "description": "[water_lines] Makes wayerway lines dashed.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/waterway_tmp?mode=taginfo"
     },
     {
       "key": "seasonal",
       "object_types": ["way"],
-      "description": "[water_lines] Makes wayerway lines dashed."
+      "description": "[water_lines] Makes wayerway lines dashed.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/waterway_tmp?mode=taginfo"
     },
     {
       "key": "water_characteristic",
       "object_types": ["node", "area"],
-      "description": "Differentiates icon for mineral springs."
+      "description": "Differentiates icon for mineral springs.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/poi_spring_water_characteristic_mineral?mode=taginfo"
     },
     {
       "key": "drinking_water",
+      "value": "yes",
       "object_types": ["node", "area"],
-      "description": "Differentiates icon for springs and wells. Supports values yes/no."
+      "description": "Differentiates icon for springs and wells. Supports values yes/no.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/poi_spring_drinking_water_yes?mode=taginfo"
+    },
+    {
+      "key": "drinking_water",
+      "value": "no",
+      "object_types": ["node", "area"],
+      "description": "Differentiates icon for springs and wells. Supports values yes/no.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/poi_spring_drinking_water_no?mode=taginfo"
     },
     {
       "key": "refitted",
+      "value": "yes",
       "object_types": ["node", "area"],
-      "description": "Differentiates icon for springs."
+      "description": "Differentiates icon for springs.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/poi_spring_refitted_yes?mode=taginfo"
     },
     {
       "key": "tunnel",

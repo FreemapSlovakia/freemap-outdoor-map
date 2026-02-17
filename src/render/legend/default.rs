@@ -85,7 +85,16 @@ pub(super) fn build_legend_items(for_taginfo: bool) -> Vec<LegendItem<'static>> 
             })
             .build(),
         LegendItem::builder("water_area", Category::Water, 17, for_taginfo)
-            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("natural", "water")))
+            .add_tag_set(|ts| {
+                ts.add_tags(|tags| tags.add("natural", "water"))
+                    .add_tags(|tags| tags.add("landuse", "basin"))
+                    .add_tags(|tags| tags.add("landuse", "reservoir"))
+                    .add_tags(|tags| tags.add("amenity", "swimming_pool"))
+                    .add_tags(|tags| tags.add("amenity", "fountain"))
+                    .add_tags(|tags| tags.add("leisure", "swimming_pool"))
+                    .add_tags(|tags| tags.add("natural", "water"))
+                    .add_tags(|tags| tags.add("waterway", "waterway"))
+            })
             .add_feature("water_areas", |b| {
                 b.with_polygon(true).with_name().with("tmp", false)
             })

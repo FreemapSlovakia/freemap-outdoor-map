@@ -118,6 +118,13 @@ pub fn pois(
                         tb
                     });
                 }
+
+                if visual_key == "spring" {
+                    ts = ts
+                        .add_tags(|t| t.add("natural", "geyser"))
+                        .add_tags(|t| t.add("man_made", "spring_box"))
+                }
+
                 ts
             })
             .add_poi(repr_typ, HashMap::new(), category)
@@ -127,7 +134,7 @@ pub fn pois(
             [
                 (("drinkable", "yes"), ("drinking_water", "yes")),
                 (("drinkable", "no"), ("drinking_water", "no")),
-                (("hot", "yes"), ("natural", "hot_spring")),
+                (("hot", "true"), ("natural", "hot_spring")),
                 (
                     ("water_characteristic", "mineral"),
                     ("water_characteristic", "mineral"),
@@ -289,11 +296,13 @@ impl<'a> LegendItemBuilder<'a> {
             Category::Other => "residential",
         };
 
+        let offset = if self.for_taginfo { 0.0 } else { factor * -2.0 };
+
         self.add_landcover(bg).add_feature("pois", |b| {
             b.with("type", typ)
                 .with_name()
                 .with("extra", extra)
-                .with("geometry", Point::new(0.0, factor * -2.0))
+                .with("geometry", Point::new(0.0, offset))
         })
     }
 }
