@@ -1002,6 +1002,167 @@
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_orchard?mode=taginfo"
     },
     {
+      "key": "landuse",
+      "value": "plant_nursery",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_plant_nursery?mode=taginfo"
+    },
+    {
+      "key": "man_made",
+      "value": "clearcut",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_clearcut?mode=taginfo"
+    },
+    {
+      "key": "landuse",
+      "value": "quarry",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_quarry?mode=taginfo"
+    },
+    {
+      "key": "landuse",
+      "value": "residential",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_residential?mode=taginfo"
+    },
+    {
+      "key": "landuse",
+      "value": "commercial",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_commercial?mode=taginfo"
+    },
+    {
+      "key": "landuse",
+      "value": "industrial",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_industrial?mode=taginfo"
+    },
+    {
+      "key": "landuse",
+      "value": "brownfield",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_brownfield?mode=taginfo"
+    },
+    {
+      "key": "landuse",
+      "value": "landfill",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_landfill?mode=taginfo"
+    },
+    {
+      "key": "amenity",
+      "value": "hospital",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_hospital?mode=taginfo"
+    },
+    {
+      "key": "landuse",
+      "value": "allotments",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_allotments?mode=taginfo"
+    },
+    {
+      "key": "leisure",
+      "value": "garden",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_garden?mode=taginfo"
+    },
+    {
+      "key": "leisure",
+      "value": "park",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_park?mode=taginfo"
+    },
+    {
+      "key": "leisure",
+      "value": "pitch",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_pitch?mode=taginfo"
+    },
+    {
+      "key": "leisure",
+      "value": "playground",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_pitch?mode=taginfo"
+    },
+    {
+      "key": "leisure",
+      "value": "golf_course",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_pitch?mode=taginfo"
+    },
+    {
+      "key": "leisure",
+      "value": "track",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_pitch?mode=taginfo"
+    },
+    {
+      "key": "landuse",
+      "value": "cemetery",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_cemetery?mode=taginfo"
+    },
+    {
+      "key": "amenity",
+      "value": "grave_yard",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_cemetery?mode=taginfo"
+    },
+    {
+      "key": "amenity",
+      "value": "college",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_college?mode=taginfo"
+    },
+    {
+      "key": "amenity",
+      "value": "school",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_college?mode=taginfo"
+    },
+    {
+      "key": "amenity",
+      "value": "university",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_college?mode=taginfo"
+    },
+    {
+      "key": "landuse",
+      "value": "winter_sports",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_winter_sports?mode=taginfo"
+    },
+    {
+      "key": "man_made",
+      "value": "silo",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_silo?mode=taginfo"
+    },
+    {
       "key": "leisure",
       "value": "dog_park",
       "object_types": ["area"],
@@ -1268,6 +1429,13 @@
     },
     {
       "key": "natural",
+      "value": "bare_rock",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_bare_rock?mode=taginfo"
+    },
+    {
+      "key": "natural",
       "value": "cave_entrance",
       "object_types": ["node", "area"],
       "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/cave_entrance.svg",
@@ -1332,7 +1500,8 @@
       "key": "natural",
       "value": "scree",
       "object_types": ["area"],
-      "description": "Rendered from zoom 0. Label (name) from zoom 12."
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_scree?mode=taginfo"
     },
     {
       "key": "natural",
@@ -1417,13 +1586,61 @@
       "description": "[water_areas] Rendered from zoom 0. Label (name) from zoom 10.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/water_area?mode=taginfo"
     },
-
     {
       "key": "natural",
       "value": "wetland",
       "object_types": ["area"],
       "description": "Rendered from zoom 0. Label (name) from zoom 12.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_wetland?mode=taginfo"
+    },
+    {
+      "key": "wetland",
+      "value": "mangrove",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_mangrove?mode=taginfo"
+    },
+    {
+      "key": "wetland",
+      "value": "bog",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_bog?mode=taginfo"
+    },
+    {
+      "key": "wetland",
+      "value": "marsh",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_marsh?mode=taginfo"
+    },
+    {
+      "key": "wetland",
+      "value": "wet_meadow",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_marsh?mode=taginfo"
+    },
+    {
+      "key": "wetland",
+      "value": "fen",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_marsh?mode=taginfo"
+    },
+    {
+      "key": "wetland",
+      "value": "mangrove",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_mangrove?mode=taginfo"
+    },
+    {
+      "key": "wetland",
+      "value": "reedbed",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_mangrove?mode=taginfo"
     },
     {
       "key": "natural",
