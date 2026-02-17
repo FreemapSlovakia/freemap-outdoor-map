@@ -1542,6 +1542,153 @@
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_steps?mode=taginfo"
     },
     {
+      "key": "highway",
+      "value": "cycleway",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_cycleway?mode=taginfo"
+    },
+    {
+      "key": "highway",
+      "value": "path",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_path?display=taginfo"
+    },
+    {
+      "key": "highway",
+      "value": "piste",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_piste?mode=taginfo"
+    },
+    {
+      "key": "highway",
+      "value": "bridleway",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_bridleway?mode=taginfo"
+    },
+    {
+      "key": "highway",
+      "value": "via_ferrata",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_via_ferrata?mode=taginfo"
+    },
+    {
+      "key": "highway",
+      "value": "track",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_track?mode=taginfo"
+    },
+    {
+      "key": "highway",
+      "value": "construction",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_construction?mode=taginfo"
+    },
+    {
+      "key": "tracktype",
+      "value": "grade1",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_track_grade1?mode=taginfo"
+    },
+    {
+      "key": "highway",
+      "value": "service",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_track_grade1?mode=taginfo"
+    },
+    {
+      "key": "tracktype",
+      "value": "grade2",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_track_grade2?mode=taginfo"
+    },
+    {
+      "key": "highway",
+      "value": "raceway",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_track_grade2?mode=taginfo"
+    },
+    {
+      "key": "leisure",
+      "value": "track",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_track_grade2?mode=taginfo"
+    },
+    {
+      "key": "tracktype",
+      "value": "grade3",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_track_grade3?mode=taginfo"
+    },
+    {
+      "key": "tracktype",
+      "value": "grade4",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_track_grade4?mode=taginfo"
+    },
+    {
+      "key": "tracktype",
+      "value": "grade5",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_track_grade5?mode=taginfo"
+    },
+    {
+      "key": "trail_visibility",
+      "value": "excellent",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/trail_visibility_excellent?mode=taginfo"
+    },
+    {
+      "key": "trail_visibility",
+      "value": "good",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/trail_visibility_good?mode=taginfo"
+    },
+    {
+      "key": "trail_visibility",
+      "value": "intermediate",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/trail_visibility_intermediate?mode=taginfo"
+    },
+    {
+      "key": "trail_visibility",
+      "value": "bad",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/trail_visibility_bad?mode=taginfo"
+    },
+    {
+      "key": "trail_visibility",
+      "value": "horrible",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/trail_visibility_horrible?mode=taginfo"
+    },
+    {
+      "key": "trail_visibility",
+      "value": "no",
+      "object_types": ["way"],
+      "description": "",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/trail_visibility_no?mode=taginfo"
+    },
+    {
       "key": "railway",
       "value": "halt",
       "object_types": ["node", "area"],
