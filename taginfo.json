@@ -12,8 +12,23 @@
   "tags": [
     {
       "key": "access",
-      "object_types": ["node", "way", "area"],
-      "description": "Rendered from zoom 14."
+      "object_types": ["node"],
+      "description": "Rendered from zoom 14. Indicated on highways for pedestrians and cyclists.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_foot_nobicycle_no?mode=taginfo"
+    },
+    {
+      "key": "access",
+      "value": "no",
+      "object_types": ["node", "area"],
+      "description": "Rendered from zoom 14. Indicates POI access.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/private_poi?mode=taginfo"
+    },
+    {
+      "key": "access",
+      "value": "private",
+      "object_types": ["node", "area"],
+      "description": "Rendered from zoom 14. Indicates POI access.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/private_poi?mode=taginfo"
     },
     {
       "key": "addr:conscriptionnumber",
@@ -2203,7 +2218,7 @@
       "key": "waterway",
       "value": "canal",
       "object_types": ["way"],
-      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_river?mode=taginfo"
     },
     {
@@ -2217,56 +2232,56 @@
       "key": "waterway",
       "value": "ditch",
       "object_types": ["way"],
-      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_stream?mode=taginfo"
     },
     {
       "key": "waterway",
       "value": "drain",
       "object_types": ["way"],
-      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_stream?mode=taginfo"
     },
     {
       "key": "waterway",
       "value": "rapids",
       "object_types": ["way"],
-      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_stream?mode=taginfo"
     },
     {
       "key": "waterway",
       "value": "tidal_channel",
       "object_types": ["way"],
-      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_stream?mode=taginfo"
     },
     {
       "key": "waterway",
       "value": "pressurised",
       "object_types": ["way"],
-      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_stream?mode=taginfo"
     },
     {
       "key": "waterway",
       "value": "canoe_pass",
       "object_types": ["way"],
-      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_stream?mode=taginfo"
     },
     {
       "key": "waterway",
       "value": "fish_pass",
       "object_types": ["way"],
-      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_stream?mode=taginfo"
     },
     {
       "key": "waterway",
       "value": "river",
       "object_types": ["way"],
-      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_river?mode=taginfo"
     },
     {
@@ -2280,7 +2295,7 @@
       "key": "waterway",
       "value": "stream",
       "object_types": ["way"],
-      "description": "[water_lines] Rendered from zoom 0. Label (name) from zoom 12.",
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_stream?mode=taginfo"
     },
     {
@@ -2299,38 +2314,44 @@
     },
     {
       "key": "intermittent",
+      "value": "yes",
       "object_types": ["area"],
       "description": "Visually indicated on water areas.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/water_area_tmp?mode=taginfo"
     },
     {
       "key": "seasonal",
+      "value": "yes",
       "object_types": ["area"],
       "description": "Visually indicated on water areas.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/water_area_tmp?mode=taginfo"
     },
     {
       "key": "intermittent",
+      "value": "yes",
       "object_types": ["node", "area"],
       "description": "Visually indicated on spring icons.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/poi_spring_intermittent_yes?mode=taginfo"
     },
     {
       "key": "seasonal",
+      "value": "yes",
       "object_types": ["node", "area"],
       "description": "Visually indicated on spring icons.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/poi_spring_intermittent_yes?mode=taginfo"
     },
     {
       "key": "intermittent",
+      "value": "yes",
       "object_types": ["way"],
-      "description": "[water_lines] Makes wayerway lines dashed.",
+      "description": "Makes wayerway lines dashed.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/waterway_tmp?mode=taginfo"
     },
     {
       "key": "seasonal",
+      "value": "yes",
       "object_types": ["way"],
-      "description": "[water_lines] Makes wayerway lines dashed.",
+      "description": "Makes wayerway lines dashed.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/waterway_tmp?mode=taginfo"
     },
     {
@@ -2362,25 +2383,30 @@
     },
     {
       "key": "tunnel",
-      "value": "yes",
-      "description": "[water_lines] Visually indicated on wayerways."
+      "value": "culvert",
+      "object_types": ["way"],
+      "description": "Visually indicated on wayerways."
     },
     {
       "key": "bridge",
       "value": "yes",
-      "description": "[roads] Visually indicated on roads and railways."
+      "object_types": ["way"],
+      "description": "Visually indicated on roads and railways."
     },
     {
       "key": "tunnel",
       "value": "yes",
-      "description": "[roads] Visually indicated on roads and railways."
+      "object_types": ["way"],
+      "description": "Visually indicated on roads and railways."
     },
     {
       "key": "tower:type",
+      "object_types": ["node", "area"],
       "description": "Affects tower icon."
     },
     {
       "key": "ele",
+      "object_types": ["node", "area"],
       "description": "Adds elevation into label with smaller font size."
     }
   ]
