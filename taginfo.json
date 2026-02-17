@@ -571,7 +571,76 @@
     },
     {
       "key": "building",
-      "object_types": ["node", "area"],
+      "object_types": ["area"],
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/building?mode=taginfo",
+      "description": ""
+    },
+    {
+      "key": "building",
+      "value": "disused",
+      "object_types": ["area"],
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/building_disused?mode=taginfo",
+      "description": ""
+    },
+    {
+      "key": "disused",
+      "value": "yes",
+      "object_types": ["area"],
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/building_disused?mode=taginfo",
+      "description": "Indicated on buildings"
+    },
+    {
+      "key": "disused:building",
+      "value": "yes",
+      "object_types": ["area"],
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/building_disused?mode=taginfo",
+      "description": ""
+    },
+    {
+      "key": "building",
+      "value": "abandoned",
+      "object_types": ["area"],
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/building_abandoned?mode=taginfo",
+      "description": ""
+    },
+    {
+      "key": "abandoned",
+      "value": "yes",
+      "object_types": ["area"],
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/building_abandoned?mode=taginfo",
+      "description": "Indicated on buildings"
+    },
+    {
+      "key": "abandoned:building",
+      "value": "yes",
+      "object_types": ["area"],
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/building_abandoned?mode=taginfo",
+      "description": ""
+    },
+    {
+      "key": "building",
+      "value": "ruins",
+      "object_types": ["area"],
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/building_ruins?mode=taginfo",
+      "description": ""
+    },
+    {
+      "key": "ruins",
+      "value": "yes",
+      "object_types": ["area"],
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/building_ruins?mode=taginfo",
+      "description": "Indicated on buildings"
+    },
+    {
+      "key": "ruins:building",
+      "value": "yes",
+      "object_types": ["area"],
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/building_ruins?mode=taginfo",
+      "description": ""
+    },
+    {
+      "key": "building",
+      "object_types": ["node"],
       "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/building.svg",
       "description": "Rendered as icon. Icon from zoom 16. Label (name/ref) from zoom 17. [buildings] Rendered from zoom 13. Label (name) from zoom 17."
     },
