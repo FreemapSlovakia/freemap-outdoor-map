@@ -7,7 +7,7 @@ use crate::{
         },
         tile_processing_worker::TileProcessingWorker,
     },
-    render::RenderWorkerPool,
+    render::{RenderLayer, RenderWorkerPool},
 };
 use axum::{
     Router,
@@ -15,33 +15,46 @@ use axum::{
     serve,
 };
 use geo::Geometry;
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
-use tokio::sync::broadcast;
+use std::{
+    collections::HashSet,
+    io,
+    net::{Ipv4Addr, SocketAddr},
+    path::PathBuf,
+    sync::Arc,
+};
+use tokio::sync::broadcast::Receiver;
 use tower::limit::ConcurrencyLimitLayer;
 use tower_http::cors::{Any, CorsLayer};
 
+pub struct ServerOptions {
+    pub serve_cached: bool,
+    pub max_zoom: u8,
+    pub tile_cache_base_path: Option<PathBuf>,
+    pub allowed_scales: Vec<f64>,
+    pub render: HashSet<RenderLayer>,
+    pub max_concurrent_connections: usize,
+    pub host: Ipv4Addr,
+    pub port: u16,
+    pub cors: bool,
+    pub limits_geometry: Option<Geometry>,
+}
+
 pub async fn start_server(
     render_worker_pool: Arc<RenderWorkerPool>,
-    tile_cache_base_path: Option<PathBuf>,
     tile_worker: Option<TileProcessingWorker>,
-    serve_cached: bool,
-    max_zoom: u8,
-    limits_geometry: Option<Geometry>,
-    allowed_scales: Vec<f64>,
-    max_concurrent_connections: usize,
-    addr: SocketAddr,
-    mut shutdown_rx: broadcast::Receiver<()>,
-    cors: bool,
-) {
+    mut shutdown_rx: Receiver<()>,
+    options: ServerOptions,
+) -> io::Result<()> {
     let app_state = AppState {
         render_worker_pool,
         export_state: Arc::new(ExportState::new()),
-        tile_cache_base_path: Arc::new(tile_cache_base_path),
+        tile_cache_base_path: options.tile_cache_base_path.clone(),
         tile_worker,
-        serve_cached,
-        max_zoom,
-        limits_geometry: Arc::new(limits_geometry),
-        allowed_scales: Arc::new(allowed_scales),
+        serve_cached: options.serve_cached,
+        max_zoom: options.max_zoom,
+        limits_geometry: options.limits_geometry,
+        allowed_scales: options.allowed_scales.clone(),
+        render: options.render.iter().copied().collect(),
     };
 
     let mut router = Router::new()
@@ -58,7 +71,7 @@ pub async fn start_server(
         .route("/legend/{id}", get(legend_route::get))
         .with_state(app_state);
 
-    if cors {
+    if options.cors {
         router = router.layer(
             CorsLayer::new()
                 .allow_origin(Any)
@@ -67,16 +80,16 @@ pub async fn start_server(
         );
     }
 
-    router = router.layer(ConcurrencyLimitLayer::new(max_concurrent_connections));
+    router = router.layer(ConcurrencyLimitLayer::new(
+        options.max_concurrent_connections,
+    ));
 
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
-        .expect("bind address");
+    let listener =
+        tokio::net::TcpListener::bind(SocketAddr::from((options.host, options.port))).await?;
 
     serve(listener, router)
         .with_graceful_shutdown(async move {
             let _ = shutdown_rx.recv().await;
         })
         .await
-        .expect("server");
 }

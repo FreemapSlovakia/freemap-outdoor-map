@@ -25,11 +25,10 @@ pub(crate) async fn get(
     Path(id): Path<String>,
     Query(LegendQuery { scale, mode }): Query<LegendQuery>,
 ) -> Response<Body> {
-    let Some(render_request) = legend_render_request(
-        id.as_str(),
-        scale.unwrap_or(1f64),
-        mode.unwrap_or(LegendMode::Normal),
-    ) else {
+    let mode = mode.unwrap_or(LegendMode::Normal);
+
+    let Some(render_request) = legend_render_request(id.as_str(), scale.unwrap_or(1f64), mode)
+    else {
         return Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::from("legend item not found"))
@@ -50,7 +49,13 @@ pub(crate) async fn get(
 
     Response::builder()
         .status(StatusCode::OK)
-        .header("Content-Type", "image/png")
+        .header(
+            "Content-Type",
+            match mode {
+                LegendMode::Normal => "image/png",
+                LegendMode::Taginfo => "image/svg+xml",
+            },
+        )
         .body(Body::from(rendered))
         .expect("body should be built")
 }

@@ -8,16 +8,12 @@ use image::{GrayImage, imageops};
 
 const BLUR_RADIUS_PX: f64 = 10.0;
 
-pub fn render(ctx: &Ctx, mask_geometry: Option<&Geometry>) -> LayerRenderResult {
+pub fn render(ctx: &Ctx, mask_polygon_merc: &Geometry) -> LayerRenderResult {
     let _span = tracy_client::span!("blur_edges::render");
-
-    let Some(mask_polygon_merc) = mask_geometry.cloned() else {
-        return Ok(());
-    };
 
     let context = ctx.context;
 
-    if tile_intersects_mask(&mask_polygon_merc, ctx) {
+    if tile_intersects_mask(mask_polygon_merc, ctx) {
         let pad = (BLUR_RADIUS_PX * 3.0).ceil() as u32;
 
         let mask_geometry = mask_polygon_merc.project_to_tile(&ctx.tile_projector);

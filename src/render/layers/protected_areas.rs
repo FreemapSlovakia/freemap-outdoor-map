@@ -180,6 +180,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             context.set_line_cap(cairo::LineCap::Square);
             context.set_line_join(cairo::LineJoin::Round);
             path_geometry(context, projected);
+
             context.stroke()?;
 
             context.set_line_width(wb);

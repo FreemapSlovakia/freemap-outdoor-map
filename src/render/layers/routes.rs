@@ -1,4 +1,7 @@
+use std::collections::HashSet;
+
 use crate::render::{
+    RenderLayer,
     collision::Collision,
     ctx::Ctx,
     draw::{
@@ -12,7 +15,6 @@ use crate::render::{
     projectable::TileProjectable,
     svg_repo::{Options, SvgRepo},
 };
-use bitflags::bitflags;
 use colorsys::{Rgb, RgbRatio};
 use postgres::Client;
 
@@ -52,16 +54,6 @@ const COLORS: [(&str, &str); 9] = [
     ("red", "ff3030"),
 ];
 
-bitflags! {
-  #[derive(Debug, Clone, Copy)]
-  pub struct RouteTypes: u32 {
-      const HIKING = 0b0000_0001;
-      const HORSE = 0b0000_0010;
-      const BICYCLE = 0b0000_0100;
-      const SKI = 0b0000_1000;
-  }
-}
-
 fn format_vec(vec: &[&str]) -> String {
     if vec.is_empty() {
         "'_x_'".to_string()
@@ -74,7 +66,7 @@ fn format_vec(vec: &[&str]) -> String {
 }
 
 fn get_routes_query(
-    route_types: &RouteTypes,
+    render: &HashSet<RenderLayer>,
     include_networks: Option<Vec<&str>>,
     gen_suffix: &str,
 ) -> String {
@@ -82,19 +74,19 @@ fn get_routes_query(
 
     let mut rights = Vec::<&str>::new();
 
-    if route_types.contains(RouteTypes::HIKING) {
+    if render.contains(&RenderLayer::RoutesHiking) {
         lefts.extend_from_slice(&["hiking", "foot", "running"]);
     }
 
-    if route_types.contains(RouteTypes::HORSE) {
+    if render.contains(&RenderLayer::RoutesHorse) {
         lefts.push("horse");
     }
 
-    if route_types.contains(RouteTypes::BICYCLE) {
+    if render.contains(&RenderLayer::RoutesBicycle) {
         rights.extend_from_slice(&["bicycle", "mtb"]);
     }
 
-    if route_types.contains(RouteTypes::SKI) {
+    if render.contains(&RenderLayer::RoutesSki) {
         rights.extend_from_slice(&["ski", "piste"]);
     }
 
@@ -122,10 +114,10 @@ fn get_routes_query(
         }
     };
 
-    let bool_horse = route_types.contains(RouteTypes::HORSE);
-    let bool_hiking = route_types.contains(RouteTypes::HIKING);
-    let bool_bicycle = route_types.contains(RouteTypes::BICYCLE);
-    let bool_ski = route_types.contains(RouteTypes::SKI);
+    let bool_horse = render.contains(&RenderLayer::RoutesHorse);
+    let bool_hiking = render.contains(&RenderLayer::RoutesHiking);
+    let bool_bicycle = render.contains(&RenderLayer::RoutesBicycle);
+    let bool_ski = render.contains(&RenderLayer::RoutesSki);
 
     format!("
         SELECT
@@ -277,7 +269,7 @@ fn get_routes_query(
 pub fn render_marking(
     ctx: &Ctx,
     client: &mut Client,
-    route_types: &RouteTypes,
+    render: &HashSet<RenderLayer>,
     svg_repo: &mut SvgRepo,
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("routes::render_marking");
@@ -286,15 +278,15 @@ pub fn render_marking(
 
     let rows = ctx.legend_features("routes", || {
         let sql = match zoom {
-            9 => get_routes_query(route_types, Some(vec!["iwn", "icn"]), "_gen0"),
-            10 => get_routes_query(route_types, Some(vec!["iwn", "nwn", "icn", "ncn"]), "_gen1"),
+            9 => get_routes_query(render, Some(vec!["iwn", "icn"]), "_gen0"),
+            10 => get_routes_query(render, Some(vec!["iwn", "nwn", "icn", "ncn"]), "_gen1"),
             11 => get_routes_query(
-                route_types,
+                render,
                 Some(vec!["iwn", "nwn", "rwn", "icn", "ncn", "rcn"]),
                 "_gen1",
             ),
-            12..=13 => get_routes_query(route_types, None, ""),
-            14.. => get_routes_query(route_types, None, ""),
+            12..=13 => get_routes_query(render, None, ""),
+            14.. => get_routes_query(render, None, ""),
             _ => return Ok(Vec::new()),
         };
 
@@ -313,7 +305,7 @@ pub fn render_marking(
         let df = 1.25;
 
         for color in COLORS.iter() {
-            if route_types.contains(RouteTypes::HORSE) {
+            if render.contains(&RenderLayer::RoutesHorse) {
                 let off = row.get_i32(&format!("r_{}", color.0))?;
 
                 if off > 0 {
@@ -341,7 +333,7 @@ pub fn render_marking(
                 }
             }
 
-            if route_types.contains(RouteTypes::SKI) {
+            if render.contains(&RenderLayer::RoutesSki) {
                 let off = row.get_i32(&format!("s_{}", color.0))?;
 
                 if off > 0 {
@@ -373,7 +365,7 @@ pub fn render_marking(
 
             let context = ctx.context;
 
-            if route_types.contains(RouteTypes::BICYCLE) {
+            if render.contains(&RenderLayer::RoutesBicycle) {
                 let off = row.get_i32(&format!("b_{}", color.0))?;
 
                 if off > 0 {
@@ -401,7 +393,7 @@ pub fn render_marking(
                 }
             }
 
-            if route_types.contains(RouteTypes::HIKING) {
+            if render.contains(&RenderLayer::RoutesHiking) {
                 {
                     let off = row.get_i32(&format!("h_{}", color.0))?;
 
@@ -465,13 +457,13 @@ pub fn render_marking(
 pub fn render_labels(
     ctx: &Ctx,
     client: &mut Client,
-    route_types: &RouteTypes,
+    render: &HashSet<RenderLayer>,
     collision: &mut Collision,
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("routes::render_labels");
 
     let rows = ctx.legend_features("routes", || {
-        let query = get_routes_query(route_types, None, "");
+        let query = get_routes_query(render, None, "");
 
         client.query(&query, &ctx.bbox_query_params(Some(2048.0)).as_params())
     })?;

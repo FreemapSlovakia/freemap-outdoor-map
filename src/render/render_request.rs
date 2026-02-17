@@ -1,6 +1,23 @@
-use crate::render::{image_format::ImageFormat, layers::RouteTypes, legend::LegendItemData};
+use std::collections::HashSet;
+
+use crate::render::{image_format::ImageFormat, legend::LegendItemData};
+use clap::ValueEnum;
 use geo::Rect;
 use geojson::Feature;
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, ValueEnum)]
+pub enum RenderLayer {
+    Shading,
+    Contours,
+    Sea,
+    Geonames,
+    CountryNames,
+    CountryBorders,
+    RoutesHiking,
+    RoutesHorse,
+    RoutesBicycle,
+    RoutesSki,
+}
 
 #[derive(Debug, Clone)]
 pub struct RenderRequest {
@@ -8,23 +25,25 @@ pub struct RenderRequest {
     pub zoom: u8,
     pub scale: f64,
     pub format: ImageFormat,
-    pub shading: bool,
-    pub contours: bool,
-    pub route_types: RouteTypes,
+    pub render: HashSet<RenderLayer>,
     pub featues: Option<Vec<Feature>>,
     pub legend: Option<LegendItemData>,
 }
 
 impl RenderRequest {
-    pub const fn new(bbox: Rect<f64>, zoom: u8, scale: f64, format: ImageFormat) -> Self {
+    pub fn new(
+        bbox: Rect<f64>,
+        zoom: u8,
+        scale: f64,
+        format: ImageFormat,
+        render: HashSet<RenderLayer>,
+    ) -> Self {
         Self {
             bbox,
             zoom,
             scale,
             format,
-            shading: true,
-            contours: true,
-            route_types: RouteTypes::all(),
+            render,
             featues: None,
             legend: None,
         }

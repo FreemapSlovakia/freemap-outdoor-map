@@ -145,7 +145,12 @@ pub fn path_line_string(context: &Context, line_string: &LineString) {
 pub fn path_line_string_with_offset(context: &Context, line_string: &LineString, offset: f64) {
     let mut polyline = Polyline::new();
 
-    for p in line_string {
+    polyline.is_closed = line_string.is_closed();
+
+    for p in line_string
+        .into_iter()
+        .skip(if polyline.is_closed { 1 } else { 0 })
+    {
         polyline.add_vertex(PlineVertex::new(p.x, p.y, 0.0));
     }
 
@@ -230,6 +235,10 @@ pub fn path_line_string_with_offset(context: &Context, line_string: &LineString,
             }
 
             prev_bulge = v.bulge;
+        }
+
+        if polyline.is_closed {
+            context.close_path();
         }
     }
 }

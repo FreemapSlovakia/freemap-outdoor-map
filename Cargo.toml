@@ -9,8 +9,7 @@ image = { version = "0.25", default-features = false, features = [
   "jpeg",
   "png",
 ] }
-librsvg = { version = "2.61" }
-bitflags = "2.10.0"
+librsvg = { version = "2.61.4" }
 cairo-rs = { version = "0.21", features = ["png", "svg", "pdf"] }
 cavalier_contours = { version = "0.7.0" }
 colorsys = "0.7"
@@ -33,12 +32,17 @@ thiserror = "2.0.17"
 axum = "0.8.8"
 clap = { version = "4.5.58", features = ["derive", "env"] }
 dotenvy = "0.15.7"
-tokio = { version = "1.40.0", features = ["fs", "macros", "rt-multi-thread", "signal"] }
+tokio = { version = "1.40.0", features = [
+  "fs",
+  "macros",
+  "rt-multi-thread",
+  "signal",
+] }
 tower = { version = "0.5.1", features = ["limit", "timeout"] }
 tower-http = { version = "0.6.1", features = ["cors"] }
 rand = "0.10.0"
 serde = { version = "1.0.217", features = ["derive"] }
-serde-saphyr = "0.0.18"
+serde-saphyr = "0.0.19"
 indexmap = { version = "2.10.0", features = ["serde"] }
 notify = "8.2.0"
 tokio-util = { version = "0.7.12", features = ["io"] }

@@ -1,6 +1,6 @@
 use crate::{
     app::server::app_state::AppState,
-    render::{ImageFormat, RenderRequest, RenderWorkerPool, RouteTypes},
+    render::{ImageFormat, RenderLayer, RenderRequest, RenderWorkerPool},
 };
 use axum::{
     body::Body,
@@ -93,9 +93,76 @@ pub(crate) async fn post(
 
     let file_path = std::env::temp_dir().join(&filename);
 
-    let render_request = match build_render_request(&request, format, scale) {
-        Ok(value) => value,
-        Err(response) => return *response,
+    let bbox = bbox4326_to_3857(request.bbox);
+
+    let rect = Rect::new((bbox[0], bbox[1]), (bbox[2], bbox[3]));
+
+    let mut render = state.render.to_owned();
+
+    if let Some(features) = &request.features {
+        if let Some(shading) = features.shading {
+            if shading {
+                render.insert(RenderLayer::Shading);
+            } else {
+                render.remove(&RenderLayer::Shading);
+            }
+        }
+
+        if let Some(contours) = features.contours {
+            if contours {
+                render.insert(RenderLayer::Contours);
+            } else {
+                render.remove(&RenderLayer::Contours);
+            }
+        }
+
+        if let Some(value) = features.hiking_trails {
+            if value {
+                render.insert(RenderLayer::RoutesHiking);
+            } else {
+                render.remove(&RenderLayer::RoutesHiking);
+            }
+        }
+
+        if let Some(value) = features.horse_trails {
+            if value {
+                render.insert(RenderLayer::RoutesHorse);
+            } else {
+                render.remove(&RenderLayer::RoutesHorse);
+            }
+        }
+
+        if let Some(value) = features.bicycle_trails {
+            if value {
+                render.insert(RenderLayer::RoutesBicycle);
+            } else {
+                render.remove(&RenderLayer::RoutesBicycle);
+            }
+        }
+
+        if let Some(value) = features.ski_trails {
+            if value {
+                render.insert(RenderLayer::RoutesSki);
+            } else {
+                render.remove(&RenderLayer::RoutesSki);
+            }
+        }
+    }
+
+    let mut render_request = RenderRequest::new(rect, request.zoom, scale, format, render);
+
+    render_request.featues = if let Some(features) = &request.features
+        && let Some(feature_collection) = &features.feature_collection
+    {
+        match serde_json::from_value::<GeoJson>(feature_collection.clone())
+            .map_err(|_err| "error parsing geojson")
+            .and_then(geojson_to_features)
+        {
+            Ok(geojson) => Some(geojson),
+            Err(_) => return bad_request(),
+        }
+    } else {
+        None
     };
 
     let job = spawn_export_job(
@@ -228,82 +295,11 @@ fn parse_format(
     }
 }
 
-fn build_render_request(
-    request: &ExportRequest,
-    format: ImageFormat,
-    scale: f64,
-) -> Result<RenderRequest, Box<Response<Body>>> {
-    let bbox = bbox4326_to_3857(request.bbox);
-
-    let rect = Rect::new((bbox[0], bbox[1]), (bbox[2], bbox[3]));
-
-    let mut render_request = RenderRequest::new(rect, request.zoom, scale, format);
-
-    if let Some(features) = &request.features {
-        if let Some(shading) = features.shading {
-            render_request.shading = shading;
-        }
-
-        if let Some(contours) = features.contours {
-            render_request.contours = contours;
-        }
-
-        if let Some(feature_collection) = &features.feature_collection {
-            let geojson = serde_json::from_value::<GeoJson>(feature_collection.clone())
-                .map_err(|_| Box::new(bad_request()))?;
-            let features = geojson_to_features(geojson).map_err(|_| Box::new(bad_request()))?;
-            render_request.featues = Some(features);
-        }
-
-        let mut any_route_flag = false;
-
-        let mut routes = RouteTypes::empty();
-
-        if let Some(value) = features.hiking_trails {
-            any_route_flag = true;
-
-            if value {
-                routes |= RouteTypes::HIKING;
-            }
-        }
-
-        if let Some(value) = features.horse_trails {
-            any_route_flag = true;
-
-            if value {
-                routes |= RouteTypes::HORSE;
-            }
-        }
-
-        if let Some(value) = features.bicycle_trails {
-            any_route_flag = true;
-
-            if value {
-                routes |= RouteTypes::BICYCLE;
-            }
-        }
-
-        if let Some(value) = features.ski_trails {
-            any_route_flag = true;
-
-            if value {
-                routes |= RouteTypes::SKI;
-            }
-        }
-
-        if any_route_flag {
-            render_request.route_types = routes;
-        }
-    }
-
-    Ok(render_request)
-}
-
-fn geojson_to_features(geojson: GeoJson) -> Result<Vec<Feature>, String> {
+fn geojson_to_features(geojson: GeoJson) -> Result<Vec<Feature>, &'static str> {
     match geojson {
         GeoJson::FeatureCollection(collection) => Ok(collection.features),
         GeoJson::Feature(feature) => Ok(vec![feature]),
-        _ => Err("unsupported geojson".into()),
+        _ => Err("unsupported geojson"),
     }
 }
 

@@ -61,7 +61,7 @@ pub(crate) async fn serve_tile(
 
     let bbox = tile_bounds_to_epsg3857(coord.x, coord.y, coord.zoom, 256);
 
-    if let Some(ref limits_geometry) = *state.limits_geometry {
+    if let Some(ref limits_geometry) = state.limits_geometry {
         let tile_polygon = bbox.to_polygon();
 
         if !limits_geometry.intersects(&tile_polygon) {
@@ -72,9 +72,15 @@ pub(crate) async fn serve_tile(
         }
     }
 
-    let render_request = RenderRequest::new(bbox, coord.zoom, scale, ImageFormat::Jpeg);
+    let render_request = RenderRequest::new(
+        bbox,
+        coord.zoom,
+        scale,
+        ImageFormat::Jpeg,
+        state.render.to_owned(),
+    );
 
-    let file_path = if let Some(ref tile_cache_base_path) = *state.tile_cache_base_path {
+    let file_path = if let Some(ref tile_cache_base_path) = state.tile_cache_base_path {
         let file_path = cached_tile_path(tile_cache_base_path, coord, scale);
 
         if state.serve_cached {

@@ -1,18 +1,11 @@
 use crate::render::{
-    LegendMode, LegendValue,
+    LegendValue,
     layers::Category,
-    legend::{
-        LegendItem,
-        shared::{
-            LegendFeatureDataBuilder, legend_feature_data_builder, legend_item_data_builder,
-            with_landcover,
-        },
-    },
+    legend::{LegendItem, PropsBuilder},
 };
 use indexmap::IndexMap;
-use std::collections::HashMap;
 
-pub fn roads(mode: LegendMode) -> Vec<LegendItem<'static>> {
+pub fn roads(for_taginfo: bool) -> Vec<LegendItem<'static>> {
     [
         &["motorway", "trunk"] as &[&str],
         &["primary", "motorway_link", "trunk_link"],
@@ -32,33 +25,30 @@ pub fn roads(mode: LegendMode) -> Vec<LegendItem<'static>> {
     .iter()
     .enumerate()
     .map(|(i, types)| {
-        LegendItem::new(
+        LegendItem::builder(
             format!("road_{}", types[0]).leak(),
             Category::RoadsAndPaths,
-            types
-                .iter()
-                .flat_map(|typ| {
-                    if *typ == "platform" {
-                        vec![
-                            IndexMap::from([("highway", "platform")]),
-                            IndexMap::from([("railway", "platform")]),
-                            IndexMap::from([("public_transport", "platform")]),
-                        ]
-                    } else {
-                        vec![IndexMap::from([("highway", *typ)])]
-                    }
-                })
-                .collect::<Vec<_>>(),
-            with_landcover(if i < 10 { "residential" } else { "wood" }, 17, mode)
-                .with_feature(
-                    "roads",
-                    road_builder(types[0], 17, mode)
-                        .with("class", "highway")
-                        .build(),
-                )
-                .build(),
             17,
+            for_taginfo,
         )
+        .add_tag_set(|mut ts| {
+            for typ in *types {
+                if *typ == "platform" {
+                    ts = ts.add_tags(|tags| {
+                        tags.add("highway", "platform")
+                            .add("railway", "platform")
+                            .add("public_transport", "platform")
+                    });
+                } else {
+                    ts = ts.add_tags(|tags| tags.add("highway", typ));
+                }
+            }
+
+            ts
+        })
+        .add_landcover(if i < 10 { "residential" } else { "wood" })
+        .add_feature("roads", |b| b.with_road(types[0]).with("class", "highway"))
+        .build()
     })
     .chain(
         ([
@@ -77,7 +67,7 @@ pub fn roads(mode: LegendMode) -> Vec<LegendItem<'static>> {
                 _ => "service",
             };
 
-            LegendItem::new(
+            LegendItem::builder(
                 format!(
                     "road_{}",
                     tags.iter()
@@ -86,216 +76,251 @@ pub fn roads(mode: LegendMode) -> Vec<LegendItem<'static>> {
                 )
                 .leak(),
                 Category::RoadsAndPaths,
-                vec![{
-                    let mut map = IndexMap::from([("highway", "*")]);
-                    map.extend(tags.iter().copied());
-                    map
-                }],
-                {
-                    let mut b = road_builder(road_type, 17, mode).with("class", "highway");
+                17,
+                for_taginfo,
+            )
+            .add_tag_set(|ts| {
+                ts.add_tags(|tags_builder| {
+                    let mut tags_builder = tags_builder.add("highway", "*");
+                    for (k, v) in tags {
+                        tags_builder = tags_builder.add(k, v);
+                    }
+                    tags_builder
+                })
+            })
+            .add_landcover("wood")
+            .add_feature("roads", |b| {
+                let mut b = b.with_road(road_type).with("class", "highway");
 
-                    let mut no_foot = 0i32;
-                    let mut no_bicycle = 0i32;
-
-                    for tag in tags {
-                        if tag.0 == "foot" {
-                            no_foot = 1;
-                            continue;
-                        }
-
-                        if tag.0 == "bicycle" {
-                            no_bicycle = 1;
-                            continue;
-                        }
-
-                        b = b.with(
-                            tag.0,
-                            if matches!(tag.0, "bridge" | "tunnel" | "oneway") {
-                                LegendValue::I16(1)
-                            } else {
-                                LegendValue::String(tag.1)
-                            },
-                        );
+                for tag in tags {
+                    if matches!(tag.0, "foot" | "bicycle") {
+                        continue;
                     }
 
-                    with_landcover("wood", 17, mode)
-                        .with_feature("roads", b.build())
-                        .with_feature(
-                            "road_access_restrictions",
-                            road_builder(road_type, 17, mode)
-                                .with("no_foot", no_foot)
-                                .with("no_bicycle", no_bicycle)
-                                .build(),
-                        )
-                        .build()
-                },
-                17,
-            )
+                    b = b.with(
+                        tag.0,
+                        if matches!(tag.0, "bridge" | "tunnel" | "oneway") {
+                            LegendValue::I16(1)
+                        } else {
+                            LegendValue::String(tag.1)
+                        },
+                    );
+                }
+
+                b
+            })
+            .add_feature("road_access_restrictions", |b| {
+                let mut no_foot = 0i32;
+                let mut no_bicycle = 0i32;
+
+                for tag in tags {
+                    if tag.0 == "foot" {
+                        no_foot = 1;
+                    }
+
+                    if tag.0 == "bicycle" {
+                        no_bicycle = 1;
+                    }
+                }
+
+                b.with_road(road_type)
+                    .with("no_foot", no_foot)
+                    .with("no_bicycle", no_bicycle)
+            })
+            .build()
         }),
     )
     .chain([
-        LegendItem::new(
-            "path_bike_foot",
-            Category::RoadsAndPaths,
-            vec![
-                [
-                    ("highway", "path"),
-                    ("foot", "designated"),
-                    ("bicycle", "designated"),
-                ]
-                .into(),
-            ],
-            with_landcover("residential", 17, mode)
-                .with_feature(
-                    "roads",
-                    road_builder("path", 17, mode)
-                        .with("class", "highway")
-                        .with("foot", "designated")
-                        .with("bicycle", "designated")
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
+        LegendItem::builder("path_bike_foot", Category::RoadsAndPaths, 17, for_taginfo)
+            .add_tag_set(|ts| {
+                ts.add_tags(|tags| {
+                    tags.add("highway", "path")
+                        .add("foot", "designated")
+                        .add("bicycle", "designated")
+                })
+            })
+            .add_landcover("residential")
+            .add_feature("roads", |b| {
+                b.with_road("path")
+                    .with("class", "highway")
+                    .with("foot", "designated")
+                    .with("bicycle", "designated")
+            })
+            .build(),
+        LegendItem::builder(
             "road_construction",
             Category::RoadsAndPaths,
-            vec![[("highway", "construction")].into()],
-            with_landcover("residential", 17, mode)
-                .with_feature(
-                    "roads",
-                    road_builder("construction", 17, mode)
-                        .with("class", "highway")
-                        .build(),
-                )
-                .build(),
             17,
-        ),
-        LegendItem::new(
-            "route_hiking",
-            Category::RoadsAndPaths,
-            vec![
-                [("type", "route"), ("route", "hiking"), ("network", "rwn")].into(),
-                [("type", "route"), ("route", "hiking"), ("network", "nwn")].into(),
-                [("type", "route"), ("route", "hiking"), ("network", "iwn")].into(),
-            ],
-            with_route(
-                route_builder(17, false)
+            for_taginfo,
+        )
+        .add_tag_set(|ts| ts.add_tags(|tags| tags.add("highway", "construction")))
+        .add_landcover("residential")
+        .add_feature("roads", |b| {
+            b.with_road("construction").with("class", "highway")
+        })
+        .build(),
+        LegendItem::builder("route_hiking", Category::RoadsAndPaths, 17, for_taginfo)
+            .add_tag_set(|ts| {
+                ts.add_tags(|tags| {
+                    tags.add("type", "route")
+                        .add("route", "hiking")
+                        .add("network", "rwn")
+                })
+                .add_tags(|tags| {
+                    tags.add("type", "route")
+                        .add("route", "hiking")
+                        .add("network", "nwn")
+                })
+                .add_tags(|tags| {
+                    tags.add("type", "route")
+                        .add("route", "hiking")
+                        .add("network", "iwn")
+                })
+            })
+            .add_landcover("wood")
+            .add_feature("roads", |b| {
+                b.with_road("track")
+                    .with("name", "")
+                    .with("class", "highway")
+                    .with("tracktype", "grade3")
+            })
+            .add_feature("routes", |b| {
+                b.with_route(false)
                     .with("refs1", "0901")
                     .with("off1", 1i32)
                     .with("h_red", 1i32)
-                    .build(),
-                mode,
-            ),
-            17,
-        ),
-        LegendItem::new(
+            })
+            .build(),
+        LegendItem::builder(
             "route_hiking_local",
             Category::RoadsAndPaths,
-            vec![[("type", "route"), ("route", "hiking"), ("network", "lwn")].into()],
-            with_route(
-                route_builder(17, false)
-                    .with("refs1", "M0123")
-                    .with("off1", 1i32)
-                    .with("h_red_loc", 1i32)
-                    .build(),
-                mode,
-            ),
             17,
-        ),
-        LegendItem::new(
-            "route_bicycle",
-            Category::RoadsAndPaths,
-            vec![[("type", "route"), ("route", "bicycle"), ("network", "lwn")].into()],
-            with_route(
-                route_builder(17, true)
+            for_taginfo,
+        )
+        .add_tag_set(|ts| {
+            ts.add_tags(|tags| {
+                tags.add("type", "route")
+                    .add("route", "hiking")
+                    .add("network", "lwn")
+            })
+        })
+        .add_landcover("wood")
+        .add_feature("roads", |b| {
+            b.with_road("track")
+                .with("name", "")
+                .with("class", "highway")
+                .with("tracktype", "grade3")
+        })
+        .add_feature("routes", |b| {
+            b.with_route(false)
+                .with("refs1", "M0123")
+                .with("off1", 1i32)
+                .with("h_red_loc", 1i32)
+        })
+        .build(),
+        LegendItem::builder("route_bicycle", Category::RoadsAndPaths, 17, for_taginfo)
+            .add_tag_set(|ts| {
+                ts.add_tags(|tags| {
+                    tags.add("type", "route")
+                        .add("route", "bicycle")
+                        .add("network", "lwn")
+                })
+            })
+            .add_landcover("wood")
+            .add_feature("roads", |b| {
+                b.with_road("track")
+                    .with("name", "")
+                    .with("class", "highway")
+                    .with("tracktype", "grade3")
+            })
+            .add_feature("routes", |b| {
+                b.with_route(true)
                     .with("refs2", "C12")
                     .with("off2", 1i32)
                     .with("b_red", 1i32)
-                    .build(),
-                mode,
-            ),
-            17,
-        ),
-        LegendItem::new(
-            "route_ski",
-            Category::RoadsAndPaths,
-            vec![[("type", "route"), ("route", "ski")].into()],
-            with_route(
-                route_builder(17, true)
+            })
+            .build(),
+        LegendItem::builder("route_ski", Category::RoadsAndPaths, 17, for_taginfo)
+            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("type", "route").add("route", "ski")))
+            .add_landcover("wood")
+            .add_feature("roads", |b| {
+                b.with_road("track")
+                    .with("name", "")
+                    .with("class", "highway")
+                    .with("tracktype", "grade3")
+            })
+            .add_feature("routes", |b| {
+                b.with_route(true)
                     .with("refs2", "S12")
                     .with("off2", 1i32)
                     .with("s_red", 1i32)
-                    .build(),
-                mode,
-            ),
-            17,
-        ),
-        LegendItem::new(
-            "route_horse",
-            Category::RoadsAndPaths,
-            vec![[("type", "route"), ("route", "horse")].into()],
-            with_route(
-                route_builder(17, false)
+            })
+            .build(),
+        LegendItem::builder("route_horse", Category::RoadsAndPaths, 17, for_taginfo)
+            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("type", "route").add("route", "horse")))
+            .add_landcover("wood")
+            .add_feature("roads", |b| {
+                b.with_road("track")
+                    .with("name", "")
+                    .with("class", "highway")
+                    .with("tracktype", "grade3")
+            })
+            .add_feature("routes", |b| {
+                b.with_route(false)
                     .with("refs1", "H12")
                     .with("off1", 1i32)
                     .with("r_red", 1i32)
-                    .build(),
-                mode,
-            ),
-            17,
-        ),
+            })
+            .build(),
     ])
     .chain((1..=5).map(|grade| {
         let grade: &str = format!("grade{grade}").leak();
 
-        LegendItem::new(
+        LegendItem::builder(
             format!("road_track_{grade}").leak(),
             Category::RoadsAndPaths,
-            {
-                let mut tags = vec![[("highway", "track"), ("tracktype", grade)].into()];
-
-                if grade == "grade1" {
-                    tags.push([("highway", "service")].into());
-                } else if grade == "grade2" {
-                    tags.push([("highway", "raceway")].into());
-                    tags.push([("leisure", "track")].into());
-                }
-
-                tags
-            },
-            with_landcover("wood", 17, mode)
-                .with_feature(
-                    "roads",
-                    road_builder("track", 17, mode)
-                        .with("class", "highway")
-                        .with("tracktype", grade)
-                        .build(),
-                )
-                .build(),
             17,
+            for_taginfo,
         )
+        .add_tag_set(|mut ts| {
+            ts = ts.add_tags(|tags| tags.add("highway", "track").add("tracktype", grade));
+
+            if grade == "grade1" {
+                ts = ts.add_tags(|tags| tags.add("highway", "service"));
+            } else if grade == "grade2" {
+                ts = ts.add_tags(|tags| tags.add("highway", "raceway"));
+                ts = ts.add_tags(|tags| tags.add("leisure", "track"));
+            }
+
+            ts
+        })
+        .add_landcover("wood")
+        .add_feature("roads", |b| {
+            b.with_road("track")
+                .with("class", "highway")
+                .with("tracktype", grade)
+        })
+        .build()
     }))
     .chain(
         ["excellent", "good", "intermediate", "bad", "horrible", "no"]
             .into_iter()
             .enumerate()
             .map(|(i, visibility)| {
-                LegendItem::new(
+                LegendItem::builder(
                     format!("trail_visibility_{visibility}").leak(),
                     Category::RoadsAndPaths,
-                    vec![[("trail_visibility", visibility)].into()],
-                    with_landcover("wood", 17, mode)
-                        .with_feature(
-                            "roads",
-                            road_builder("path", 17, mode)
-                                .with("class", "highway")
-                                .with("trail_visibility", i as i32)
-                                .build(),
-                        )
-                        .build(),
                     17,
+                    for_taginfo,
                 )
+                .add_tag_set(|ts| ts.add_tags(|tags| tags.add("trail_visibility", visibility)))
+                .add_landcover("wood")
+                .add_feature("roads", |b| {
+                    b.with_road("path")
+                        .with("class", "highway")
+                        .with("trail_visibility", i as i32)
+                })
+                .build()
             }),
     )
     .chain(
@@ -314,176 +339,135 @@ pub fn roads(mode: LegendMode) -> Vec<LegendItem<'static>> {
         ]
         .iter()
         .map(|types| {
-            LegendItem::new(
+            LegendItem::builder(
                 format!("railway_{}", types[0]).leak(),
                 Category::Railway,
-                types
-                    .iter()
-                    .flat_map(|typ| match *typ {
-                        "rail" => vec![
-                            IndexMap::from([("railway", "rail")]),
-                            IndexMap::from([("railway", "rail"), ("service", "main")]),
-                        ],
-                        "light_rail" => vec![
-                            IndexMap::from([("railway", "light_rail")]),
-                            IndexMap::from([("railway", "rail"), ("service", "≠main")]),
-                        ],
-                        _ => vec![IndexMap::from([("railway", *typ)])],
-                    })
-                    .collect::<Vec<_>>(),
-                with_landcover("residential", 17, mode)
-                    .with_feature(
-                        "roads",
-                        road_builder(types[0], 17, mode)
-                            .with("class", "railway")
-                            .build(),
-                    )
-                    .build(),
                 17,
+                for_taginfo,
             )
+            .add_tag_set(|mut ts| {
+                for tag_set in types.iter().flat_map(|typ| match *typ {
+                    "rail" => vec![
+                        IndexMap::from([("railway", "rail")]),
+                        IndexMap::from([("railway", "rail"), ("service", "main")]),
+                    ],
+                    "light_rail" => vec![
+                        IndexMap::from([("railway", "light_rail")]),
+                        IndexMap::from([("railway", "rail"), ("service", "≠main")]),
+                    ],
+                    _ => vec![IndexMap::from([("railway", *typ)])],
+                }) {
+                    ts = ts.add_tags(|mut tb| {
+                        for (k, v) in &tag_set {
+                            tb = tb.add(k, v);
+                        }
+                        tb
+                    });
+                }
+                ts
+            })
+            .add_landcover("residential")
+            .add_feature("roads", |b| b.with_road(types[0]).with("class", "railway"))
+            .build()
         }),
     )
     .chain([
-        LegendItem::new(
-            "railway_bridge",
-            Category::Railway,
-            vec![[("railway", "rail"), ("bridge", "yes")].into()],
-            with_landcover("residential", 17, mode)
-                .with_feature(
-                    "roads",
-                    road_builder("rail", 17, mode)
-                        .with("class", "railway")
-                        .with("bridge", 1i16)
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "railway_tunnel",
-            Category::Railway,
-            vec![[("railway", "rail"), ("tunnel", "yes")].into()],
-            with_landcover("residential", 17, mode)
-                .with_feature(
-                    "roads",
-                    road_builder("rail", 17, mode)
-                        .with("class", "railway")
-                        .with("tunnel", 1i16)
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
-        LegendItem::new(
-            "water_slide",
-            Category::Other,
-            vec![[("attraction", "water_slide")].into()],
-            legend_item_data_builder()
-                .with_feature(
-                    "roads",
-                    road_builder("water_slide", 17, mode)
-                        .with("class", "attraction")
-                        .build(),
-                )
-                .build(),
-            17,
-        ),
+        LegendItem::builder("railway_bridge", Category::Railway, 17, for_taginfo)
+            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("railway", "rail").add("bridge", "yes")))
+            .add_landcover("residential")
+            .add_feature("roads", |b| {
+                b.with_road("rail")
+                    .with("class", "railway")
+                    .with("bridge", 1i16)
+            })
+            .build(),
+        LegendItem::builder("railway_tunnel", Category::Railway, 17, for_taginfo)
+            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("railway", "rail").add("tunnel", "yes")))
+            .add_landcover("residential")
+            .add_feature("roads", |b| {
+                b.with_road("rail")
+                    .with("class", "railway")
+                    .with("tunnel", 1i16)
+            })
+            .build(),
+        LegendItem::builder("water_slide", Category::Other, 17, for_taginfo)
+            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("attraction", "water_slide")))
+            .add_feature("roads", |b| {
+                b.with_road("water_slide").with("class", "attraction")
+            })
+            .build(),
     ])
     .collect()
 }
 
-fn with_route(
-    rt: HashMap<String, LegendValue>,
-    mode: LegendMode,
-) -> HashMap<String, Vec<HashMap<String, LegendValue>>> {
-    with_landcover("wood", 17, mode)
-        .with_feature(
-            "roads",
-            road_builder("track", 17, mode)
-                .with("name", "")
-                .with("class", "highway")
-                .with("tracktype", "grade3")
-                .build(),
-        )
-        .with_feature("routes", rt)
-        .build()
-}
+impl PropsBuilder {
+    fn with_road(self, typ: &'static str) -> Self {
+        self.with("type", typ)
+            .with_name()
+            .with("tracktype", "")
+            .with("class", "")
+            .with("service", "")
+            .with("bridge", 0i16)
+            .with("tunnel", 0i16)
+            .with("oneway", 0i16)
+            .with("bicycle", "")
+            .with("foot", "")
+            .with("trail_visibility", 0)
+            .with_line_string(false)
+    }
 
-fn road_builder(typ: &'static str, zoom: u8, mode: LegendMode) -> LegendFeatureDataBuilder {
-    legend_feature_data_builder()
-        .with("type", typ)
-        .with(
-            "name",
-            if mode == LegendMode::Normal {
-                "Abc"
-            } else {
-                ""
-            },
-        )
-        .with("tracktype", "")
-        .with("class", "")
-        .with("service", "")
-        .with("bridge", 0i16)
-        .with("tunnel", 0i16)
-        .with("oneway", 0i16)
-        .with("bicycle", "")
-        .with("foot", "")
-        .with("trail_visibility", 0)
-        .with_line_string(zoom, false)
-}
-
-fn route_builder(zoom: u8, reverse: bool) -> LegendFeatureDataBuilder {
-    legend_feature_data_builder()
-        .with_line_string(zoom, reverse)
-        .with("refs1", "")
-        .with("off1", 0i32)
-        .with("refs2", "")
-        .with("off2", 0i32)
-        .with("h_red", 0i32)
-        .with("h_blue", 0i32)
-        .with("h_green", 0i32)
-        .with("h_yellow", 0i32)
-        .with("h_black", 0i32)
-        .with("h_white", 0i32)
-        .with("h_orange", 0i32)
-        .with("h_purple", 0i32)
-        .with("h_none", 0i32)
-        .with("h_red_loc", 0i32)
-        .with("h_blue_loc", 0i32)
-        .with("h_green_loc", 0i32)
-        .with("h_yellow_loc", 0i32)
-        .with("h_black_loc", 0i32)
-        .with("h_white_loc", 0i32)
-        .with("h_orange_loc", 0i32)
-        .with("h_purple_loc", 0i32)
-        .with("h_none_loc", 0i32)
-        .with("b_red", 0i32)
-        .with("b_blue", 0i32)
-        .with("b_green", 0i32)
-        .with("b_yellow", 0i32)
-        .with("b_black", 0i32)
-        .with("b_white", 0i32)
-        .with("b_orange", 0i32)
-        .with("b_purple", 0i32)
-        .with("b_none", 0i32)
-        .with("s_red", 0i32)
-        .with("s_blue", 0i32)
-        .with("s_green", 0i32)
-        .with("s_yellow", 0i32)
-        .with("s_black", 0i32)
-        .with("s_white", 0i32)
-        .with("s_orange", 0i32)
-        .with("s_purple", 0i32)
-        .with("s_none", 0i32)
-        .with("r_red", 0i32)
-        .with("r_blue", 0i32)
-        .with("r_green", 0i32)
-        .with("r_yellow", 0i32)
-        .with("r_black", 0i32)
-        .with("r_white", 0i32)
-        .with("r_orange", 0i32)
-        .with("r_purple", 0i32)
-        .with("r_none", 0i32)
-        .with("class", "highway")
-        .with("tracktype", "grade3")
+    fn with_route(self, reverse: bool) -> Self {
+        self.with_line_string(reverse)
+            .with("refs1", "")
+            .with("off1", 0i32)
+            .with("refs2", "")
+            .with("off2", 0i32)
+            .with("h_red", 0i32)
+            .with("h_blue", 0i32)
+            .with("h_green", 0i32)
+            .with("h_yellow", 0i32)
+            .with("h_black", 0i32)
+            .with("h_white", 0i32)
+            .with("h_orange", 0i32)
+            .with("h_purple", 0i32)
+            .with("h_none", 0i32)
+            .with("h_red_loc", 0i32)
+            .with("h_blue_loc", 0i32)
+            .with("h_green_loc", 0i32)
+            .with("h_yellow_loc", 0i32)
+            .with("h_black_loc", 0i32)
+            .with("h_white_loc", 0i32)
+            .with("h_orange_loc", 0i32)
+            .with("h_purple_loc", 0i32)
+            .with("h_none_loc", 0i32)
+            .with("b_red", 0i32)
+            .with("b_blue", 0i32)
+            .with("b_green", 0i32)
+            .with("b_yellow", 0i32)
+            .with("b_black", 0i32)
+            .with("b_white", 0i32)
+            .with("b_orange", 0i32)
+            .with("b_purple", 0i32)
+            .with("b_none", 0i32)
+            .with("s_red", 0i32)
+            .with("s_blue", 0i32)
+            .with("s_green", 0i32)
+            .with("s_yellow", 0i32)
+            .with("s_black", 0i32)
+            .with("s_white", 0i32)
+            .with("s_orange", 0i32)
+            .with("s_purple", 0i32)
+            .with("s_none", 0i32)
+            .with("r_red", 0i32)
+            .with("r_blue", 0i32)
+            .with("r_green", 0i32)
+            .with("r_yellow", 0i32)
+            .with("r_black", 0i32)
+            .with("r_white", 0i32)
+            .with("r_orange", 0i32)
+            .with("r_purple", 0i32)
+            .with("r_none", 0i32)
+            .with("class", "highway")
+            .with("tracktype", "grade3")
+    }
 }
