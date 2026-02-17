@@ -1,6 +1,6 @@
 use crate::{
     app::server::app_state::AppState,
-    render::{LegendMeta, legend_metadata, legend_render_request},
+    render::{LegendMeta, LegendMode, legend_metadata, legend_render_request},
 };
 use axum::{
     Json,
@@ -11,8 +11,9 @@ use axum::{
 use serde::Deserialize;
 
 #[derive(Deserialize)]
-pub struct LegendScale {
-    scale: f64,
+pub struct LegendQuery {
+    scale: Option<f64>,
+    mode: Option<LegendMode>,
 }
 
 pub(crate) async fn get_metadata() -> Json<Vec<LegendMeta<'static>>> {
@@ -22,9 +23,12 @@ pub(crate) async fn get_metadata() -> Json<Vec<LegendMeta<'static>>> {
 pub(crate) async fn get(
     State(state): State<AppState>,
     Path(id): Path<String>,
-    Query(LegendScale { scale }): Query<LegendScale>,
+    Query(LegendQuery { scale, mode }): Query<LegendQuery>,
 ) -> Response<Body> {
-    let Some(render_request) = legend_render_request(id.as_str(), scale) else {
+    let mode = mode.unwrap_or(LegendMode::Normal);
+
+    let Some(render_request) = legend_render_request(id.as_str(), scale.unwrap_or(1f64), mode)
+    else {
         return Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::from("legend item not found"))
@@ -45,7 +49,13 @@ pub(crate) async fn get(
 
     Response::builder()
         .status(StatusCode::OK)
-        .header("Content-Type", "image/png")
+        .header(
+            "Content-Type",
+            match mode {
+                LegendMode::Normal => "image/png",
+                LegendMode::Taginfo => "image/svg+xml",
+            },
+        )
         .body(Body::from(rendered))
         .expect("body should be built")
 }

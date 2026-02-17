@@ -12,6 +12,7 @@ use std::collections::{HashMap, HashSet};
 pub fn pois(
     mapping_root: &mapping::MappingRoot,
     mapping_entries: &[MappingEntry],
+    for_taginfo: bool,
 ) -> Vec<LegendItem<'static>> {
     let mut poi_tags: HashMap<&'static str, Vec<(&'static str, &'static str)>> = HashMap::new();
     let mut feature_alias_values: HashMap<&'static str, HashSet<&'static str>> = HashMap::new();
@@ -102,20 +103,25 @@ pub fn pois(
     poi_groups
         .into_iter()
         .map(|(visual_key, (category, tags, repr_typ))| {
-            LegendItem::builder(format!("poi_{visual_key}").leak(), category, 19)
-                .add_tag_set(|mut ts| {
-                    for tag_set in &tags {
-                        ts = ts.add_tags(|mut tb| {
-                            for (k, v) in tag_set {
-                                tb = tb.add(k, v);
-                            }
-                            tb
-                        });
-                    }
-                    ts
-                })
-                .add_poi(repr_typ, HashMap::new(), category)
-                .build()
+            LegendItem::builder(
+                format!("poi_{visual_key}").leak(),
+                category,
+                19,
+                for_taginfo,
+            )
+            .add_tag_set(|mut ts| {
+                for tag_set in &tags {
+                    ts = ts.add_tags(|mut tb| {
+                        for (k, v) in tag_set {
+                            tb = tb.add(k, v);
+                        }
+                        tb
+                    });
+                }
+                ts
+            })
+            .add_poi(repr_typ, HashMap::new(), category)
+            .build()
         })
         .chain(
             [
@@ -134,6 +140,7 @@ pub fn pois(
                     format!("poi_spring_{tag_key}_{tag_value}").leak(),
                     Category::Water,
                     19,
+                    for_taginfo,
                 )
                 .add_tag_set(|mut ts| {
                     ts = ts.add_tags(|tags| {
@@ -167,7 +174,7 @@ pub fn pois(
             }),
         )
         .chain([{
-            LegendItem::builder("private_poi", Category::Other, 19)
+            LegendItem::builder("private_poi", Category::Other, 19, for_taginfo)
                 .add_tag_set(|ts| {
                     ts.add_tags(|tags| tags.add("access", "private"))
                         .add_tags(|tags| tags.add("access", "no"))
@@ -282,12 +289,9 @@ impl<'a> LegendItemBuilder<'a> {
             Category::Other => "residential",
         };
 
-        self.add_feature("landcovers", |b| {
-            b.with("type", bg).with("name", "").with_polygon(true)
-        })
-        .add_feature("pois", |b| {
+        self.add_landcover(bg).add_feature("pois", |b| {
             b.with("type", typ)
-                .with("name", "Abc")
+                .with_name()
                 .with("extra", extra)
                 .with("geometry", Point::new(0.0, factor * -2.0))
         })

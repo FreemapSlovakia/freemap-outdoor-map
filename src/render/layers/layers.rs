@@ -74,7 +74,16 @@ pub fn render(
         layers::sea::render(ctx, client).with_layer("sea")?;
     }
 
-    ctx.context.push_group();
+    let mask_geometry = if ctx.legend.is_none()
+        && matches!(request.format, ImageFormat::Jpeg | ImageFormat::Png)
+        && let Some(mask_geometry) = mask_geometry
+    {
+        ctx.context.push_group();
+
+        Some(mask_geometry)
+    } else {
+        None
+    };
 
     // osm_landcovers (landcovers)
     layers::landcover::render(ctx, client, svg_repo).with_layer("landcover")?;
@@ -303,18 +312,15 @@ pub fn render(
         layers::place_names::render(ctx, client, &mut None).with_layer("place_names")?;
     }
 
-    if ctx.legend.is_none()
-        && matches!(request.format, ImageFormat::Jpeg | ImageFormat::Png)
-        && let Some(mask_geometry) = mask_geometry
-    {
+    if let Some(mask_geometry) = mask_geometry {
         layers::blur_edges::render(ctx, mask_geometry).with_layer("blur_edges")?;
-    }
 
-    ctx.context
-        .pop_group_to_source()
-        .and_then(|_| ctx.context.paint())
-        .map_err(LayerRenderError::from)
-        .with_layer("top")?;
+        ctx.context
+            .pop_group_to_source()
+            .and_then(|_| ctx.context.paint())
+            .map_err(LayerRenderError::from)
+            .with_layer("top")?;
+    }
 
     if zoom < 8 && request.render.contains(&RenderLayer::CountryNames) {
         // country_names_smooth (country_names)

@@ -8,7 +8,7 @@ use crate::render::{
 use indexmap::IndexMap;
 use std::collections::HashMap;
 
-pub fn landcovers(mapping_entries: &[MappingEntry]) -> Vec<LegendItem<'static>> {
+pub fn landcovers(mapping_entries: &[MappingEntry], for_taginfo: bool) -> Vec<LegendItem<'static>> {
     let mut landcover_tags = HashMap::<&'static str, &'static str>::new();
 
     for entry in mapping_entries {
@@ -39,6 +39,7 @@ pub fn landcovers(mapping_entries: &[MappingEntry]) -> Vec<LegendItem<'static>> 
                 format!("landcover_{id_typ}").leak(),
                 Category::Landcover,
                 19,
+                for_taginfo,
             )
             .add_tag_set(|mut ts| {
                 for tag_set in &tags {
@@ -52,9 +53,7 @@ pub fn landcovers(mapping_entries: &[MappingEntry]) -> Vec<LegendItem<'static>> 
                 ts
             })
             .add_feature("landcovers", |b| {
-                b.with("type", id_typ)
-                    .with("name", "Abc")
-                    .with_polygon(skew)
+                b.with("type", id_typ).with_name().with_polygon(skew)
             })
             .build()
         })

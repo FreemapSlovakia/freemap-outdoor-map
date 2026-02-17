@@ -5,7 +5,7 @@ use crate::render::{
 };
 use indexmap::IndexMap;
 
-pub fn roads() -> Vec<LegendItem<'static>> {
+pub fn roads(for_taginfo: bool) -> Vec<LegendItem<'static>> {
     [
         &["motorway", "trunk"] as &[&str],
         &["primary", "motorway_link", "trunk_link"],
@@ -29,6 +29,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
             format!("road_{}", types[0]).leak(),
             Category::RoadsAndPaths,
             17,
+            for_taginfo,
         )
         .add_tag_set(|mut ts| {
             for typ in *types {
@@ -45,11 +46,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
 
             ts
         })
-        .add_feature("landcovers", |b| {
-            b.with("type", if i < 10 { "residential" } else { "wood" })
-                .with("name", "")
-                .with_polygon(true)
-        })
+        .add_landcover(if i < 10 { "residential" } else { "wood" })
         .add_feature("roads", |b| b.with_road(types[0]).with("class", "highway"))
         .build()
     })
@@ -80,6 +77,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                 .leak(),
                 Category::RoadsAndPaths,
                 17,
+                for_taginfo,
             )
             .add_tag_set(|ts| {
                 ts.add_tags(|tags_builder| {
@@ -90,9 +88,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     tags_builder
                 })
             })
-            .add_feature("landcovers", |b| {
-                b.with("type", "wood").with("name", "").with_polygon(true)
-            })
+            .add_landcover("wood")
             .add_feature("roads", |b| {
                 let mut b = b.with_road(road_type).with("class", "highway");
 
@@ -135,7 +131,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
         }),
     )
     .chain([
-        LegendItem::builder("path_bike_foot", Category::RoadsAndPaths, 17)
+        LegendItem::builder("path_bike_foot", Category::RoadsAndPaths, 17, for_taginfo)
             .add_tag_set(|ts| {
                 ts.add_tags(|tags| {
                     tags.add("highway", "path")
@@ -143,11 +139,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                         .add("bicycle", "designated")
                 })
             })
-            .add_feature("landcovers", |b| {
-                b.with("type", "residential")
-                    .with("name", "")
-                    .with_polygon(true)
-            })
+            .add_landcover("residential")
             .add_feature("roads", |b| {
                 b.with_road("path")
                     .with("class", "highway")
@@ -155,18 +147,19 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     .with("bicycle", "designated")
             })
             .build(),
-        LegendItem::builder("road_construction", Category::RoadsAndPaths, 17)
-            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("highway", "construction")))
-            .add_feature("landcovers", |b| {
-                b.with("type", "residential")
-                    .with("name", "")
-                    .with_polygon(true)
-            })
-            .add_feature("roads", |b| {
-                b.with_road("construction").with("class", "highway")
-            })
-            .build(),
-        LegendItem::builder("route_hiking", Category::RoadsAndPaths, 17)
+        LegendItem::builder(
+            "road_construction",
+            Category::RoadsAndPaths,
+            17,
+            for_taginfo,
+        )
+        .add_tag_set(|ts| ts.add_tags(|tags| tags.add("highway", "construction")))
+        .add_landcover("residential")
+        .add_feature("roads", |b| {
+            b.with_road("construction").with("class", "highway")
+        })
+        .build(),
+        LegendItem::builder("route_hiking", Category::RoadsAndPaths, 17, for_taginfo)
             .add_tag_set(|ts| {
                 ts.add_tags(|tags| {
                     tags.add("type", "route")
@@ -184,9 +177,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                         .add("network", "iwn")
                 })
             })
-            .add_feature("landcovers", |b| {
-                b.with("type", "wood").with("name", "").with_polygon(true)
-            })
+            .add_landcover("wood")
             .add_feature("roads", |b| {
                 b.with_road("track")
                     .with("name", "")
@@ -200,31 +191,34 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     .with("h_red", 1i32)
             })
             .build(),
-        LegendItem::builder("route_hiking_local", Category::RoadsAndPaths, 17)
-            .add_tag_set(|ts| {
-                ts.add_tags(|tags| {
-                    tags.add("type", "route")
-                        .add("route", "hiking")
-                        .add("network", "lwn")
-                })
+        LegendItem::builder(
+            "route_hiking_local",
+            Category::RoadsAndPaths,
+            17,
+            for_taginfo,
+        )
+        .add_tag_set(|ts| {
+            ts.add_tags(|tags| {
+                tags.add("type", "route")
+                    .add("route", "hiking")
+                    .add("network", "lwn")
             })
-            .add_feature("landcovers", |b| {
-                b.with("type", "wood").with("name", "").with_polygon(true)
-            })
-            .add_feature("roads", |b| {
-                b.with_road("track")
-                    .with("name", "")
-                    .with("class", "highway")
-                    .with("tracktype", "grade3")
-            })
-            .add_feature("routes", |b| {
-                b.with_route(false)
-                    .with("refs1", "M0123")
-                    .with("off1", 1i32)
-                    .with("h_red_loc", 1i32)
-            })
-            .build(),
-        LegendItem::builder("route_bicycle", Category::RoadsAndPaths, 17)
+        })
+        .add_landcover("wood")
+        .add_feature("roads", |b| {
+            b.with_road("track")
+                .with("name", "")
+                .with("class", "highway")
+                .with("tracktype", "grade3")
+        })
+        .add_feature("routes", |b| {
+            b.with_route(false)
+                .with("refs1", "M0123")
+                .with("off1", 1i32)
+                .with("h_red_loc", 1i32)
+        })
+        .build(),
+        LegendItem::builder("route_bicycle", Category::RoadsAndPaths, 17, for_taginfo)
             .add_tag_set(|ts| {
                 ts.add_tags(|tags| {
                     tags.add("type", "route")
@@ -232,9 +226,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                         .add("network", "lwn")
                 })
             })
-            .add_feature("landcovers", |b| {
-                b.with("type", "wood").with("name", "").with_polygon(true)
-            })
+            .add_landcover("wood")
             .add_feature("roads", |b| {
                 b.with_road("track")
                     .with("name", "")
@@ -248,11 +240,9 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     .with("b_red", 1i32)
             })
             .build(),
-        LegendItem::builder("route_ski", Category::RoadsAndPaths, 17)
+        LegendItem::builder("route_ski", Category::RoadsAndPaths, 17, for_taginfo)
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add("type", "route").add("route", "ski")))
-            .add_feature("landcovers", |b| {
-                b.with("type", "wood").with("name", "").with_polygon(true)
-            })
+            .add_landcover("wood")
             .add_feature("roads", |b| {
                 b.with_road("track")
                     .with("name", "")
@@ -266,11 +256,9 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     .with("s_red", 1i32)
             })
             .build(),
-        LegendItem::builder("route_horse", Category::RoadsAndPaths, 17)
+        LegendItem::builder("route_horse", Category::RoadsAndPaths, 17, for_taginfo)
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add("type", "route").add("route", "horse")))
-            .add_feature("landcovers", |b| {
-                b.with("type", "wood").with("name", "").with_polygon(true)
-            })
+            .add_landcover("wood")
             .add_feature("roads", |b| {
                 b.with_road("track")
                     .with("name", "")
@@ -292,6 +280,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
             format!("road_track_{grade}").leak(),
             Category::RoadsAndPaths,
             17,
+            for_taginfo,
         )
         .add_tag_set(|mut ts| {
             ts = ts.add_tags(|tags| tags.add("highway", "track").add("tracktype", grade));
@@ -305,9 +294,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
 
             ts
         })
-        .add_feature("landcovers", |b| {
-            b.with("type", "wood").with("name", "").with_polygon(true)
-        })
+        .add_landcover("wood")
         .add_feature("roads", |b| {
             b.with_road("track")
                 .with("class", "highway")
@@ -324,11 +311,10 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                     format!("trail_visibility_{visibility}").leak(),
                     Category::RoadsAndPaths,
                     17,
+                    for_taginfo,
                 )
                 .add_tag_set(|ts| ts.add_tags(|tags| tags.add("trail_visibility", visibility)))
-                .add_feature("landcovers", |b| {
-                    b.with("type", "wood").with("name", "").with_polygon(true)
-                })
+                .add_landcover("wood")
                 .add_feature("roads", |b| {
                     b.with_road("path")
                         .with("class", "highway")
@@ -357,6 +343,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                 format!("railway_{}", types[0]).leak(),
                 Category::Railway,
                 17,
+                for_taginfo,
             )
             .add_tag_set(|mut ts| {
                 for tag_set in types.iter().flat_map(|typ| match *typ {
@@ -379,43 +366,31 @@ pub fn roads() -> Vec<LegendItem<'static>> {
                 }
                 ts
             })
-            .add_feature("landcovers", |b| {
-                b.with("type", "residential")
-                    .with("name", "")
-                    .with_polygon(true)
-            })
+            .add_landcover("residential")
             .add_feature("roads", |b| b.with_road(types[0]).with("class", "railway"))
             .build()
         }),
     )
     .chain([
-        LegendItem::builder("railway_bridge", Category::Railway, 17)
+        LegendItem::builder("railway_bridge", Category::Railway, 17, for_taginfo)
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add("railway", "rail").add("bridge", "yes")))
-            .add_feature("landcovers", |b| {
-                b.with("type", "residential")
-                    .with("name", "")
-                    .with_polygon(true)
-            })
+            .add_landcover("residential")
             .add_feature("roads", |b| {
                 b.with_road("rail")
                     .with("class", "railway")
                     .with("bridge", 1i16)
             })
             .build(),
-        LegendItem::builder("railway_tunnel", Category::Railway, 17)
+        LegendItem::builder("railway_tunnel", Category::Railway, 17, for_taginfo)
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add("railway", "rail").add("tunnel", "yes")))
-            .add_feature("landcovers", |b| {
-                b.with("type", "residential")
-                    .with("name", "")
-                    .with_polygon(true)
-            })
+            .add_landcover("residential")
             .add_feature("roads", |b| {
                 b.with_road("rail")
                     .with("class", "railway")
                     .with("tunnel", 1i16)
             })
             .build(),
-        LegendItem::builder("water_slide", Category::Other, 17)
+        LegendItem::builder("water_slide", Category::Other, 17, for_taginfo)
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add("attraction", "water_slide")))
             .add_feature("roads", |b| {
                 b.with_road("water_slide").with("class", "attraction")
@@ -428,7 +403,7 @@ pub fn roads() -> Vec<LegendItem<'static>> {
 impl PropsBuilder {
     fn with_road(self, typ: &'static str) -> Self {
         self.with("type", typ)
-            .with("name", "Abc")
+            .with_name()
             .with("tracktype", "")
             .with("class", "")
             .with("service", "")

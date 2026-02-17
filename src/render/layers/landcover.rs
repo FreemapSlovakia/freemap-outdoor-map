@@ -139,7 +139,9 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         let typ = row.get_string("type")?;
 
         if let Some(paints) = PAINTS.get(typ) {
-            context.push_group();
+            if paints.len() > 1 {
+                context.push_group();
+            }
 
             for paint in paints.iter() {
                 match paint {
@@ -189,9 +191,10 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
                 }
             }
 
-            context.pop_group_to_source()?;
-
-            context.paint()?;
+            if paints.len() > 1 {
+                context.pop_group_to_source()?;
+                context.paint()?;
+            }
         }
 
         if typ == "winter_sports" && zoom >= 11 {
