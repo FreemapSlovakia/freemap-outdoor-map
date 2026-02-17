@@ -2694,6 +2694,27 @@
       "key": "ele",
       "object_types": ["node", "area"],
       "description": "Adds elevation into label with smaller font size."
+    },
+    {
+      "key": "name",
+      "object_types": ["node", "way", "area"],
+      "description": "Rendered as label."
+    },
+    {
+      "key": "ref",
+      "object_types": ["node", "way", "area"],
+      "description": "Rendered as label on some features."
+    },
+    {
+      "key": "protect_class",
+      "object_types": ["area"],
+      "description": ""
+    },
+    {
+      "key": "aerialway",
+      "value": "pylon",
+      "object_types": ["node"],
+      "description": ""
     }
   ]
 }
