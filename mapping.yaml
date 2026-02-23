@@ -26,6 +26,7 @@ tags:
     - icao
     - intermittent
     - location
+    - operator
     - plant:method
     - plant:source
     - protect_class
@@ -598,6 +599,7 @@ tables:
             - fee
             - icao
             - intermittent
+            - operator
             - protected
             - ref
             - refitted
