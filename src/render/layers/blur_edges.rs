@@ -6,7 +6,7 @@ use cairo::{Format, ImageSurface, Operator};
 use geo::{BoundingRect, Geometry, Intersects, Rect};
 use image::{GrayImage, imageops};
 
-const BLUR_RADIUS_PX: f64 = 10.0;
+const BLUR_RADIUS_M: f64 = 5_000.0;
 
 pub fn render(ctx: &Ctx, mask_polygon_merc: &Geometry) -> LayerRenderResult {
     let _span = tracy_client::span!("blur_edges::render");
@@ -14,19 +14,21 @@ pub fn render(ctx: &Ctx, mask_polygon_merc: &Geometry) -> LayerRenderResult {
     let context = ctx.context;
 
     if tile_intersects_mask(mask_polygon_merc, ctx) {
-        let pad = (BLUR_RADIUS_PX * 3.0).ceil() as u32;
+        let blur_radius_px = BLUR_RADIUS_M / ctx.meters_per_pixel();
+
+        let pad = blur_radius_px.ceil();
 
         let mask_geometry = mask_polygon_merc.project_to_tile(&ctx.tile_projector);
 
-        let padded_w = (ctx.size.width + pad * 2) as i32;
-        let padded_h = (ctx.size.height + pad * 2) as i32;
+        let padded_w = (ctx.size.width + pad as u32 * 2) as i32;
+        let padded_h = (ctx.size.height + pad as u32 * 2) as i32;
 
         let mut mask_surface = ImageSurface::create(Format::A8, padded_w, padded_h)?;
 
         {
             let mask_ctx = cairo::Context::new(&mask_surface)?;
 
-            mask_ctx.translate(pad as f64, pad as f64);
+            mask_ctx.translate(pad, pad);
             path_geometry(&mask_ctx, &mask_geometry);
             mask_ctx.set_source_rgba(1.0, 1.0, 1.0, 1.0);
             mask_ctx.fill()?;
@@ -49,7 +51,7 @@ pub fn render(ctx: &Ctx, mask_polygon_merc: &Geometry) -> LayerRenderResult {
         let gray =
             GrayImage::from_vec(mask_width, mask_height, alpha).expect("valid mask alpha buffer");
 
-        let blurred = imageops::blur(&gray, BLUR_RADIUS_PX as f32).into_raw();
+        let blurred = imageops::blur(&gray, blur_radius_px as f32).into_raw();
 
         let mut blurred_rgba = vec![0u8; blurred.len() * 4];
 
@@ -66,7 +68,7 @@ pub fn render(ctx: &Ctx, mask_polygon_merc: &Geometry) -> LayerRenderResult {
             (mask_width * 4) as i32,
         )?;
 
-        context.set_source_surface(&blurred_surface, -(pad as f64), -(pad as f64))?;
+        context.set_source_surface(&blurred_surface, -pad, -pad)?;
     } else {
         context.set_source_rgba(0.0, 0.0, 0.0, 0.0);
     }
@@ -82,11 +84,9 @@ fn tile_intersects_mask(mask: &Geometry, ctx: &Ctx) -> bool {
         return false;
     };
 
-    let blur_radius_m = BLUR_RADIUS_PX * ctx.meters_per_pixel() * 3.0;
-
     Rect::new(
-        (bbox.min().x - blur_radius_m, bbox.min().y - blur_radius_m),
-        (bbox.max().x + blur_radius_m, bbox.max().y + blur_radius_m),
+        (bbox.min().x - BLUR_RADIUS_M, bbox.min().y - BLUR_RADIUS_M),
+        (bbox.max().x + BLUR_RADIUS_M, bbox.max().y + BLUR_RADIUS_M),
     )
     .intersects(&ctx.bbox)
 }

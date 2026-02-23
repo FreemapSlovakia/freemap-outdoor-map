@@ -13,6 +13,7 @@ pub enum LegendValue {
     F64(f64),
     I16(i16),
     I32(i32),
+    I64(i64),
     Hstore(HashMap<String, Option<String>>),
     Point(Point),
     LineString(LineString),
@@ -104,6 +105,7 @@ fn legend_value_type(value: &LegendValue) -> &'static str {
         LegendValue::F64(_) => "F64",
         LegendValue::I16(_) => "I16",
         LegendValue::I32(_) => "I32",
+        LegendValue::I64(_) => "I64",
         LegendValue::Hstore(_) => "Hstore",
         LegendValue::Point(_) => "Point",
         LegendValue::LineString(_) => "LineString",
@@ -270,6 +272,19 @@ impl Feature {
             })? {
                 LegendValue::I32(value) => Ok(*value),
                 other => Err(WrongTypeError::new(arg, "i32", legend_value_type(other)).into()),
+            },
+        }
+    }
+
+    pub(crate) fn get_i64(&self, arg: &str) -> Result<i64, FeatureError> {
+        match self {
+            Self::Row(row) => Ok(row.try_get(arg)?),
+            Self::LegendData(data) => match data.get(arg).ok_or(FeatureError::MissingValue {
+                field: arg.to_string(),
+                expected: "I64",
+            })? {
+                LegendValue::I64(value) => Ok(*value),
+                other => Err(WrongTypeError::new(arg, "i64", legend_value_type(other)).into()),
             },
         }
     }

@@ -269,3 +269,13 @@ DELETE /export?token=6f41b0ebf3bef99cad07c1041fac3339
 ### WMTS
 
 Endpoint: `/service`
+
+## Notes
+
+Buffer polygon for imposm:
+
+```sh
+ogr2ogr -f GeoJSON limit-europe-buffered.geojson limit-europe.geojson \
+  -dialect sqlite \
+  -sql "WITH P AS (SELECT BufferOptions_SetJoinStyle('MITRE') AS a, BufferOptions_SetMitreLimit(5.0) AS b) SELECT ST_Transform(ST_Buffer(ST_Transform(geometry, 3857), 10000), 4326) AS geometry, * FROM \"limit-europe\", P"
+```

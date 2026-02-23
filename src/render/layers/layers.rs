@@ -70,20 +70,23 @@ pub fn render(
         legend: request.legend.as_ref(),
     };
 
-    if request.legend.is_none() {
-        layers::sea::render(ctx, client).with_layer("sea")?;
-    }
-
     let mask_geometry = if ctx.legend.is_none()
         && matches!(request.format, ImageFormat::Jpeg | ImageFormat::Png)
         && let Some(mask_geometry) = mask_geometry
     {
+        context.set_source_rgb(0.8, 0.8, 0.8);
+        context.paint().unwrap();
+
         ctx.context.push_group();
 
         Some(mask_geometry)
     } else {
         None
     };
+
+    if request.legend.is_none() {
+        layers::sea::render(ctx, client).with_layer("sea")?;
+    }
 
     // osm_landcovers (landcovers)
     layers::landcover::render(ctx, client, svg_repo).with_layer("landcover")?;
@@ -312,6 +315,11 @@ pub fn render(
         layers::place_names::render(ctx, client, &mut None).with_layer("place_names")?;
     }
 
+    if zoom < 8 && request.render.contains(&RenderLayer::CountryNames) {
+        // country_names_smooth (country_names)
+        layers::country_names::render(ctx, client).with_layer("country_names")?;
+    }
+
     if let Some(mask_geometry) = mask_geometry {
         layers::blur_edges::render(ctx, mask_geometry).with_layer("blur_edges")?;
 
@@ -320,11 +328,6 @@ pub fn render(
             .and_then(|_| ctx.context.paint())
             .map_err(LayerRenderError::from)
             .with_layer("top")?;
-    }
-
-    if zoom < 8 && request.render.contains(&RenderLayer::CountryNames) {
-        // country_names_smooth (country_names)
-        layers::country_names::render(ctx, client).with_layer("country_names")?;
     }
 
     if let Some(ref features) = request.featues {
