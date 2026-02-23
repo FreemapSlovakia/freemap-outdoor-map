@@ -27,7 +27,7 @@ pub fn render(
     client: &mut postgres::Client,
     svg_repo: &mut SvgRepo,
     hillshading_datasets: Option<&mut HillshadingDatasets>,
-    mask_geometry: Option<&Geometry>,
+    coverage_geometry: Option<&Geometry>,
 ) -> Result<Vec<u8>, RenderError> {
     let _span = tracy_client::span!("render_tile");
 
@@ -42,7 +42,7 @@ pub fn render(
             size,
             svg_repo,
             hillshading_datasets,
-            mask_geometry,
+            coverage_geometry,
             request.scale,
         )
     };

@@ -55,13 +55,9 @@ pub struct Cli {
     )]
     pub allowed_scales: Vec<f64>,
 
-    /// Optional polygon geojson limiting requested tiles.
-    #[arg(long, env = "MAPRENDER_LIMITS_GEOJSON")]
-    pub limits_geojson: Option<PathBuf>,
-
-    /// Mask geojson polygon file
-    #[arg(long, env = "MAPRENDER_MASK_GEOJSON")]
-    pub mask_geojson: Option<PathBuf>,
+    /// Coverage geojson polygon file used both for edge blur and tile request limits.
+    #[arg(long, env = "MAPRENDER_COVERAGE_GEOJSON")]
+    pub coverage_geojson: Option<PathBuf>,
 
     /// Base directory for cached tiles.
     #[arg(long, env = "MAPRENDER_TILE_CACHE_BASE_PATH")]

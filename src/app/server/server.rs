@@ -36,7 +36,7 @@ pub struct ServerOptions {
     pub host: Ipv4Addr,
     pub port: u16,
     pub cors: bool,
-    pub limits_geometry: Option<Geometry>,
+    pub coverage_geometry: Option<Geometry>,
 }
 
 pub async fn start_server(
@@ -52,7 +52,7 @@ pub async fn start_server(
         tile_worker,
         serve_cached: options.serve_cached,
         max_zoom: options.max_zoom,
-        limits_geometry: options.limits_geometry,
+        coverage_geometry: options.coverage_geometry,
         allowed_scales: options.allowed_scales.clone(),
         render: options.render.iter().copied().collect(),
     };

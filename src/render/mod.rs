@@ -1,3 +1,4 @@
+pub(crate) use coverage::{TileCoverageRelation, tile_touches_coverage};
 pub(super) use feature::{Feature, FeatureError, GeomError, LegendValue};
 pub(super) use image_format::ImageFormat;
 pub(crate) use legend::{LegendMeta, LegendMode, legend_metadata, legend_render_request};
@@ -8,6 +9,7 @@ use std::path::PathBuf;
 mod categories;
 mod collision;
 mod colors;
+mod coverage;
 mod ctx;
 mod draw;
 mod feature;

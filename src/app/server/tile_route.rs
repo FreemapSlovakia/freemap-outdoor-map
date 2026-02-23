@@ -1,6 +1,6 @@
 use crate::{
     app::{server::app_state::AppState, tile_coord::TileCoord, tile_processor::cached_tile_path},
-    render::{ImageFormat, RenderRequest},
+    render::{ImageFormat, RenderRequest, TileCoverageRelation, tile_touches_coverage},
 };
 use axum::{
     body::Body,
@@ -8,7 +8,6 @@ use axum::{
     http::{Response, StatusCode},
 };
 use geo::Rect;
-use geo::algorithm::intersects::Intersects;
 use std::time::SystemTime;
 use tokio::fs;
 
@@ -61,10 +60,11 @@ pub(crate) async fn serve_tile(
 
     let bbox = tile_bounds_to_epsg3857(coord.x, coord.y, coord.zoom, 256);
 
-    if let Some(ref limits_geometry) = state.limits_geometry {
-        let tile_polygon = bbox.to_polygon();
-
-        if !limits_geometry.intersects(&tile_polygon) {
+    if let Some(ref coverage_geometry) = state.coverage_geometry {
+        let meters_per_pixel = bbox.width() / 256.0;
+        if tile_touches_coverage(coverage_geometry, bbox, meters_per_pixel)
+            == TileCoverageRelation::Outside
+        {
             return Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(Body::empty())

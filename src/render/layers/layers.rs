@@ -43,7 +43,7 @@ pub fn render(
     size: Size<u32>,
     svg_repo: &mut SvgRepo,
     mut hillshading_datasets: Option<&mut HillshadingDatasets>,
-    mask_geometry: Option<&Geometry>,
+    coverage_geometry: Option<&Geometry>,
     scale: f64,
 ) -> Result<(), RenderError> {
     let _span = tracy_client::span!("render_tile::draw");
@@ -70,16 +70,16 @@ pub fn render(
         legend: request.legend.as_ref(),
     };
 
-    let mask_geometry = if ctx.legend.is_none()
+    let coverage_geometry = if ctx.legend.is_none()
         && matches!(request.format, ImageFormat::Jpeg | ImageFormat::Png)
-        && let Some(mask_geometry) = mask_geometry
+        && let Some(coverage_geometry) = coverage_geometry
     {
         context.set_source_rgb(0.8, 0.8, 0.8);
         context.paint().unwrap();
 
         ctx.context.push_group();
 
-        Some(mask_geometry)
+        Some(coverage_geometry)
     } else {
         None
     };
@@ -320,8 +320,8 @@ pub fn render(
         layers::country_names::render(ctx, client).with_layer("country_names")?;
     }
 
-    if let Some(mask_geometry) = mask_geometry {
-        layers::blur_edges::render(ctx, mask_geometry).with_layer("blur_edges")?;
+    if let Some(coverage_geometry) = coverage_geometry {
+        layers::blur_edges::render(ctx, coverage_geometry).with_layer("blur_edges")?;
 
         ctx.context
             .pop_group_to_source()

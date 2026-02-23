@@ -42,7 +42,7 @@ impl RenderWorkerPool {
         worker_count: usize,
         svg_base_path: Arc<Path>,
         hillshading_base_path: Arc<Path>,
-        mask_geometry: Option<Geometry>,
+        coverage_geometry: Option<Geometry>,
     ) -> Self {
         let queue_size = worker_count.max(1) * 2;
         let (tx, rx) = mpsc::channel(queue_size);
@@ -54,7 +54,7 @@ impl RenderWorkerPool {
             let pool = pool.clone();
             let svg_base_path = svg_base_path.clone();
             let hillshading_base_path = hillshading_base_path.clone();
-            let mask_geometry = mask_geometry.clone();
+            let coverage_geometry = coverage_geometry.clone();
 
             let handle = std::thread::Builder::new()
                 .name(format!("render-worker-{worker_id}"))
@@ -80,7 +80,7 @@ impl RenderWorkerPool {
                                 &mut client,
                                 &mut svg_repo,
                                 hillshading_datasets.as_mut(),
-                                mask_geometry.as_ref(),
+                                coverage_geometry.as_ref(),
                             )
                             .map_err(ReError::from)
                         });

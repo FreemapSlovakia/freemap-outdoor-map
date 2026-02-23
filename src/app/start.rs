@@ -34,6 +34,14 @@ pub(crate) fn start() {
     let cli = Cli::parse();
     set_mapping_path(cli.mapping_path.clone());
 
+    let coverage_geometry =
+        cli.coverage_geojson
+            .as_ref()
+            .map(|path| match load_geometry_from_geojson(path) {
+                Ok(g) => g,
+                Err(err) => panic!("failed to load coverage geojson {}: {err}", path.display()),
+            });
+
     let render_worker_pool = {
         let connection_pool = r2d2::Pool::builder()
             .max_size(cli.pool_max_size)
@@ -43,32 +51,14 @@ pub(crate) fn start() {
             ))
             .expect("build db pool");
 
-        let mask_geometry = cli
-            .mask_geojson
-            .map(|path| match load_geometry_from_geojson(&path) {
-                Ok(g) => g,
-                Err(err) => panic!("failed to load mask geojson {}: {err}", path.display()),
-            });
-
         Arc::new(RenderWorkerPool::new(
             connection_pool,
             cli.worker_count,
             Arc::from(cli.svg_base_path),
             Arc::from(cli.hillshading_base_path),
-            mask_geometry,
+            coverage_geometry.clone(),
         ))
     };
-
-    let limits_geometry = cli
-        .limits_geojson
-        .as_ref()
-        .map(|path| match load_geometry_from_geojson(path) {
-            Ok(geometry) => geometry,
-            Err(err) => panic!(
-                "failed to load limits geojson {}: {err}",
-                path.to_string_lossy()
-            ),
-        });
 
     let mut tile_processing_worker = None;
     let mut tile_invalidation_watcher = None;
@@ -143,7 +133,7 @@ pub(crate) fn start() {
             host: cli.host,
             port: cli.port,
             cors: cli.cors,
-            limits_geometry,
+            coverage_geometry,
         },
     )) {
         eprintln!("Server stopped with error: {err}");
@@ -225,7 +215,7 @@ pub fn load_geometry_from_geojson(path: &Path) -> Result<Geometry, String> {
     });
 
     if failed.get() {
-        Err("failed to project some mask coordinates to EPSG:3857".into())
+        Err("failed to project some coverage coordinates to EPSG:3857".into())
     } else {
         Ok(geometry)
     }

@@ -13,7 +13,7 @@ pub(crate) struct AppState {
     pub(crate) tile_worker: Option<TileProcessingWorker>,
     pub(crate) serve_cached: bool,
     pub(crate) max_zoom: u8,
-    pub(crate) limits_geometry: Option<Geometry>,
+    pub(crate) coverage_geometry: Option<Geometry>,
     pub(crate) allowed_scales: Vec<f64>,
     pub(crate) render: HashSet<RenderLayer>,
 }
