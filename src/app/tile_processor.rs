@@ -2,7 +2,7 @@ use sled::Batch;
 
 use crate::app::tile_coord::TileCoord;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs,
     io::ErrorKind,
     path::PathBuf,
@@ -10,17 +10,27 @@ use std::{
 };
 
 #[derive(Clone)]
-pub(crate) struct TileProcessingConfig {
-    pub(crate) tile_cache_base_paths: Vec<PathBuf>,
+pub(crate) struct VariantConfig {
+    pub(crate) tile_cache_base_path: Option<PathBuf>,
     pub(crate) tile_index: Option<PathBuf>,
+}
+
+#[derive(Clone)]
+pub(crate) struct TileProcessingConfig {
+    pub(crate) variants: Vec<VariantConfig>,
     pub(crate) invalidate_min_zoom: u8,
 }
 
+struct VariantRuntime {
+    tile_cache_base_path: Option<PathBuf>,
+    db: Option<sled::Db>,
+}
+
 pub(crate) struct TileProcessor {
-    config: TileProcessingConfig,
+    variants: Vec<VariantRuntime>,
+    invalidate_min_zoom: u8,
     invalidation_register: HashMap<TileCoord, SystemTime>,
     last_prune: SystemTime,
-    db: Option<sled::Db>,
 }
 
 fn concatenate_merge(
@@ -38,17 +48,26 @@ fn concatenate_merge(
 
 impl TileProcessor {
     pub(crate) fn new(config: TileProcessingConfig) -> Result<Self, sled::Error> {
-        let db = config.tile_index.clone().map(sled::open).transpose()?;
+        let mut variants = Vec::with_capacity(config.variants.len());
 
-        if let Some(ref db) = db {
-            db.set_merge_operator(concatenate_merge);
+        for variant in config.variants {
+            let db = variant.tile_index.map(sled::open).transpose()?;
+
+            if let Some(ref db) = db {
+                db.set_merge_operator(concatenate_merge);
+            }
+
+            variants.push(VariantRuntime {
+                tile_cache_base_path: variant.tile_cache_base_path,
+                db,
+            });
         }
 
         Ok(Self {
-            config,
+            variants,
+            invalidate_min_zoom: config.invalidate_min_zoom,
             invalidation_register: HashMap::new(),
             last_prune: SystemTime::now(),
-            db,
         })
     }
 
@@ -66,15 +85,24 @@ impl TileProcessor {
         coord: TileCoord,
         scale: f64,
         render_started_at: SystemTime,
-        tile_cache_base_path: PathBuf,
+        variant_index: usize,
     ) {
         if self.should_drop_save(coord, render_started_at) {
             return;
         }
 
-        self.append_index_entry(coord, scale);
+        let Some(variant) = self.variants.get(variant_index) else {
+            eprintln!("save tile for unknown variant index: {variant_index}");
+            return;
+        };
 
-        let file_path = cached_tile_path(&tile_cache_base_path, coord, scale);
+        let Some(tile_cache_base_path) = variant.tile_cache_base_path.as_ref() else {
+            return;
+        };
+
+        self.append_index_entry(variant.db.as_ref(), coord, scale);
+
+        let file_path = cached_tile_path(tile_cache_base_path, coord, scale);
 
         if let Some(parent) = file_path.parent()
             && let Err(err) = fs::create_dir_all(parent)
@@ -87,79 +115,38 @@ impl TileProcessor {
         }
     }
 
-    fn remove(&self, batch: &mut Batch, coord: TileCoord, scales: impl AsRef<[u8]>) {
-        for base_path in &self.config.tile_cache_base_paths {
-            for scale in scales.as_ref() {
-                let path = cached_tile_path(base_path, coord, *scale as f64);
-
-                if let Err(err) = fs::remove_file(&path)
-                    && err.kind() != ErrorKind::NotFound
-                {
-                    eprintln!("failed to remove file {}: {err}", path.display());
-                }
-            }
-        }
-
-        let key: Vec<u8> = coord.into();
-
-        batch.remove(key)
-    }
-
     pub(crate) fn handle_invalidation(&mut self, coord: TileCoord, invalidated_at: SystemTime) {
         self.record_invalidation(coord, invalidated_at);
 
-        let Some(ref db) = self.db else {
-            return;
-        };
-
-        let key: Vec<u8> = coord.into();
-
-        let mut batch = Batch::default();
-
-        for item in db.scan_prefix(key) {
-            match item {
-                Ok(entry) => {
-                    let coord = entry.0.as_ref().into();
-
-                    self.remove(&mut batch, coord, entry.1);
-                }
-                Err(err) => {
-                    eprint!("error scanning {coord}: {err}");
-                    continue;
-                }
-            }
-        }
-
-        let mut coord = coord;
-
-        loop {
-            if coord.zoom < self.config.invalidate_min_zoom {
-                break;
-            }
-
-            let Some(parent) = coord.parent() else {
-                break;
+        for variant in &self.variants {
+            let (Some(base_path), Some(db)) =
+                (variant.tile_cache_base_path.as_ref(), variant.db.as_ref())
+            else {
+                continue;
             };
 
-            coord = parent;
+            let mut batch = Batch::default();
 
-            let key: Vec<u8> = coord.into();
+            self.remove_descendants(db, &mut batch, coord, base_path);
 
-            let scales = match db.get(key) {
-                Ok(Some(scales)) => scales,
-                Ok(None) => continue,
-                Err(err) => {
-                    eprintln!("failed to get {} from DB: {err}", coord);
-
-                    continue;
+            let mut current = coord;
+            loop {
+                if current.zoom < self.invalidate_min_zoom {
+                    break;
                 }
-            };
 
-            self.remove(&mut batch, coord, scales);
-        }
+                let Some(parent) = current.parent() else {
+                    break;
+                };
 
-        if let Err(err) = db.apply_batch(batch) {
-            eprintln!("failed to apply DB remove batch for {}: {err}", coord);
+                current = parent;
+
+                self.remove_exact(db, &mut batch, current, base_path);
+            }
+
+            if let Err(err) = db.apply_batch(batch) {
+                eprintln!("failed to apply DB remove batch for {}: {err}", coord);
+            }
         }
     }
 
@@ -199,8 +186,8 @@ impl TileProcessor {
         false
     }
 
-    fn append_index_entry(&self, coord: TileCoord, scale: f64) {
-        let Some(ref db) = self.db else {
+    fn append_index_entry(&self, db: Option<&sled::Db>, coord: TileCoord, scale: f64) {
+        let Some(db) = db else {
             return;
         };
 
@@ -208,6 +195,65 @@ impl TileProcessor {
 
         if let Err(err) = db.merge(key, [scale.round() as u8; 1]) {
             eprint!("error merging tile {coord}: {err}")
+        }
+    }
+
+    fn remove_descendants(
+        &self,
+        db: &sled::Db,
+        batch: &mut Batch,
+        coord: TileCoord,
+        base_path: &std::path::Path,
+    ) {
+        let key: Vec<u8> = coord.into();
+
+        for item in db.scan_prefix(key) {
+            match item {
+                Ok(entry) => {
+                    let entry_coord = entry.0.as_ref().into();
+                    self.remove_files(entry_coord, entry.1.as_ref(), base_path);
+                    batch.remove(entry.0);
+                }
+                Err(err) => {
+                    eprintln!("error scanning {coord}: {err}");
+                }
+            }
+        }
+    }
+
+    fn remove_exact(
+        &self,
+        db: &sled::Db,
+        batch: &mut Batch,
+        coord: TileCoord,
+        base_path: &std::path::Path,
+    ) {
+        let key: Vec<u8> = coord.into();
+
+        let scales = match db.get(key.clone()) {
+            Ok(Some(scales)) => scales,
+            Ok(None) => return,
+            Err(err) => {
+                eprintln!("failed to get {} from DB: {err}", coord);
+                return;
+            }
+        };
+
+        self.remove_files(coord, scales.as_ref(), base_path);
+        batch.remove(key);
+    }
+
+    fn remove_files(&self, coord: TileCoord, scales: &[u8], base_path: &std::path::Path) {
+        let unique_scales: HashSet<u8> = scales.iter().copied().collect();
+
+        for scale in unique_scales {
+            let path = cached_tile_path(base_path, coord, scale as f64);
+
+            if let Err(err) = fs::remove_file(&path)
+                && err.kind() != ErrorKind::NotFound
+            {
+                eprintln!("failed to remove file {}: {err}", path.display());
+            }
         }
     }
 }

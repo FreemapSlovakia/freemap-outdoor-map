@@ -3,7 +3,7 @@ use crate::app::{
     server::{ServerOptions, TileVariantOptions, start_server},
     tile_invalidation,
     tile_processing_worker::TileProcessingWorker,
-    tile_processor::TileProcessingConfig,
+    tile_processor::{TileProcessingConfig, VariantConfig},
 };
 use crate::render::{RenderWorkerPool, set_mapping_path};
 use dotenvy::dotenv;
@@ -16,7 +16,7 @@ use std::{
     cell::Cell,
     fs::File,
     io::BufReader,
-    path::{Path, PathBuf},
+    path::Path,
     str::FromStr,
     sync::{Arc, Mutex},
 };
@@ -38,14 +38,10 @@ pub(crate) fn start() {
         Err(err) => panic!("invalid tile route configuration: {err}"),
     };
 
-    let mut tile_cache_base_paths = Vec::<PathBuf>::new();
-    for variant in &tile_variants {
-        if let Some(path) = variant.tile_cache_base_path.as_ref()
-            && !tile_cache_base_paths.contains(path)
-        {
-            tile_cache_base_paths.push(path.clone());
-        }
-    }
+    let tile_processing_variants = match build_tile_processing_variants(&cli) {
+        Ok(config) => config,
+        Err(err) => panic!("invalid tile processing configuration: {err}"),
+    };
 
     let render_worker_pool = {
         let connection_pool = r2d2::Pool::builder()
@@ -67,10 +63,12 @@ pub(crate) fn start() {
     let mut tile_processing_worker = None;
     let mut tile_invalidation_watcher = None;
 
-    if !tile_cache_base_paths.is_empty() {
+    if tile_processing_variants
+        .iter()
+        .any(|variant| variant.tile_cache_base_path.is_some())
+    {
         let processing_config = TileProcessingConfig {
-            tile_cache_base_paths,
-            tile_index: cli.index.clone(),
+            variants: tile_processing_variants,
             invalidate_min_zoom: cli.invalidate_min_zoom,
         };
 
@@ -155,6 +153,18 @@ fn build_tile_variants(cli: &Cli) -> Result<Vec<TileVariantOptions>, String> {
         .into_iter()
         .map(tile_variant_input_to_server_variant)
         .collect()
+}
+
+fn build_tile_processing_variants(cli: &Cli) -> Result<Vec<VariantConfig>, String> {
+    let variant_inputs = cli.tile_variant_inputs()?;
+
+    Ok(variant_inputs
+        .into_iter()
+        .map(|variant| VariantConfig {
+            tile_cache_base_path: variant.tile_cache_base_path,
+            tile_index: variant.tile_index,
+        })
+        .collect())
 }
 
 fn tile_variant_input_to_server_variant(

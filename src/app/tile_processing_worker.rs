@@ -3,7 +3,6 @@ use crate::app::{
     tile_processor::{TileProcessingConfig, TileProcessor},
 };
 use std::{
-    path::PathBuf,
     sync::{Arc, Mutex},
     thread,
     time::{Duration, SystemTime},
@@ -36,7 +35,7 @@ enum TileProcessingMessage {
         coord: TileCoord,
         scale: f64,
         render_started_at: SystemTime,
-        tile_cache_base_path: PathBuf,
+        variant_index: usize,
     },
     Invalidate {
         coord: TileCoord,
@@ -72,13 +71,13 @@ impl TileProcessingWorker {
                             coord,
                             scale,
                             render_started_at,
-                            tile_cache_base_path,
+                            variant_index,
                         } => processor.handle_save_tile(
                             data,
                             coord,
                             scale,
                             render_started_at,
-                            tile_cache_base_path,
+                            variant_index,
                         ),
                         TileProcessingMessage::Invalidate {
                             coord,
@@ -103,7 +102,7 @@ impl TileProcessingWorker {
         coord: TileCoord,
         scale: f64,
         render_started_at: SystemTime,
-        tile_cache_base_path: PathBuf,
+        variant_index: usize,
     ) -> Result<(), TileProcessingSendError> {
         let tx = {
             let guard = self.inner.tx.lock().unwrap();
@@ -115,7 +114,7 @@ impl TileProcessingWorker {
             coord,
             scale,
             render_started_at,
-            tile_cache_base_path,
+            variant_index,
         })
         .await
         .map_err(|_| TileProcessingSendError::QueueClosed)

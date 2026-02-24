@@ -163,14 +163,13 @@ pub(crate) async fn serve_tile(
 
     if file_path.is_some()
         && let Some(tile_worker) = state.tile_worker.as_ref()
-        && let Some(tile_cache_base_path) = variant.tile_cache_base_path.as_ref()
         && let Err(err) = tile_worker
             .save_tile(
                 rendered.clone(),
                 coord,
                 scale,
                 render_started_at,
-                tile_cache_base_path.to_owned(),
+                variant_index,
             )
             .await
     {

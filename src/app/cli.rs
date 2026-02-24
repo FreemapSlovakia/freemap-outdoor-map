@@ -47,6 +47,7 @@ pub struct TileVariantInput {
     pub url_path: String,
     pub coverage_geojson: Option<PathBuf>,
     pub tile_cache_base_path: Option<PathBuf>,
+    pub tile_index: Option<PathBuf>,
     pub render: HashSet<RenderLayer>,
 }
 
@@ -163,9 +164,9 @@ pub struct Cli {
     #[arg(long, env = "MAPRENDER_INVALIDATE_MIN_ZOOM", default_value_t = 0)]
     pub invalidate_min_zoom: u8,
 
-    /// Tile index file
-    #[arg(long, env = "MAPRENDER_INDEX")]
-    pub index: Option<PathBuf>,
+    /// Tile index files aligned with tile URL paths.
+    #[arg(long, env = "MAPRENDER_INDEX", value_delimiter = ',')]
+    pub index: Vec<PathBuf>,
 
     /// Path to the imposm mapping YAML.
     #[arg(long, env = "MAPRENDER_MAPPING_PATH", default_value = "mapping.yaml")]
@@ -228,6 +229,7 @@ impl Cli {
             variants_len,
             "--tile-cache-base-path",
         )?;
+        let index_by_variant = expand_optional_by_variant(&self.index, variants_len, "--index")?;
 
         let mut result = Vec::with_capacity(variants_len);
 
@@ -236,6 +238,7 @@ impl Cli {
                 url_path: self.tile_url_path[i].as_str().to_string(),
                 coverage_geojson: coverage_by_variant[i].clone(),
                 tile_cache_base_path: cache_by_variant[i].clone(),
+                tile_index: index_by_variant[i].clone(),
                 render: render_by_variant[i].layers().clone(),
             });
         }
