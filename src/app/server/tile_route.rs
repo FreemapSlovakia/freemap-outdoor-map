@@ -1,5 +1,9 @@
 use crate::{
-    app::{server::app_state::AppState, tile_coord::TileCoord, tile_processor::cached_tile_path},
+    app::{
+        server::app_state::{AppState, TileRouteState},
+        tile_coord::TileCoord,
+        tile_processor::cached_tile_path,
+    },
     render::{ImageFormat, RenderRequest, TileCoverageRelation, tile_touches_coverage},
 };
 use axum::{
@@ -37,9 +41,12 @@ static GRAY_TILE_JPEG: LazyLock<Vec<u8>> = LazyLock::new(|| {
 });
 
 pub(crate) async fn get(
-    State(state): State<AppState>,
+    State(tile_route_state): State<TileRouteState>,
     Path((zoom, x, y_with_suffix)): Path<(u8, u32, String)>,
 ) -> Response<Body> {
+    let state = tile_route_state.app_state;
+    let variant_index = tile_route_state.variant_index;
+
     let Some((y, scale, ext)) = parse_y_suffix(&y_with_suffix) else {
         return Response::builder()
             .status(StatusCode::BAD_REQUEST)
@@ -47,15 +54,23 @@ pub(crate) async fn get(
             .expect("body should be built");
     };
 
-    serve_tile(&state, TileCoord { zoom, x, y }, scale, ext).await
+    serve_tile(&state, variant_index, TileCoord { zoom, x, y }, scale, ext).await
 }
 
 pub(crate) async fn serve_tile(
     state: &AppState,
+    variant_index: usize,
     coord: TileCoord,
     scale: f64,
     ext: Option<&str>,
 ) -> Response<Body> {
+    let Some(variant) = state.tile_variants.get(variant_index) else {
+        return Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(Body::from("tile variant not found"))
+            .expect("body should be built");
+    };
+
     if coord.zoom > state.max_zoom {
         return Response::builder()
             .status(StatusCode::NOT_FOUND)
@@ -85,7 +100,7 @@ pub(crate) async fn serve_tile(
 
     let bbox = tile_bounds_to_epsg3857(coord.x, coord.y, coord.zoom, 256);
 
-    if let Some(ref coverage_geometry) = state.coverage_geometry {
+    if let Some(ref coverage_geometry) = variant.coverage_geometry {
         let meters_per_pixel = bbox.width() / 256.0;
         if tile_touches_coverage(coverage_geometry, bbox, meters_per_pixel)
             == TileCoverageRelation::Outside
@@ -103,10 +118,11 @@ pub(crate) async fn serve_tile(
         coord.zoom,
         scale,
         ImageFormat::Jpeg,
-        state.render.to_owned(),
+        variant.render.to_owned(),
+        variant.coverage_geometry.clone(),
     );
 
-    let file_path = if let Some(ref tile_cache_base_path) = state.tile_cache_base_path {
+    let file_path = if let Some(ref tile_cache_base_path) = variant.tile_cache_base_path {
         let file_path = cached_tile_path(tile_cache_base_path, coord, scale);
 
         if state.serve_cached {
@@ -147,8 +163,15 @@ pub(crate) async fn serve_tile(
 
     if file_path.is_some()
         && let Some(tile_worker) = state.tile_worker.as_ref()
+        && let Some(tile_cache_base_path) = variant.tile_cache_base_path.as_ref()
         && let Err(err) = tile_worker
-            .save_tile(rendered.clone(), coord, scale, render_started_at)
+            .save_tile(
+                rendered.clone(),
+                coord,
+                scale,
+                render_started_at,
+                tile_cache_base_path.to_owned(),
+            )
             .await
     {
         eprintln!("Enqueue tile {coord}@{scale} save failed: {err}");

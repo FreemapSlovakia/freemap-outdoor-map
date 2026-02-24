@@ -74,7 +74,10 @@ fn get_routes_query(
 
     let mut rights = Vec::<&str>::new();
 
-    if render.contains(&RenderLayer::RoutesHiking) {
+    let bool_hiking_kst = render.contains(&RenderLayer::RoutesHikingKst);
+    let bool_hiking = render.contains(&RenderLayer::RoutesHiking) || bool_hiking_kst;
+
+    if bool_hiking || bool_hiking_kst {
         lefts.extend_from_slice(&["hiking", "foot", "running"]);
     }
 
@@ -94,28 +97,35 @@ fn get_routes_query(
 
     let rights_in = format_vec(&rights);
 
-    let cond = match include_networks {
-        None => String::from(""),
-        Some(networks) => {
-            let mut result = String::from("network IN (");
+    let mut conditions = Vec::new();
 
-            for (i, &network) in networks.iter().enumerate() {
-                if i > 0 {
-                    result.push(',');
-                }
-                result.push('\'');
-                result.push_str(network);
-                result.push('\'');
+    if let Some(networks) = include_networks {
+        let mut network_condition = String::from("network IN (");
+
+        for (i, &network) in networks.iter().enumerate() {
+            if i > 0 {
+                network_condition.push(',');
             }
-
-            result.push_str(") AND ");
-
-            result
+            network_condition.push('\'');
+            network_condition.push_str(network);
+            network_condition.push('\'');
         }
+
+        network_condition.push(')');
+        conditions.push(network_condition);
+    }
+
+    if bool_hiking_kst {
+        conditions.push(String::from(r"operator ~* '\ykst\y|\ytanap\y'"));
+    }
+
+    let cond = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!("{} AND ", conditions.join(" AND "))
     };
 
     let bool_horse = render.contains(&RenderLayer::RoutesHorse);
-    let bool_hiking = render.contains(&RenderLayer::RoutesHiking);
     let bool_bicycle = render.contains(&RenderLayer::RoutesBicycle);
     let bool_ski = render.contains(&RenderLayer::RoutesSki);
 
@@ -393,7 +403,9 @@ pub fn render_marking(
                 }
             }
 
-            if render.contains(&RenderLayer::RoutesHiking) {
+            if render.contains(&RenderLayer::RoutesHiking)
+                || render.contains(&RenderLayer::RoutesHikingKst)
+            {
                 {
                     let off = row.get_i32(&format!("h_{}", color.0))?;
 

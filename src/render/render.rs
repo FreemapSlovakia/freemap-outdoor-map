@@ -6,7 +6,6 @@ use crate::render::{
     xyz::bbox_size_in_pixels,
 };
 use cairo::{Format, ImageSurface, PdfSurface, Surface, SvgSurface};
-use geo::Geometry;
 use image::codecs::jpeg::JpegEncoder;
 use image::{ExtendedColorType, ImageEncoder};
 
@@ -27,7 +26,6 @@ pub fn render(
     client: &mut postgres::Client,
     svg_repo: &mut SvgRepo,
     hillshading_datasets: Option<&mut HillshadingDatasets>,
-    coverage_geometry: Option<&Geometry>,
 ) -> Result<Vec<u8>, RenderError> {
     let _span = tracy_client::span!("render_tile");
 
@@ -42,7 +40,7 @@ pub fn render(
             size,
             svg_repo,
             hillshading_datasets,
-            coverage_geometry,
+            request.coverage_geometry.as_deref(),
             request.scale,
         )
     };

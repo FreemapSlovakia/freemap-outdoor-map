@@ -1,12 +1,11 @@
 use crate::app::{
-    cli::Cli,
-    server::{ServerOptions, start_server},
+    cli::{Cli, TileVariantInput},
+    server::{ServerOptions, TileVariantOptions, start_server},
     tile_invalidation,
     tile_processing_worker::TileProcessingWorker,
     tile_processor::TileProcessingConfig,
 };
 use crate::render::{RenderWorkerPool, set_mapping_path};
-use clap::Parser;
 use dotenvy::dotenv;
 use geo::{Coord, Geometry, MapCoordsInPlace};
 use geojson::GeoJson;
@@ -17,7 +16,7 @@ use std::{
     cell::Cell,
     fs::File,
     io::BufReader,
-    path::Path,
+    path::{Path, PathBuf},
     str::FromStr,
     sync::{Arc, Mutex},
 };
@@ -31,16 +30,22 @@ pub(crate) fn start() {
 
     tracy_client::Client::start();
 
-    let cli = Cli::parse();
+    let cli = Cli::parse_checked();
     set_mapping_path(cli.mapping_path.clone());
 
-    let coverage_geometry =
-        cli.coverage_geojson
-            .as_ref()
-            .map(|path| match load_geometry_from_geojson(path) {
-                Ok(g) => g,
-                Err(err) => panic!("failed to load coverage geojson {}: {err}", path.display()),
-            });
+    let tile_variants = match build_tile_variants(&cli) {
+        Ok(config) => config,
+        Err(err) => panic!("invalid tile route configuration: {err}"),
+    };
+
+    let mut tile_cache_base_paths = Vec::<PathBuf>::new();
+    for variant in &tile_variants {
+        if let Some(path) = variant.tile_cache_base_path.as_ref()
+            && !tile_cache_base_paths.contains(path)
+        {
+            tile_cache_base_paths.push(path.clone());
+        }
+    }
 
     let render_worker_pool = {
         let connection_pool = r2d2::Pool::builder()
@@ -56,17 +61,16 @@ pub(crate) fn start() {
             cli.worker_count,
             Arc::from(cli.svg_base_path),
             Arc::from(cli.hillshading_base_path),
-            coverage_geometry.clone(),
         ))
     };
 
     let mut tile_processing_worker = None;
     let mut tile_invalidation_watcher = None;
 
-    if let Some(tile_cache_base_path) = cli.tile_cache_base_path.clone() {
+    if !tile_cache_base_paths.is_empty() {
         let processing_config = TileProcessingConfig {
-            tile_cache_base_path,
-            tile_index: cli.index,
+            tile_cache_base_paths,
+            tile_index: cli.index.clone(),
             invalidate_min_zoom: cli.invalidate_min_zoom,
         };
 
@@ -85,7 +89,7 @@ pub(crate) fn start() {
             ));
         }
     } else if cli.expires_base_path.is_some() {
-        eprintln!("imposm watcher disabled: missing --tile-base-path");
+        eprintln!("imposm watcher disabled: missing --tile-cache-base-path");
     }
 
     let rt = tokio::runtime::Builder::new_multi_thread()
@@ -126,14 +130,12 @@ pub(crate) fn start() {
         ServerOptions {
             serve_cached: cli.serve_cached,
             max_zoom: cli.max_zoom,
-            tile_cache_base_path: cli.tile_cache_base_path,
             allowed_scales: cli.allowed_scales,
-            render: cli.render.iter().copied().collect(),
             max_concurrent_connections: cli.max_concurrent_connections,
             host: cli.host,
             port: cli.port,
             cors: cli.cors,
-            coverage_geometry,
+            tile_variants,
         },
     )) {
         eprintln!("Server stopped with error: {err}");
@@ -144,6 +146,34 @@ pub(crate) fn start() {
     println!("Stopping render worker pool.");
     render_worker_pool.shutdown();
     println!("Render worker pool stopped.");
+}
+
+fn build_tile_variants(cli: &Cli) -> Result<Vec<TileVariantOptions>, String> {
+    let variant_inputs = cli.tile_variant_inputs()?;
+
+    variant_inputs
+        .into_iter()
+        .map(tile_variant_input_to_server_variant)
+        .collect()
+}
+
+fn tile_variant_input_to_server_variant(
+    variant: TileVariantInput,
+) -> Result<TileVariantOptions, String> {
+    let coverage_geometry =
+        match variant.coverage_geojson.as_ref() {
+            Some(path) => Some(load_geometry_from_geojson(path).map_err(|err| {
+                format!("failed to load coverage geojson {}: {err}", path.display())
+            })?),
+            None => None,
+        };
+
+    Ok(TileVariantOptions {
+        url_path: variant.url_path,
+        tile_cache_base_path: variant.tile_cache_base_path,
+        render: variant.render,
+        coverage_geometry,
+    })
 }
 
 async fn shutdown_signal(shutdown_tx: broadcast::Sender<()>) {

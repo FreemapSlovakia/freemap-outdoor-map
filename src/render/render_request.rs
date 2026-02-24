@@ -1,7 +1,9 @@
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use crate::render::{image_format::ImageFormat, legend::LegendItemData};
 use clap::ValueEnum;
+use geo::Geometry;
 use geo::Rect;
 use geojson::Feature;
 
@@ -14,6 +16,7 @@ pub enum RenderLayer {
     CountryNames,
     CountryBorders,
     RoutesHiking,
+    RoutesHikingKst,
     RoutesHorse,
     RoutesBicycle,
     RoutesSki,
@@ -26,6 +29,7 @@ pub struct RenderRequest {
     pub scale: f64,
     pub format: ImageFormat,
     pub render: HashSet<RenderLayer>,
+    pub coverage_geometry: Option<Arc<Geometry>>,
     pub featues: Option<Vec<Feature>>,
     pub legend: Option<LegendItemData>,
 }
@@ -37,6 +41,7 @@ impl RenderRequest {
         scale: f64,
         format: ImageFormat,
         render: HashSet<RenderLayer>,
+        coverage_geometry: Option<Arc<Geometry>>,
     ) -> Self {
         Self {
             bbox,
@@ -44,6 +49,7 @@ impl RenderRequest {
             scale,
             format,
             render,
+            coverage_geometry,
             featues: None,
             legend: None,
         }

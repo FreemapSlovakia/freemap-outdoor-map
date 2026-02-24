@@ -235,6 +235,7 @@ pub fn legend_render_request(id: &str, scale: f64, mode: LegendMode) -> Option<R
             RenderLayer::RoutesHorse,
             RenderLayer::RoutesSki,
         ]),
+        None,
     );
 
     render_request.legend = Some(legend_item_data);

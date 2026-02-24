@@ -11,7 +11,7 @@ use std::{
 
 #[derive(Clone)]
 pub(crate) struct TileProcessingConfig {
-    pub(crate) tile_cache_base_path: PathBuf,
+    pub(crate) tile_cache_base_paths: Vec<PathBuf>,
     pub(crate) tile_index: Option<PathBuf>,
     pub(crate) invalidate_min_zoom: u8,
 }
@@ -66,6 +66,7 @@ impl TileProcessor {
         coord: TileCoord,
         scale: f64,
         render_started_at: SystemTime,
+        tile_cache_base_path: PathBuf,
     ) {
         if self.should_drop_save(coord, render_started_at) {
             return;
@@ -73,7 +74,7 @@ impl TileProcessor {
 
         self.append_index_entry(coord, scale);
 
-        let file_path = cached_tile_path(&self.config.tile_cache_base_path, coord, scale);
+        let file_path = cached_tile_path(&tile_cache_base_path, coord, scale);
 
         if let Some(parent) = file_path.parent()
             && let Err(err) = fs::create_dir_all(parent)
@@ -87,13 +88,15 @@ impl TileProcessor {
     }
 
     fn remove(&self, batch: &mut Batch, coord: TileCoord, scales: impl AsRef<[u8]>) {
-        for scale in scales.as_ref() {
-            let path = cached_tile_path(&self.config.tile_cache_base_path, coord, *scale as f64);
+        for base_path in &self.config.tile_cache_base_paths {
+            for scale in scales.as_ref() {
+                let path = cached_tile_path(base_path, coord, *scale as f64);
 
-            if let Err(err) = fs::remove_file(&path)
-                && err.kind() != ErrorKind::NotFound
-            {
-                eprintln!("failed to remove file {}: {err}", path.display());
+                if let Err(err) = fs::remove_file(&path)
+                    && err.kind() != ErrorKind::NotFound
+                {
+                    eprintln!("failed to remove file {}: {err}", path.display());
+                }
             }
         }
 

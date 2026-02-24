@@ -97,7 +97,7 @@ pub(crate) async fn post(
 
     let rect = Rect::new((bbox[0], bbox[1]), (bbox[2], bbox[3]));
 
-    let mut render = state.render.to_owned();
+    let mut render = state.default_render.to_owned();
 
     if let Some(features) = &request.features {
         if let Some(shading) = features.shading {
@@ -149,7 +149,7 @@ pub(crate) async fn post(
         }
     }
 
-    let mut render_request = RenderRequest::new(rect, request.zoom, scale, format, render);
+    let mut render_request = RenderRequest::new(rect, request.zoom, scale, format, render, None);
 
     render_request.featues = if let Some(features) = &request.features
         && let Some(feature_collection) = &features.feature_collection

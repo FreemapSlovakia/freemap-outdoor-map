@@ -52,7 +52,7 @@ pub(crate) async fn service_handler(
                 None => return bad_request(),
             };
 
-            serve_tile(&state, TileCoord { zoom, x, y }, scale, Some(ext)).await
+            serve_tile(&state, 0, TileCoord { zoom, x, y }, scale, Some(ext)).await
         }
         Some("GetCapabilities") => Response::builder()
             .status(StatusCode::OK)

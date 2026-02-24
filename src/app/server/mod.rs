@@ -1,4 +1,4 @@
-pub use server::{ServerOptions, start_server};
+pub use server::{ServerOptions, TileVariantOptions, start_server};
 
 mod app_state;
 mod export_route;
