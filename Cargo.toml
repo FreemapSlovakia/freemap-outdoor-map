@@ -10,27 +10,27 @@ image = { version = "0.25", default-features = false, features = [
   "png",
 ] }
 librsvg = { version = "2.61.4" }
-cairo-rs = { version = "0.21", features = ["png", "svg", "pdf"] }
+cairo-rs = { version = "0.21.5", features = ["png", "svg", "pdf"] }
 cavalier_contours = { version = "0.7.0" }
-colorsys = "0.7"
+colorsys = "0.7.3"
 geo-postgis = "0.2.2"
-pangocairo = "0.21"
-postgis = "0.9"
-proj = { version = "=0.29", features = ["geo-types"] }
+pangocairo = "0.21.5"
+postgis = "0.9.0"
+proj = { version = "=0.29,0", features = ["geo-types"] }
 gio = "0.21.5"
 xmltree = "0.12.0"
-gdal = { version = "0.19", features = ["bindgen"] }
-geo = { version = "=0.30", features = ["use-proj"] }
-geojson = "0.24"
-postgres = "0.19"
-r2d2 = "0.8"
-r2d2_postgres = "0.18"
+gdal = { version = "0.19.0", features = ["bindgen"] }
+geo = { version = "=0.30.0", features = ["use-proj"] }
+geojson = "0.24.2"
+postgres = "0.19.12"
+r2d2 = "0.8.10"
+r2d2_postgres = "0.18.2"
 regex = "1.12.3"
 serde_json = "1.0.149"
 tracy-client = "0.18.4"
 thiserror = "2.0.17"
 axum = "0.8.8"
-clap = { version = "4.5.58", features = ["derive", "env"] }
+clap = { version = "4.5.60", features = ["derive", "env"] }
 dotenvy = "0.15.7"
 tokio = { version = "1.40.0", features = [
   "fs",
@@ -42,7 +42,7 @@ tower = { version = "0.5.1", features = ["limit", "timeout"] }
 tower-http = { version = "0.6.1", features = ["cors"] }
 rand = "0.10.0"
 serde = { version = "1.0.217", features = ["derive"] }
-serde-saphyr = "0.0.19"
+serde-saphyr = "0.0.20"
 indexmap = { version = "2.10.0", features = ["serde"] }
 notify = "8.2.0"
 tokio-util = { version = "0.7.12", features = ["io"] }
