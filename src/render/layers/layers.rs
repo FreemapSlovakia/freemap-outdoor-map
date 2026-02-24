@@ -245,7 +245,14 @@ pub fn render(
 
     if zoom >= 10 {
         // osm_pois (pois)
-        layers::pois::render(ctx, client, collision, svg_repo).with_layer("features")?;
+        layers::pois::render(
+            ctx,
+            client,
+            collision,
+            svg_repo,
+            request.render.contains(&RenderLayer::RoutesHikingKst),
+        )
+        .with_layer("features")?;
     }
 
     if zoom >= 10 {

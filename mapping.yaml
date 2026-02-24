@@ -15,6 +15,7 @@ tags:
   include:
     - abandoned
     - access
+    - bicycle
     - covered
     - denotation
     - disused
@@ -23,6 +24,8 @@ tags:
     - fee
     - generator:method
     - generator:source
+    - hiking
+    - horse
     - icao
     - intermittent
     - location
@@ -36,6 +39,7 @@ tags:
     - ruins
     - seasonal
     - shelter_type
+    - ski
     - tower:type
     - water_characteristic
     - wetland
@@ -597,6 +601,10 @@ tables:
             - drinking_water
             - ele
             - fee
+            - hiking
+            - bicycle
+            - ski
+            - horse
             - icao
             - intermittent
             - operator

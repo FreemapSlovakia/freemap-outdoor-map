@@ -443,6 +443,7 @@ pub fn render(
     client: &mut Client,
     collision: &mut Collision,
     svg_repo: &mut SvgRepo,
+    kst_only: bool,
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("pois::render");
 
@@ -450,6 +451,9 @@ pub fn render(
 
     let rows = ctx.legend_features("pois", || {
         let mut selects = vec![];
+
+        // TODO add hiking-only
+        let kst_cond = if kst_only { r"AND (type <> 'guidepost' OR tags->'operator' ~* '\ykst\y|\ytanap\y')"} else { "" };
 
         selects.push(
             "SELECT
@@ -468,13 +472,15 @@ pub fn render(
                 isolations
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                type = 'peak' AND name <> ''
+                type = 'peak' AND
+                name <> ''
             ",
         );
 
+        let gte_z13_sql;
+
         if zoom >= 13 {
-            selects.push(
-                "SELECT
+            gte_z13_sql = format!("SELECT
                     osm_id,
                     geometry,
                     name,
@@ -485,8 +491,10 @@ pub fn render(
                 WHERE
                     type = 'guidepost' AND
                     geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-                ",
-            );
+                    {kst_cond}
+                ");
+
+            selects.push(&gte_z13_sql);
         }
 
         if (12..=13).contains(&zoom) {
@@ -596,7 +604,7 @@ pub fn render(
                     type NOT IN ('saddle', 'mountain_pass') OR
                     COALESCE(NULLIF(name, ''), tags->'ref', '') <> ''
                 )
-                {w}
+                {w} {kst_cond}
             ");
 
             selects.push(&z14_sql);
