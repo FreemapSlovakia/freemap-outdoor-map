@@ -3,13 +3,38 @@ use crate::{
     render::{ImageFormat, RenderRequest, TileCoverageRelation, tile_touches_coverage},
 };
 use axum::{
-    body::Body,
+    body::{Body, Bytes},
     extract::{Path, State},
     http::{Response, StatusCode},
 };
 use geo::Rect;
-use std::time::SystemTime;
+use image::{ColorType, codecs::jpeg::JpegEncoder};
+use std::{sync::LazyLock, time::SystemTime};
 use tokio::fs;
+
+static GRAY_TILE_JPEG: LazyLock<Vec<u8>> = LazyLock::new(|| {
+    const TILE_SIZE: usize = 256;
+    const RED: u8 = 209;
+    const GREEN: u8 = 204;
+    const BLUE: u8 = 199;
+
+    let mut pixels = vec![0; TILE_SIZE * TILE_SIZE * 3];
+    for px in pixels.chunks_exact_mut(3) {
+        px[0] = RED;
+        px[1] = GREEN;
+        px[2] = BLUE;
+    }
+    let mut encoded = Vec::new();
+    JpegEncoder::new(&mut encoded)
+        .encode(
+            &pixels,
+            TILE_SIZE as u32,
+            TILE_SIZE as u32,
+            ColorType::Rgb8.into(),
+        )
+        .expect("encode gray tile jpeg");
+    encoded
+});
 
 pub(crate) async fn get(
     State(state): State<AppState>,
@@ -66,8 +91,9 @@ pub(crate) async fn serve_tile(
             == TileCoverageRelation::Outside
         {
             return Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::empty())
+                .status(StatusCode::OK)
+                .header("Content-Type", "image/jpeg")
+                .body(Body::from(Bytes::from_static(GRAY_TILE_JPEG.as_slice())))
                 .expect("body should be built");
         }
     }

@@ -74,7 +74,7 @@ pub fn render(
         && matches!(request.format, ImageFormat::Jpeg | ImageFormat::Png)
         && let Some(coverage_geometry) = coverage_geometry
     {
-        context.set_source_rgb(0.8, 0.8, 0.8);
+        context.set_source_rgb(0.82, 0.80, 0.78);
         context.paint().unwrap();
 
         ctx.context.push_group();
