@@ -287,7 +287,14 @@ pub fn render_marking(
     let zoom = ctx.zoom;
 
     let rows = ctx.legend_features("routes", || {
-        let sql = match zoom {
+        let z = zoom
+            + if render.contains(&RenderLayer::RoutesHikingKst) {
+                2
+            } else {
+                0
+            };
+
+        let sql = match z {
             9 => get_routes_query(render, Some(vec!["iwn", "icn"]), "_gen0"),
             10 => get_routes_query(render, Some(vec!["iwn", "nwn", "icn", "ncn"]), "_gen1"),
             11 => get_routes_query(
@@ -295,8 +302,7 @@ pub fn render_marking(
                 Some(vec!["iwn", "nwn", "rwn", "icn", "ncn", "rcn"]),
                 "_gen1",
             ),
-            12..=13 => get_routes_query(render, None, ""),
-            14.. => get_routes_query(render, None, ""),
+            12.. => get_routes_query(render, None, ""),
             _ => return Ok(Vec::new()),
         };
 

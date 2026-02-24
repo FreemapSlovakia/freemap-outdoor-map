@@ -215,7 +215,13 @@ pub fn render(
         layers::borders::render(ctx, client).with_layer("borders")?;
     }
 
-    if zoom >= 9 {
+    if zoom
+        >= if request.render.contains(&RenderLayer::RoutesHikingKst) {
+            8
+        } else {
+            9
+        }
+    {
         // osm_routes, osm_route_members (routes)
         layers::routes::render_marking(ctx, client, &request.render, svg_repo)
             .with_layer("routes")?;
