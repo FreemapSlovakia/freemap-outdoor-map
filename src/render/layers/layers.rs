@@ -25,6 +25,12 @@ impl RenderError {
     }
 }
 
+impl From<cairo::Error> for RenderError {
+    fn from(value: cairo::Error) -> Self {
+        value.into()
+    }
+}
+
 pub trait WithLayer<T> {
     fn with_layer(self, layer: &'static str) -> Result<T, RenderError>;
 }
@@ -48,9 +54,7 @@ pub fn render(
 ) -> Result<(), RenderError> {
     let _span = tracy_client::span!("render_tile::draw");
 
-    let context = &Context::new(surface)
-        .map_err(LayerRenderError::from)
-        .with_layer("top")?;
+    let context = &Context::new(surface)?;
 
     if scale != 1.0 {
         context.scale(scale, scale);
@@ -233,7 +237,7 @@ pub fn render(
     }
 
     if (8..=14).contains(&zoom) {
-        // osm_places (place_names)
+        // osm_places (place_names_lowzoom)
         layers::place_names::render(ctx, client, &mut Some(collision)).with_layer("place_names")?;
     }
 
@@ -323,9 +327,10 @@ pub fn render(
         layers::valleys_ridges::render(ctx, client).with_layer("valleys_ridges")?;
     }
 
-    if zoom >= 15 {
+    if (15..=17).contains(&zoom) {
         // osm_places (place_names)
-        layers::place_names::render(ctx, client, &mut None).with_layer("place_names")?;
+        layers::place_names::render(ctx, client, &mut Some(collision))
+            .with_layer("place_names_highzoom")?;
     }
 
     if zoom < 8 && request.render.contains(&RenderLayer::CountryNames) {
@@ -335,12 +340,8 @@ pub fn render(
 
     if let Some(coverage_geometry) = coverage_geometry {
         layers::blur_edges::render(ctx, coverage_geometry).with_layer("blur_edges")?;
-
-        ctx.context
-            .pop_group_to_source()
-            .and_then(|_| ctx.context.paint())
-            .map_err(LayerRenderError::from)
-            .with_layer("top")?;
+        ctx.context.pop_group_to_source()?;
+        ctx.context.paint()?;
     }
 
     if let Some(ref features) = request.featues {

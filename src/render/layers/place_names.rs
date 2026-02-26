@@ -20,8 +20,6 @@ pub fn render(
 
     let zoom = ctx.zoom;
 
-    let scale = 2.5 * 1.2f64.powf(zoom as f64);
-
     let rows = ctx.legend_features("place_names", || {
         let by_zoom = match zoom {
             8 => "type = 'city'",
@@ -52,6 +50,19 @@ pub fn render(
         client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
     })?;
 
+    let positions = vec![
+        (0.0, -10.0),
+        (0.0, 10.0),
+        (-30.0, 0.0),
+        (30.0, 0.0),
+        (-25.0, -8.0),
+        (-25.0, 8.0),
+        (25.0, -8.0),
+        (25.0, 8.0),
+    ];
+
+    let scale = 2.5 * 1.2f64.powf(zoom.min(14) as f64);
+
     for row in rows {
         let (size, uppercase, halo_width) = match (zoom, row.get_string("type")?) {
             (6.., "city") => (1.2, true, 2.0),
@@ -64,6 +75,16 @@ pub fn render(
             _ => continue,
         };
 
+        // TODO could be precomputed
+        let mut placements = Vec::with_capacity(41);
+        placements.push((0.0, 0.0));
+
+        for i in 1..6 {
+            for p in positions.iter() {
+                placements.push((2.0 * size * p.0 * i as f64, 2.0 * size * p.1 * i as f64));
+            }
+        }
+
         draw_text(
             ctx.context,
             collision.as_deref_mut(),
@@ -72,6 +93,7 @@ pub fn render(
             &TextOptions {
                 flo: FontAndLayoutOptions {
                     size: size * scale,
+                    max_width: 8.0 * size * scale,
                     uppercase,
                     narrow: true,
                     weight: Weight::Bold,
@@ -80,7 +102,7 @@ pub fn render(
                 },
                 halo_width,
                 halo_opacity: 0.9,
-                alpha: if zoom <= 14 { 1.0 } else { 0.5 },
+                placements: &placements,
                 ..TextOptions::default()
             },
         )?;
