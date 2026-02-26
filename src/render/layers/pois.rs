@@ -891,7 +891,14 @@ pub fn render(
                 },
                 color: def.extra.text_color,
                 valign_by_placement: true,
-                placements: &[-d - 3.0, d - 3.0, -d - 5.0, d - 1.0, -d - 7.0, d + 1.0],
+                placements: &[
+                    (0.0, -d - 3.0),
+                    (0.0, d - 3.0),
+                    (0.0, -d - 5.0),
+                    (0.0, d - 1.0),
+                    (0.0, -d - 7.0),
+                    (0.0, d + 1.0),
+                ],
                 omit_bbox: Some(bbox_idx),
                 ..Default::default()
             };
@@ -919,7 +926,7 @@ pub fn render(
                 draw_text(context, Some(collision), &point, &name, &text_options)?
             };
 
-            if !drawn {
+            if drawn.is_none() {
                 continue;
             }
         }

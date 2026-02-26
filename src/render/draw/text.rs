@@ -17,7 +17,7 @@ pub struct TextOptions<'a> {
     pub halo_color: Color,
     pub halo_opacity: f64,
     pub halo_width: f64,
-    pub placements: &'a [f64],
+    pub placements: &'a [(f64, f64)],
     pub flo: FontAndLayoutOptions,
     pub valign_by_placement: bool,
     pub omit_bbox: Option<usize>,
@@ -32,7 +32,15 @@ impl Default for TextOptions<'_> {
             halo_opacity: 0.75,
             halo_width: 1.5,
             flo: Default::default(),
-            placements: &[0.0, 3.0, -3.0, 6.0, -6.0, 9.0, -9.0],
+            placements: &[
+                (0.0, 0.0),
+                (0.0, 3.0),
+                (0.0, -3.0),
+                (0.0, 6.0),
+                (0.0, -6.0),
+                (0.0, 9.0),
+                (0.0, -9.0),
+            ],
             valign_by_placement: false,
             omit_bbox: None,
         }
@@ -45,7 +53,7 @@ pub fn draw_text(
     point: &Point,
     text: &str,
     options: &TextOptions,
-) -> cairo::Result<bool> {
+) -> cairo::Result<Option<usize>> {
     draw_text_with_attrs(context, collision, point, text, None, options)
 }
 
@@ -56,9 +64,9 @@ pub fn draw_text_with_attrs(
     text: &str,
     attrs: Option<AttrList>,
     options: &TextOptions,
-) -> cairo::Result<bool> {
+) -> cairo::Result<Option<usize>> {
     if text.is_empty() {
-        return Ok(true);
+        return Ok(Some(0));
     }
 
     let TextOptions {
@@ -82,7 +90,7 @@ pub fn draw_text_with_attrs(
         Some((point.x(), point.y())),
     )?;
 
-    let mut my: Option<f64> = None;
+    let mut m: Option<(f64, f64)> = None;
 
     let (ext, _) = layout.extents();
 
@@ -100,8 +108,11 @@ pub fn draw_text_with_attrs(
     let mut first_baseline: Option<f64> = None;
     let mut last_baseline: Option<f64> = None;
 
-    'outer: for &dy in *placements {
-        let anchor_y = dy + point.y();
+    let mut i: usize = 0;
+
+    'outer: for &(dx, dy) in *placements {
+        i += 1;
+
         let y = if *valign_by_placement {
             let ch = *cap_height.get_or_insert_with(|| {
                 layout
@@ -129,15 +140,19 @@ pub fn draw_text_with_attrs(
             let lb = last_baseline.expect("last_baseline");
 
             if dy > 0.0 {
-                anchor_y - fb + ch
+                fb + ch
             } else if dy < 0.0 {
-                anchor_y - lb
+                lb
             } else {
-                anchor_y - (layout_y + layout_height / 2.0)
+                layout_y + layout_height / 2.0
             }
         } else {
-            anchor_y - (layout_y + layout_height / 2.0)
+            layout_y + layout_height / 2.0
         };
+
+        let y = dy + point.y() - y;
+
+        let x = dx + x;
 
         let mut items = Vec::new();
 
@@ -185,14 +200,14 @@ pub fn draw_text_with_attrs(
             }
         }
 
-        my = Some(y);
+        m = Some((x, y));
 
         break;
     }
 
-    let y = match my {
-        Some(y) => y,
-        None => return Ok(false),
+    let (x, y) = match m {
+        Some(a) => a,
+        None => return Ok(None),
     };
 
     context.push_group();
@@ -216,5 +231,5 @@ pub fn draw_text_with_attrs(
 
     context.paint_with_alpha(*alpha)?;
 
-    Ok(true)
+    Ok(Some(i))
 }
