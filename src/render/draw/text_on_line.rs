@@ -358,11 +358,9 @@ fn prepare_label_span(
         pts_use = off_pts;
     }
 
-    if let Some(clip) = clip_extents
-        && !bbox_intersects_clip(&pts_use, clip, clip_padding)
-    {
-        return None;
-    }
+    let intersects_clip = clip_extents
+        .map(|clip| bbox_intersects_clip(&pts_use, clip, clip_padding))
+        .unwrap_or(true);
 
     let cum_use = cumulative_lengths(&pts_use);
     let total_length_use = *cum_use.last().unwrap_or(&0.0);
@@ -381,6 +379,7 @@ fn prepare_label_span(
         total_length: total_length_use,
         cursor_start,
         trim_start,
+        intersects_clip,
     })
 }
 
@@ -605,6 +604,7 @@ struct PreparedLine {
     total_length: f64,
     cursor_start: f64,
     trim_start: f64,
+    intersects_clip: bool,
 }
 
 fn repeat_params(
@@ -779,6 +779,8 @@ pub fn draw_text_on_line(
                 None => continue 'outer,
             };
 
+            let should_draw = prepared.intersects_clip;
+
             let mut cursor = prepared.cursor_start;
             let mut label_placements = Vec::new();
             let mut glyph_bboxes: Vec<Rect<f64>> = Vec::new();
@@ -919,7 +921,9 @@ pub fn draw_text_on_line(
                 ));
                 glyph_span_ends.push(span_end);
 
-                label_placements.push((glyph_string.clone(), font.clone(), pos, angle));
+                if should_draw {
+                    label_placements.push((glyph_string.clone(), font.clone(), pos, angle));
+                }
 
                 cursor += eff_advance;
 
@@ -966,8 +970,11 @@ pub fn draw_text_on_line(
                 }
             }
 
-            placements.push(label_placements);
-            rendered = true;
+            if should_draw {
+                placements.push(label_placements);
+                rendered = true;
+            }
+
             break 'attempt;
         }
     }
