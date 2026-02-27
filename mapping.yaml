@@ -43,6 +43,10 @@ tags:
     - tower:type
     - water_characteristic
     - wetland
+    - safety_rope
+    - ladder
+    - rungs
+    - assisted_trail
   include_regex:
     - ^(disused|abandoned|ruins|demolished|removed|destroyed|was):(leisure|natural|amenity|highway)
 generalized_tables:
@@ -399,11 +403,14 @@ tables:
         type: id
       - name: geometry
         type: geometry
+        geometry_transform: point_on_surface
       - name: name
         type: string
         key: name
       - name: type
         type: mapping_value
+      - name: area
+        type: webmerc_area
       - name: z_order
         type: enumerate
         args:
@@ -437,7 +444,7 @@ tables:
       - name: population
         type: integer
         key: population
-    type: point
+    type: point_or_polygon
     mapping:
       place:
         - __any__
@@ -1258,22 +1265,22 @@ tables:
             - "yes"
             - left
             - right
-      - name: ref
+      - name: ref # TODO move to tags
         type: string
         key: ref
       - name: z_order
         type: wayzorder
         key: layer
-      - name: access
+      - name: access # TODO move to tags
         type: string
         key: access
-      - name: bicycle
+      - name: bicycle # TODO move to tags
         type: string
         key: bicycle
-      - name: foot
+      - name: foot # TODO move to tags
         type: string
         key: foot
-      - name: vehicle
+      - name: vehicle # TODO move to tags
         type: string
         key: vehicle
       - name: service
@@ -1306,9 +1313,17 @@ tables:
             - alpine_hiking
             - demanding_alpine_hiking
             - difficult_alpine_hiking
-      - name: fixme
+      - name: fixme # TODO move to tags
         type: string
         key: fixme
+      - name: tags
+        type: hstore_tags
+        args:
+          include:
+            - safety_rope
+            - ladder
+            - rungs
+            - assisted_trail
     type: linestring
     filters:
       reject:
