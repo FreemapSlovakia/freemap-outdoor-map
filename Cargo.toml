@@ -15,7 +15,7 @@ cavalier_contours = { version = "0.7.0" }
 colorsys = "0.7.3"
 geo-postgis = "0.2.2"
 pangocairo = "0.22.0"
-pango = { version = "0.22.0", features = ["v1_57"] }
+pango = { version = "0.22.0", features = ["v1_56"] }
 postgis = "0.9.0"
 proj = { version = "=0.31.0", features = ["geo-types"] }
 gio = "0.22.1"
