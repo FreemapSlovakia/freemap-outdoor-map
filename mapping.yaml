@@ -415,32 +415,32 @@ tables:
         type: enumerate
         args:
           values:
-            - allotments
-            - atoll
-            - borough
-            - city
-            - city_block
-            - country
-            - county
-            - district
-            - farm
-            - hamlet
-            - island
-            - islet
-            - isolated_dwelling
             - locality
-            - municipality
-            - neighbourhood
             - plot
-            - province
+            - isolated_dwelling
+            - square
+            - farm
+            - city_block
             - quarter
+            - neighbourhood
+            - allotments
+            - borough
+            - suburb
+            - hamlet
+            - village
+            - district
+            - municipality
+            - atoll
+            - islet
+            - province
+            - town
+            - city
+            - island
+            - county
             - region
             - sea
-            - square
             - state
-            - suburb
-            - town
-            - village
+            - country
       - name: population
         type: integer
         key: population
