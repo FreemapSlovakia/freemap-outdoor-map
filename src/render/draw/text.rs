@@ -140,7 +140,7 @@ pub fn draw_text_with_attrs(
             let lb = last_baseline.expect("last_baseline");
 
             if dy > 0.0 {
-                fb + ch
+                fb - ch
             } else if dy < 0.0 {
                 lb
             } else {

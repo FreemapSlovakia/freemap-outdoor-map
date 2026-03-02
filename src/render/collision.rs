@@ -34,7 +34,7 @@ impl<'a> Collision<'a> {
             context.rectangle(item.min().x, item.min().y, item.width(), item.height());
 
             context.save().expect("context saved");
-            context.set_source_rgba(0.0, 1.0, 0.0, 0.5);
+            context.set_source_rgba(0.0, 0.5, 0.0, 0.5);
             context.set_line_width(1.0);
             context.stroke().unwrap();
             context.restore().expect("context restored");
