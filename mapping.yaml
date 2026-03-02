@@ -216,6 +216,7 @@ tables:
         args:
           include:
             - protect_class
+            - ref
             - wetland
     type: polygon
     mappings:
@@ -232,6 +233,7 @@ tables:
       boundary:
         mapping:
           boundary:
+            - forest_compartment
             - national_park
             - protected_area
       highway:
