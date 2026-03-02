@@ -233,7 +233,9 @@ tables:
       boundary:
         mapping:
           boundary:
+            - forest
             - forest_compartment
+            - hazard
             - national_park
             - protected_area
       highway:
