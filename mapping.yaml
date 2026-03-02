@@ -1324,10 +1324,11 @@ tables:
         type: hstore_tags
         args:
           include:
-            - safety_rope
-            - ladder
-            - rungs
             - assisted_trail
+            - ladder
+            - mtb:scale
+            - rungs
+            - safety_rope
     type: linestring
     filters:
       reject:
