@@ -40,7 +40,8 @@ pub fn render(
             WHERE
                 {by_zoom} AND
                  name <> '' AND
-                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                 area IS NULL
             ORDER BY
                 z_order DESC,
                 population DESC,
