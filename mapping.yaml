@@ -921,6 +921,7 @@ tables:
                 - manor
                 - memorial
                 - mine
+                - mine_adit
                 - mine_shaft
                 - monastery
                 - monument
