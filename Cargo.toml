@@ -5,7 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
-image = { version = "0.25", default-features = false, features = [
+image = { version = "0.25.10", default-features = false, features = [
   "jpeg",
   "png",
 ] }
@@ -22,7 +22,7 @@ gio = "0.22.1"
 xmltree = "0.12.0"
 gdal = { version = "0.19.0", features = ["bindgen"] }
 geo = { version = "=0.32.0", features = ["use-proj"] }
-geojson = "0.24.2"
+geojson = "1.0.0"
 postgres = "0.19.12"
 r2d2 = "0.8.10"
 r2d2_postgres = "0.18.2"
@@ -31,7 +31,7 @@ serde_json = "1.0.149"
 tracy-client = "0.18.4"
 thiserror = "2.0.17"
 axum = "0.8.8"
-clap = { version = "4.5.60", features = ["derive", "env"] }
+clap = { version = "4.6.0", features = ["derive", "env"] }
 dotenvy = "0.15.7"
 tokio = { version = "1.40.0", features = [
   "fs",
