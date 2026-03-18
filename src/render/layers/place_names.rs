@@ -22,30 +22,30 @@ pub fn render(
 
     let rows = ctx.legend_features("place_names", || {
         let by_zoom = match zoom {
-            8 => "type = 'city'",
-            9..=10 => "(type = 'city' OR type = 'town')",
-            11 => "(type = 'city' OR type = 'town' OR type = 'village')",
-            12.. => "type <> 'locality'",
+            8 => "a.type IN('city', 'islet')",
+            9..=10 => "a.type IN('islet', 'city', 'town')",
+            11 => "a.type IN ('islet', 'city', 'town', 'village')",
+            12.. => "a.type <> 'locality'",
             _ => return Ok(Vec::new()),
         };
 
         #[cfg_attr(any(), rustfmt::skip)]
         let sql = format!("
             SELECT
-                name,
-                type,
-                geometry
+                a.name,
+                a.type,
+                ST_PointOnSurface(a.geometry) AS geometry
             FROM
-                osm_places
+                osm_places a LEFT JOIN osm_places b ON a.name = b.name AND a.osm_id <> b.osm_id AND ST_Contains(b.geometry, a.geometry)
             WHERE
-                {by_zoom} AND
-                 name <> '' AND
-                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                 area IS NULL
+                 {by_zoom} AND
+                 a.name <> '' AND
+                 a.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                 b.osm_id IS NULL
             ORDER BY
-                z_order DESC,
-                population DESC,
-                osm_id
+                a.z_order DESC,
+                a.population DESC,
+                a.osm_id
         ");
 
         client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
@@ -66,7 +66,7 @@ pub fn render(
 
     for row in rows {
         let (size, uppercase, halo_width) = match (zoom, row.get_string("type")?) {
-            (6.., "city") => (1.2, true, 2.0),
+            (6.., "city" | "islet") => (1.2, true, 2.0),
             (9.., "town") => (0.8, true, 2.0),
             (11.., "village") => (0.55, true, 1.5),
             (12.., "hamlet" | "allotments" | "suburb") => (0.50, false, 1.5),

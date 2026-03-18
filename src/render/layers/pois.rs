@@ -154,11 +154,8 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
             ]),
             ..Extra::default()
         }),
-        (14, 15, Y, N, Poi, "historic_mine", Extra { icon: Some("disused_mine"), ..Extra::default() }),
         (14, 15, Y, N, Poi, "adit", Extra { icon: Some("mine"), ..Extra::default() }),
         (14, 15, Y, N, Poi, "mineshaft", Extra { icon: Some("mine"), ..Extra::default() }),
-        (14, 15, Y, N, Poi, "disused_adit", Extra { icon: Some("disused_mine"), ..Extra::default() }),
-        (14, 15, Y, N, Poi, "disused_mineshaft", Extra { icon: Some("disused_mine"), ..Extra::default() }),
         (14, 15, Y, N, Accommodation, "hotel", Extra {
             replacements: build_replacements(&[(r"^[Hh]otel\b *", "")]),
             ..Extra::default()
@@ -221,6 +218,13 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (15, NN, Y, N, Poi, "guidepost_noname", Extra { icon: Some("guidepost_x"), ..Extra::default() }),
         (15, 15, Y, Y, NaturalPoi, "saddle", Extra { font_size: 13.0, halo: false, ..Extra::default() }),
         (15, 15, Y, Y, NaturalPoi, "mountain_pass", Extra { icon: Some("saddle"), font_size: 13.0, halo: false, ..Extra::default() }),
+        (15, 16, Y, N, Poi, "historic_mine", Extra { icon: Some("disused_mine"), ..Extra::default() }),
+        (15, 16, Y, N, Poi, "mine_shaft", Extra { icon: Some("disused_mine"), ..Extra::default() }),
+        (15, 16, Y, N, Poi, "mine_adit", Extra { icon: Some("disused_mine"), ..Extra::default() }),
+        (15, 16, Y, N, Poi, "disused_adit", Extra { icon: Some("disused_mine"), ..Extra::default() }),
+        (15, 16, Y, N, Poi, "disused_mineshaft", Extra { icon: Some("disused_mine"), ..Extra::default() }),
+        (15, 16, Y, N, Poi, "abandoned_adit", Extra { icon: Some("disused_mine"), ..Extra::default() }),
+        (15, 16, Y, N, Poi, "abandoned_mineshaft", Extra { icon: Some("disused_mine"), ..Extra::default() }),
         (15, 16, N, N, Poi, "ruins", Extra::default()),
         (15, 16, N, N, Poi, "generator_wind", Extra::default()),
         (15, 16, N, N, Poi, "chimney", Extra::default()),
