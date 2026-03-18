@@ -121,6 +121,28 @@ pub(crate) fn start() {
         }
     });
 
+    #[cfg(unix)]
+    rt.spawn({
+        let render_worker_pool = render_worker_pool.clone();
+        let mut shutdown_rx = shutdown_tx.subscribe();
+
+        async move {
+            let mut sigusr1 =
+                unix_signal(SignalKind::user_defined1()).expect("install SIGUSR1 handler");
+
+            loop {
+                tokio::select! {
+                    _ = sigusr1.recv() => {
+                        println!("Received SIGUSR1, recycling render workers...");
+                        render_worker_pool.recycle();
+                        println!("Render workers recycled (old workers draining in background).");
+                    }
+                    _ = shutdown_rx.recv() => break,
+                }
+            }
+        }
+    });
+
     if let Err(err) = rt.block_on(start_server(
         render_worker_pool.clone(),
         tile_processing_worker_for_server,
