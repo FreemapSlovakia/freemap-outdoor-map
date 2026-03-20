@@ -19,8 +19,6 @@ use std::{
     path::Path,
     str::FromStr,
     sync::{Arc, Mutex},
-    thread::sleep,
-    time::Duration,
 };
 use tokio::signal;
 #[cfg(unix)]
