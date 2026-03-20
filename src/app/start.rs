@@ -168,10 +168,6 @@ pub(crate) fn start() {
     println!("Stopping render worker pool.");
     render_worker_pool.shutdown();
     println!("Render worker pool stopped.");
-
-    println!("Sleeping for 30 seconds.");
-    sleep(Duration::from_secs(30));
-    println!("Done.");
 }
 
 fn build_tile_variants(cli: &Cli) -> Result<Vec<TileVariantOptions>, String> {
