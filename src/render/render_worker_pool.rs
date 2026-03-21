@@ -124,12 +124,10 @@ impl RenderWorkerPool {
             let _ = handle.join();
         }
 
-        if let Some(pool) = &self.hillshading_pool {
-            pool.shutdown();
-        }
+        let evictor = self.evictor.lock().unwrap().take();
 
-        if let Some(handle) = self.evictor.lock().unwrap().take() {
-            let _ = handle.join();
+        if let Some(pool) = &self.hillshading_pool {
+            pool.shutdown(evictor);
         }
     }
 }

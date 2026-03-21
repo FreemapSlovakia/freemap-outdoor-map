@@ -3,9 +3,9 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     sync::{
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
         mpsc::{self, SyncSender},
-        Arc, Mutex,
     },
     thread::JoinHandle,
     time::{Duration, Instant},
@@ -94,9 +94,7 @@ impl HillshadingPool {
             let mut state = self.state.lock().unwrap();
             let country_actors = state
                 .entry(country.to_string())
-                .or_insert_with(|| CountryActors {
-                    actors: Vec::new(),
-                });
+                .or_insert_with(|| CountryActors { actors: Vec::new() });
 
             // Try to find an idle actor.
             if let Some(actor) = country_actors.actors.iter_mut().find(|a| !a.busy) {
@@ -206,15 +204,21 @@ impl HillshadingPool {
             .name("hillshading-evictor".into())
             .spawn(move || {
                 while !pool.shutdown.load(Ordering::Relaxed) {
-                    std::thread::sleep(EVICT_INTERVAL);
-                    pool.evict_unused();
+                    std::thread::park_timeout(EVICT_INTERVAL);
+                    if !pool.shutdown.load(Ordering::Relaxed) {
+                        pool.evict_unused();
+                    }
                 }
             })
             .expect("evictor thread spawn")
     }
 
-    pub fn shutdown(&self) {
+    pub fn shutdown(&self, evictor: Option<JoinHandle<()>>) {
         self.shutdown.store(true, Ordering::Relaxed);
+
+        if let Some(handle) = &evictor {
+            handle.thread().unpark();
+        }
 
         let mut state = self.state.lock().unwrap();
 
@@ -229,16 +233,21 @@ impl HillshadingPool {
         }
 
         state.clear();
+
+        if let Some(handle) = evictor {
+            let _ = handle.join();
+        }
     }
 }
 
 fn recv_result(
     rx: mpsc::Receiver<Result<Option<RawSurface>, gdal::errors::GdalError>>,
 ) -> Result<Option<RawSurface>, gdal::errors::GdalError> {
-    rx.recv().unwrap_or(Err(gdal::errors::GdalError::NullPointer {
-        method_name: "pool recv",
-        msg: "actor dropped".into(),
-    }))
+    rx.recv()
+        .unwrap_or(Err(gdal::errors::GdalError::NullPointer {
+            method_name: "pool recv",
+            msg: "actor dropped".into(),
+        }))
 }
 
 struct SpawnedActor {
