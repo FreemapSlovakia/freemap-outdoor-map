@@ -51,16 +51,14 @@ pub fn render(
         client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
     })?;
 
-    let positions = vec![
-        (0.0, -10.0),
+    let positions = [(0.0, -10.0),
         (0.0, 10.0),
         (-30.0, 0.0),
         (30.0, 0.0),
         (-25.0, -8.0),
         (-25.0, 8.0),
         (25.0, -8.0),
-        (25.0, 8.0),
-    ];
+        (25.0, 8.0)];
 
     let scale = 2.5 * 1.2f64.powf(zoom.min(14) as f64);
 
