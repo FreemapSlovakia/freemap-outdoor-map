@@ -1,7 +1,7 @@
 use crate::render::RenderLayer;
 use crate::render::{
     ImageFormat, collision::Collision, ctx::Ctx, layer_render_error::LayerRenderError, layers,
-    layers::hillshading_datasets::HillshadingDatasets, projectable::TileProjector,
+    layers::hillshading_pool::HillshadingPool, projectable::TileProjector,
     render_request::RenderRequest, size::Size, svg_repo::SvgRepo,
 };
 use cairo::{Context, Surface};
@@ -48,7 +48,7 @@ pub fn render(
     bbox: Rect<f64>,
     size: Size<u32>,
     svg_repo: &mut SvgRepo,
-    mut hillshading_datasets: Option<&mut HillshadingDatasets>,
+    hillshading_pool: Option<&HillshadingPool>,
     coverage_geometry: Option<&Geometry>,
     scale: f64,
 ) -> Result<(), RenderError> {
@@ -134,7 +134,7 @@ pub fn render(
             &feature_line_rows,
             svg_repo,
             if request.render.contains(&RenderLayer::Shading) {
-                hillshading_datasets.as_deref_mut()
+                hillshading_pool
             } else {
                 None
             },
@@ -166,12 +166,12 @@ pub fn render(
 
     if (request.render.contains(&RenderLayer::Shading)
         || request.render.contains(&RenderLayer::Contours))
-        && let Some(hillshading_datasets) = hillshading_datasets.as_deref_mut()
+        && let Some(pool) = hillshading_pool
     {
         layers::shading_and_contours::render(
             ctx,
             client,
-            hillshading_datasets,
+            pool,
             request.render.contains(&RenderLayer::Shading),
             request.render.contains(&RenderLayer::Contours),
         )
@@ -346,10 +346,6 @@ pub fn render(
 
     if let Some(ref features) = request.featues {
         layers::custom::render(ctx, features).with_layer("custom")?;
-    }
-
-    if let Some(hillshading_datasets) = hillshading_datasets {
-        hillshading_datasets.evict_unused();
     }
 
     Ok(())

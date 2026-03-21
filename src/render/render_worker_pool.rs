@@ -1,5 +1,6 @@
 use crate::render::{
-    self, RenderRequest, layers::load_hillshading_datasets, render::RenderError, svg_repo::SvgRepo,
+    self, RenderRequest, layers::hillshading_pool::HillshadingPool, render::RenderError,
+    svg_repo::SvgRepo,
 };
 use postgres::NoTls;
 use r2d2_postgres::PostgresConnectionManager;
@@ -18,6 +19,8 @@ struct RenderTask {
 pub(crate) struct RenderWorkerPool {
     tx: Mutex<Option<mpsc::Sender<RenderTask>>>,
     workers: Mutex<Vec<JoinHandle<()>>>,
+    hillshading_pool: Option<Arc<HillshadingPool>>,
+    evictor: Mutex<Option<JoinHandle<()>>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -42,6 +45,9 @@ impl RenderWorkerPool {
         svg_base_path: Arc<Path>,
         hillshading_base_path: Arc<Path>,
     ) -> Self {
+        let hillshading_pool = Arc::new(HillshadingPool::new(&*hillshading_base_path));
+        let evictor = hillshading_pool.start_evictor();
+
         let queue_size = worker_count.max(1) * 2;
         let (tx, rx) = mpsc::channel(queue_size);
         let rx = Arc::new(Mutex::new(rx));
@@ -51,15 +57,12 @@ impl RenderWorkerPool {
             let rx = rx.clone();
             let pool = pool.clone();
             let svg_base_path = svg_base_path.clone();
-            let hillshading_base_path = hillshading_base_path.clone();
+            let hillshading_pool = hillshading_pool.clone();
 
             let handle = std::thread::Builder::new()
                 .name(format!("render-worker-{worker_id}"))
                 .spawn(move || {
                     let mut svg_repo = SvgRepo::new(svg_base_path.as_ref().to_path_buf());
-
-                    let mut hillshading_datasets =
-                        Some(load_hillshading_datasets(&*hillshading_base_path));
 
                     loop {
                         let task = {
@@ -76,7 +79,7 @@ impl RenderWorkerPool {
                                 &request,
                                 &mut client,
                                 &mut svg_repo,
-                                hillshading_datasets.as_mut(),
+                                Some(&hillshading_pool),
                             )
                             .map_err(ReError::from)
                         });
@@ -92,6 +95,8 @@ impl RenderWorkerPool {
         Self {
             tx: Mutex::new(Some(tx)),
             workers: Mutex::new(workers),
+            hillshading_pool: Some(hillshading_pool),
+            evictor: Mutex::new(Some(evictor)),
         }
     }
 
@@ -116,6 +121,14 @@ impl RenderWorkerPool {
 
         let mut workers = self.workers.lock().unwrap();
         for handle in workers.drain(..) {
+            let _ = handle.join();
+        }
+
+        if let Some(pool) = &self.hillshading_pool {
+            pool.shutdown();
+        }
+
+        if let Some(handle) = self.evictor.lock().unwrap().take() {
             let _ = handle.join();
         }
     }

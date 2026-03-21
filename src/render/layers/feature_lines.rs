@@ -7,7 +7,7 @@ use crate::render::{
         path_geom::path_line_string,
     },
     layer_render_error::{LayerRenderError, LayerRenderResult},
-    layers::{HillshadingDatasets, hillshading},
+    layers::{hillshading, hillshading_pool::HillshadingPool},
     projectable::TileProjectable,
     svg_repo::SvgRepo,
 };
@@ -87,7 +87,7 @@ pub fn render(
     stage: u8,
     rows: &[Feature],
     svg_repo: &mut SvgRepo,
-    hillshading_datasets: Option<&mut HillshadingDatasets>,
+    hillshading_pool: Option<&HillshadingPool>,
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("feature_lines::render");
 
@@ -308,14 +308,14 @@ pub fn render(
 
     draw(false)?;
 
-    if let Some(hillshading_datasets) = hillshading_datasets {
+    if let Some(pool) = hillshading_pool {
         let mut mask_surfaces = Vec::new();
 
         for cc in [
             "pl", "sk", "cz", "at", /*"ch", "it" (CH, IT are not so detailed) */
         ] {
             let mask_surface =
-                hillshading::load_surface(ctx, cc, hillshading_datasets, hillshading::Mode::Mask)?;
+                hillshading::load_surface(ctx, cc, pool, hillshading::Mode::Mask)?;
 
             if let Some(mask_surface) = mask_surface {
                 mask_surfaces.push(mask_surface);

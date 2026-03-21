@@ -1,6 +1,4 @@
 pub use crate::render::categories::Category;
-pub use hillshading_datasets::HillshadingDatasets;
-pub use hillshading_datasets::load_hillshading_datasets;
 pub(crate) use landcover::PAINT_DEFS;
 pub use layers::RenderError;
 pub use layers::render;
@@ -22,7 +20,7 @@ mod fixmes;
 mod geonames;
 mod highway_names;
 mod hillshading;
-mod hillshading_datasets;
+pub(crate) mod hillshading_pool;
 mod housenumbers;
 mod landcover;
 mod landcover_names;

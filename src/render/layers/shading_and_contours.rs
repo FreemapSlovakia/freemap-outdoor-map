@@ -1,7 +1,7 @@
 use crate::render::{
     ctx::Ctx,
     layer_render_error::LayerRenderResult,
-    layers::{bridge_areas, contours, hillshading, hillshading_datasets::HillshadingDatasets},
+    layers::{bridge_areas, contours, hillshading, hillshading_pool::HillshadingPool},
 };
 use postgres::Client;
 
@@ -10,7 +10,7 @@ const FALLBACK: bool = true;
 pub fn render(
     ctx: &Ctx,
     client: &mut Client,
-    hillshading_datasets: &mut HillshadingDatasets,
+    pool: &HillshadingPool,
     shading: bool,
     contours: bool,
 ) -> LayerRenderResult {
@@ -44,7 +44,7 @@ pub fn render(
 
     for (country, better_countries) in config {
         let mask_surface =
-            hillshading::load_surface(ctx, country, hillshading_datasets, hillshading::Mode::Mask)?;
+            hillshading::load_surface(ctx, country, pool, hillshading::Mode::Mask)?;
 
         let Some(mask_surface) = mask_surface else {
             continue;
@@ -68,7 +68,7 @@ pub fn render(
                 ctx,
                 country,
                 fade_alpha,
-                hillshading_datasets,
+                pool,
                 hillshading::Mode::Shading,
             )?;
         }
@@ -85,7 +85,7 @@ pub fn render(
                     ctx,
                     better_country,
                     1.0,
-                    hillshading_datasets,
+                    pool,
                     hillshading::Mode::Mask,
                 )?;
             }
@@ -102,7 +102,7 @@ pub fn render(
             let mask_surface = hillshading::load_surface(
                 ctx,
                 country,
-                hillshading_datasets,
+                pool,
                 hillshading::Mode::Mask,
             )?;
 
@@ -136,7 +136,7 @@ pub fn render(
                     ctx,
                     "_",
                     fade_alpha,
-                    hillshading_datasets,
+                    pool,
                     hillshading::Mode::Shading,
                 )?;
             }

@@ -1,6 +1,6 @@
 use crate::render::{
     image_format::ImageFormat,
-    layers::{self, HillshadingDatasets},
+    layers::{self, hillshading_pool::HillshadingPool},
     render_request::RenderRequest,
     svg_repo::SvgRepo,
     xyz::bbox_size_in_pixels,
@@ -25,13 +25,13 @@ pub fn render(
     request: &RenderRequest,
     client: &mut postgres::Client,
     svg_repo: &mut SvgRepo,
-    hillshading_datasets: Option<&mut HillshadingDatasets>,
+    hillshading_pool: Option<&HillshadingPool>,
 ) -> Result<Vec<u8>, RenderError> {
     let _span = tracy_client::span!("render_tile");
 
     let size = bbox_size_in_pixels(request.bbox, request.zoom as f64);
 
-    let render = |surface: &Surface| {
+    let mut render = |surface: &Surface| {
         layers::render(
             surface,
             request,
@@ -39,7 +39,7 @@ pub fn render(
             request.bbox,
             size,
             svg_repo,
-            hillshading_datasets,
+            hillshading_pool,
             request.coverage_geometry.as_deref(),
             request.scale,
         )
