@@ -4,7 +4,7 @@ use crate::app::{
 use axum::{
     body::Body,
     extract::{Query, State},
-    http::{Response, StatusCode},
+    http::{HeaderMap, Response, StatusCode},
 };
 use std::collections::HashMap;
 
@@ -13,6 +13,7 @@ const CAPABILITIES_XML: &str = include_str!("wmts_capabilities.xml");
 pub(crate) async fn service_handler(
     State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
+    headers: HeaderMap,
 ) -> Response<Body> {
     if get_param(&params, "SERVICE") != Some("WMTS")
         || (get_param(&params, "VERSION") != Some("1.0.0"))
@@ -52,7 +53,15 @@ pub(crate) async fn service_handler(
                 None => return bad_request(),
             };
 
-            serve_tile(&state, 0, TileCoord { zoom, x, y }, scale, Some(ext)).await
+            serve_tile(
+                &state,
+                0,
+                TileCoord { zoom, x, y },
+                scale,
+                Some(ext),
+                headers,
+            )
+            .await
         }
         Some("GetCapabilities") => Response::builder()
             .status(StatusCode::OK)

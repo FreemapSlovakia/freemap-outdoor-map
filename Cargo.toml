@@ -48,3 +48,4 @@ indexmap = { version = "2.10.0", features = ["serde"] }
 notify = "8.2.0"
 tokio-util = { version = "0.7.12", features = ["io"] }
 sled = "0.34.7"
+httpdate = "1.0.3"

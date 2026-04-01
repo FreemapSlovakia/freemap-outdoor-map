@@ -3,8 +3,7 @@ use sled::Batch;
 use crate::app::tile_coord::TileCoord;
 use std::{
     collections::{HashMap, HashSet},
-    fs,
-    io::ErrorKind,
+    fs, io,
     path::PathBuf,
     time::{Duration, SystemTime},
 };
@@ -110,8 +109,18 @@ impl TileProcessor {
             eprintln!("create tile dir failed: {err}");
         }
 
-        if let Err(err) = fs::write(&file_path, data) {
-            eprintln!("write tile failed: {err}");
+        match fs::File::create(&file_path) {
+            Err(err) => eprintln!("write tile failed: {err}"),
+            Ok(mut file) => {
+                if let Err(err) = io::Write::write_all(&mut file, &data) {
+                    eprintln!("write tile failed: {err}");
+                } else {
+                    let times = fs::FileTimes::new().set_modified(render_started_at);
+                    if let Err(err) = file.set_times(times) {
+                        eprintln!("set tile mtime failed: {err}");
+                    }
+                }
+            }
         }
     }
 
@@ -250,7 +259,7 @@ impl TileProcessor {
             let path = cached_tile_path(base_path, coord, scale as f64);
 
             if let Err(err) = fs::remove_file(&path)
-                && err.kind() != ErrorKind::NotFound
+                && err.kind() != io::ErrorKind::NotFound
             {
                 eprintln!("failed to remove file {}: {err}", path.display());
             }

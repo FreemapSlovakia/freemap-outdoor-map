@@ -794,6 +794,7 @@ dependencies = [
  "geo-postgis",
  "geojson",
  "gio",
+ "httpdate",
  "image",
  "indexmap",
  "librsvg",
