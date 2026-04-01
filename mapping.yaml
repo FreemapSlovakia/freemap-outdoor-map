@@ -552,9 +552,9 @@ tables:
       millitary:
         - trench
       natural:
+        - bay # also in area/node
         - cliff
         - earth_bank
-        - fjord # also in area/node
         - gully
         - ridge
         - strait # also in area/node
@@ -1000,11 +1000,10 @@ tables:
             mapping:
               natural:
                 - arch
-                - bay
+                - bay # also as way
                 - birds_nest
                 - cape
                 - cave_entrance
-                - fjord # also a way
                 - geyser
                 - hot_spring
                 - peak
