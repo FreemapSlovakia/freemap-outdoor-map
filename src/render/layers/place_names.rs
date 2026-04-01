@@ -1,5 +1,6 @@
 use crate::render::{
     collision::Collision,
+    colors,
     ctx::Ctx,
     draw::{
         create_pango_layout::FontAndLayoutOptions,
@@ -22,9 +23,9 @@ pub fn render(
 
     let rows = ctx.legend_features("place_names", || {
         let by_zoom = match zoom {
-            8 => "a.type IN('city', 'islet')",
-            9..=10 => "a.type IN('islet', 'city', 'town')",
-            11 => "a.type IN ('islet', 'city', 'town', 'village')",
+            8 => "a.type IN('city', 'islet', 'island')",
+            9..=10 => "a.type IN('islet', 'island', 'city', 'town')",
+            11 => "a.type IN ('islet', 'island', 'city', 'town', 'village')",
             12.. => "a.type <> 'locality'",
             _ => return Ok(Vec::new()),
         };
@@ -34,6 +35,7 @@ pub fn render(
             SELECT
                 a.name,
                 a.type,
+                COALESCE(a.area, 0) AS area,
                 ST_PointOnSurface(a.geometry) AS geometry
             FROM
                 osm_places a LEFT JOIN osm_places b ON a.name = b.name AND a.osm_id <> b.osm_id AND ST_Contains(b.geometry, a.geometry)
@@ -51,26 +53,52 @@ pub fn render(
         client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
     })?;
 
-    let positions = [(0.0, -10.0),
+    let positions = [
+        (0.0, -10.0),
         (0.0, 10.0),
         (-30.0, 0.0),
         (30.0, 0.0),
         (-25.0, -8.0),
         (-25.0, 8.0),
         (25.0, -8.0),
-        (25.0, 8.0)];
+        (25.0, 8.0),
+    ];
 
     let scale = 2.5 * 1.2f64.powf(zoom.min(14) as f64);
 
     for row in rows {
-        let (size, uppercase, halo_width) = match (zoom, row.get_string("type")?) {
-            (6.., "city" | "islet") => (1.2, true, 2.0),
-            (9.., "town") => (0.8, true, 2.0),
-            (11.., "village") => (0.55, true, 1.5),
-            (12.., "hamlet" | "allotments" | "suburb") => (0.50, false, 1.5),
-            (14.., "isolated_dwelling" | "quarter") => (0.45, false, 1.5),
-            (15.., "neighbourhood") => (0.40, false, 1.5),
-            (16.., "farm" | "borough" | "square") => (0.35, false, 1.5),
+        let mut color = colors::BLACK;
+        let mut letter_spacing = 1.0;
+
+        let (size, uppercase, halo_width, italic) = match (zoom, row.get_string("type")?) {
+            (8.., "city") => (1.2, true, 2.0, false),
+            (9.., "town") => (0.8, true, 2.0, false),
+            (11.., "village") => (0.55, true, 1.5, false),
+            (12.., "hamlet" | "allotments" | "suburb") => (0.50, false, 1.5, false),
+            (14.., "isolated_dwelling" | "quarter") => (0.45, false, 1.5, false),
+            (15.., "neighbourhood") => (0.40, false, 1.5, false),
+            (16.., "farm" | "borough" | "square") => (0.35, false, 1.5, false),
+            (8.., "island" | "islet") => {
+                let mut area = row.get_f32("area")?;
+
+                if area == 0.0 {
+                    area = 10000.0;
+                }
+
+                if area < 4f32.powf(22f32 - zoom as f32) {
+                    continue;
+                }
+
+                color = colors::LOCALITY_LABEL;
+                letter_spacing = 0.0;
+
+                (
+                    0.4 * (1.0 + area.sqrt() / 2000.0).min(2.0) as f64,
+                    false,
+                    1.5,
+                    true,
+                )
+            }
             _ => continue,
         };
 
@@ -96,12 +124,18 @@ pub fn render(
                     uppercase,
                     narrow: true,
                     weight: Weight::Bold,
-                    letter_spacing: 1.0,
+                    letter_spacing,
+                    style: if italic {
+                        pango::Style::Italic
+                    } else {
+                        pango::Style::Normal
+                    },
                     ..FontAndLayoutOptions::default()
                 },
-                halo_width,
+                halo_width: halo_width * scale / 30.0,
                 halo_opacity: 0.9,
                 placements: &placements,
+                color,
                 ..TextOptions::default()
             },
         )?;

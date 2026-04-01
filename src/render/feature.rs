@@ -10,6 +10,7 @@ use std::collections::HashMap;
 pub enum LegendValue {
     String(&'static str),
     Bool(bool),
+    F32(f32),
     F64(f64),
     I16(i16),
     I32(i32),
@@ -103,6 +104,7 @@ fn legend_value_type(value: &LegendValue) -> &'static str {
         LegendValue::String(_) => "String",
         LegendValue::Bool(_) => "Bool",
         LegendValue::F64(_) => "F64",
+        LegendValue::F32(_) => "F32",
         LegendValue::I16(_) => "I16",
         LegendValue::I32(_) => "I32",
         LegendValue::I64(_) => "I64",
@@ -246,6 +248,19 @@ impl Feature {
             })? {
                 LegendValue::F64(value) => Ok(*value),
                 other => Err(WrongTypeError::new(arg, "f64", legend_value_type(other)).into()),
+            },
+        }
+    }
+
+    pub(crate) fn get_f32(&self, arg: &str) -> Result<f32, FeatureError> {
+        match self {
+            Self::Row(row) => Ok(row.try_get(arg)?),
+            Self::LegendData(data) => match data.get(arg).ok_or(FeatureError::MissingValue {
+                field: arg.to_string(),
+                expected: "F32",
+            })? {
+                LegendValue::F32(value) => Ok(*value),
+                other => Err(WrongTypeError::new(arg, "f32", legend_value_type(other)).into()),
             },
         }
     }
