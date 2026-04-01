@@ -9,12 +9,16 @@ use crate::{
 use axum::{
     body::{Body, Bytes},
     extract::{Path, State},
-    http::{Response, StatusCode},
+    http::{HeaderMap, Response, StatusCode, header},
 };
 use geo::Rect;
+use httpdate::parse_http_date;
 use image::{ColorType, codecs::jpeg::JpegEncoder};
-use std::{sync::LazyLock, time::SystemTime};
-use tokio::fs;
+use std::{os::unix::fs::MetadataExt, sync::LazyLock, time::SystemTime};
+use tokio::{
+    fs,
+    io::{self, AsyncReadExt},
+};
 
 static GRAY_TILE_JPEG: LazyLock<Vec<u8>> = LazyLock::new(|| {
     const TILE_SIZE: usize = 256;
@@ -43,6 +47,7 @@ static GRAY_TILE_JPEG: LazyLock<Vec<u8>> = LazyLock::new(|| {
 pub(crate) async fn get(
     State(tile_route_state): State<TileRouteState>,
     Path((zoom, x, y_with_suffix)): Path<(u8, u32, String)>,
+    headers: HeaderMap,
 ) -> Response<Body> {
     let state = tile_route_state.app_state;
     let variant_index = tile_route_state.variant_index;
@@ -54,7 +59,15 @@ pub(crate) async fn get(
             .expect("body should be built");
     };
 
-    serve_tile(&state, variant_index, TileCoord { zoom, x, y }, scale, ext).await
+    serve_tile(
+        &state,
+        variant_index,
+        TileCoord { zoom, x, y },
+        scale,
+        ext,
+        headers,
+    )
+    .await
 }
 
 pub(crate) async fn serve_tile(
@@ -63,6 +76,7 @@ pub(crate) async fn serve_tile(
     coord: TileCoord,
     scale: f64,
     ext: Option<&str>,
+    headers: HeaderMap,
 ) -> Response<Body> {
     let Some(variant) = state.tile_variants.get(variant_index) else {
         return Response::builder()
@@ -113,26 +127,59 @@ pub(crate) async fn serve_tile(
         }
     }
 
-    let render_request = RenderRequest::new(
-        bbox,
-        coord.zoom,
-        scale,
-        ImageFormat::Jpeg,
-        variant.render.to_owned(),
-        variant.coverage_geometry.clone(),
-    );
-
     let file_path = if let Some(ref tile_cache_base_path) = variant.tile_cache_base_path {
         let file_path = cached_tile_path(tile_cache_base_path, coord, scale);
 
+        enum ModifiedOrFresh {
+            Modified(Vec<u8>, Option<SystemTime>),
+            Fresh(SystemTime),
+        }
+
         if state.serve_cached {
-            match fs::read(&file_path).await {
-                Ok(data) => {
-                    return Response::builder()
+            let result: Result<_, io::Error> = async {
+                let mut f = fs::OpenOptions::new().read(true).open(&file_path).await?;
+
+                let metadata = f.metadata().await?;
+
+                let mtime = metadata.modified().ok();
+
+                if let Some(ims) = headers.get(header::IF_MODIFIED_SINCE)
+                    && let Ok(ims_time) = parse_http_date(ims.to_str().unwrap_or(""))
+                    && let Some(mtime) = mtime
+                    && mtime <= ims_time
+                {
+                    return Ok(ModifiedOrFresh::Fresh(mtime));
+                }
+
+                let mut buf = Vec::with_capacity(metadata.size() as usize);
+
+                f.read_to_end(&mut buf).await?;
+
+                Ok(ModifiedOrFresh::Modified(buf, mtime))
+            }
+            .await;
+
+            match result {
+                Ok(ModifiedOrFresh::Modified(data, modified)) => {
+                    let mut builder = Response::builder()
                         .status(StatusCode::OK)
                         .header("Content-Type", "image/jpeg")
-                        .body(Body::from(data))
-                        .expect("cached body");
+                        .header("Cache-Control", "no-cache");
+
+                    if let Some(modified) = modified {
+                        builder =
+                            builder.header("Last-Modified", httpdate::fmt_http_date(modified));
+                    }
+
+                    return builder.body(Body::from(data)).expect("cached body");
+                }
+                Ok(ModifiedOrFresh::Fresh(date)) => {
+                    return Response::builder()
+                        .status(StatusCode::NOT_MODIFIED)
+                        .header("Cache-Control", "no-cache")
+                        .header("Last-Modified", httpdate::fmt_http_date(date))
+                        .body(Body::empty())
+                        .expect("empty body");
                 }
                 Err(err) => {
                     if err.kind() != std::io::ErrorKind::NotFound {
@@ -148,6 +195,15 @@ pub(crate) async fn serve_tile(
     };
 
     let render_started_at = SystemTime::now();
+
+    let render_request = RenderRequest::new(
+        bbox,
+        coord.zoom,
+        scale,
+        ImageFormat::Jpeg,
+        variant.render.to_owned(),
+        variant.coverage_geometry.clone(),
+    );
 
     let rendered = match state.render_worker_pool.render(render_request).await {
         Ok(rendered) => rendered,
@@ -179,6 +235,8 @@ pub(crate) async fn serve_tile(
     Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "image/jpeg")
+        .header("Cache-Control", "no-cache")
+        .header("Last-Modified", httpdate::fmt_http_date(render_started_at))
         .body(Body::from(rendered))
         .expect("body should be built")
 }

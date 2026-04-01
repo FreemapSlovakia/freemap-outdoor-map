@@ -5,7 +5,17 @@ use crate::render::{
 };
 use postgres::Client;
 
-const FALLBACK: bool = true;
+const HILLSHADING_HIERARCHY: [(&str, &[&str]); 9] = [
+    ("at", &["sk", "si", "cz"]),
+    ("it", &["at", "ch", "si", "fr"]),
+    ("ch", &["at", "fr"]),
+    ("si", &[]),
+    ("cz", &["sk", "pl"]),
+    ("pl", &["sk"]),
+    ("sk", &[]),
+    ("fr", &[]),
+    ("no", &[]),
+];
 
 pub fn render(
     ctx: &Ctx,
@@ -30,19 +40,7 @@ pub fn render(
 
     // (CC, CC, CC, (mask-$cc, mask-$cc, mask-$cc, (fallback_contours, fallback_final):src-out):src-over)
 
-    let config: Vec<(&str, Vec<&str>)> = vec![
-        ("at", vec!["sk", "si", "cz"]),
-        ("it", vec!["at", "ch", "si", "fr"]),
-        ("ch", vec!["at", "fr"]),
-        ("si", vec![]),
-        ("cz", vec!["sk", "pl"]),
-        ("pl", vec!["sk"]),
-        ("sk", vec![]),
-        ("fr", vec![]),
-        ("no", vec![]),
-    ];
-
-    for (country, better_countries) in config {
+    for (country, better_countries) in HILLSHADING_HIERARCHY {
         let mask_surface =
             hillshading::load_surface(ctx, country, hillshading_datasets, hillshading::Mode::Mask)?;
 
@@ -91,63 +89,57 @@ pub fn render(
             }
         }
 
-        context.pop_group_to_source()?; // // country-contours-and-shading
+        context.pop_group_to_source()?; // country-contours-and-shading
         context.paint()?;
     }
 
-    if FALLBACK {
-        let mut mask_surfaces = Vec::new();
+    let mut mask_surfaces = Vec::new();
 
-        for country in ["it", "at", "ch", "si", "pl", "sk", "cz", "fr", "no"] {
-            let mask_surface = hillshading::load_surface(
+    for country in ["it", "at", "ch", "si", "pl", "sk", "cz", "fr", "no"] {
+        let mask_surface =
+            hillshading::load_surface(ctx, country, hillshading_datasets, hillshading::Mode::Mask)?;
+
+        if let Some(mask_surface) = mask_surface {
+            mask_surfaces.push(mask_surface);
+        }
+    }
+
+    if !hillshading::mask_covers_tile(&mut mask_surfaces)? {
+        context.push_group(); // mask
+
+        for mask_surface in &mask_surfaces {
+            hillshading::paint_surface(ctx, mask_surface, 1.0)?;
+        }
+
+        context.push_group(); // fallback
+
+        {
+            let _span = tracy_client::span!("shading_and_contours::contours");
+
+            if contours && ctx.zoom >= 12 {
+                context.push_group(); // contours
+                contours::render(ctx, client, None)?;
+                context.pop_group_to_source()?; // contours
+                context.paint_with_alpha(0.33)?;
+            }
+        }
+
+        if shading {
+            hillshading::load_and_paint(
                 ctx,
-                country,
+                "_",
+                fade_alpha,
                 hillshading_datasets,
-                hillshading::Mode::Mask,
+                hillshading::Mode::Shading,
             )?;
-
-            if let Some(mask_surface) = mask_surface {
-                mask_surfaces.push(mask_surface);
-            }
         }
 
-        if !hillshading::mask_covers_tile(&mut mask_surfaces)? {
-            context.push_group(); // mask
+        context.pop_group_to_source()?; // fallback
+        context.set_operator(cairo::Operator::Out);
+        context.paint()?;
 
-            for mask_surface in &mask_surfaces {
-                hillshading::paint_surface(ctx, mask_surface, 1.0)?;
-            }
-
-            context.push_group(); // fallback
-
-            {
-                let _span = tracy_client::span!("shading_and_contours::contours");
-
-                if contours && ctx.zoom >= 12 {
-                    context.push_group(); // contours
-                    contours::render(ctx, client, None)?;
-                    context.pop_group_to_source()?; // contours
-                    context.paint_with_alpha(0.33)?;
-                }
-            }
-
-            if shading {
-                hillshading::load_and_paint(
-                    ctx,
-                    "_",
-                    fade_alpha,
-                    hillshading_datasets,
-                    hillshading::Mode::Shading,
-                )?;
-            }
-
-            context.pop_group_to_source()?; // fallback
-            context.set_operator(cairo::Operator::Out);
-            context.paint()?;
-
-            context.pop_group_to_source()?; // mask
-            context.paint()?;
-        }
+        context.pop_group_to_source()?; // mask
+        context.paint()?;
     }
 
     context.pop_group_to_source()?; // top

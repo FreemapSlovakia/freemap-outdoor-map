@@ -4,7 +4,7 @@ use crate::render::{
 use postgres::NoTls;
 use r2d2_postgres::PostgresConnectionManager;
 use std::{
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     thread::JoinHandle,
 };
@@ -40,7 +40,7 @@ impl RenderWorkerPool {
         pool: r2d2::Pool<PostgresConnectionManager<NoTls>>,
         worker_count: usize,
         svg_base_path: Arc<Path>,
-        hillshading_base_path: Arc<Path>,
+        hillshading_base_path: Arc<Option<PathBuf>>,
     ) -> Self {
         let queue_size = worker_count.max(1) * 2;
         let (tx, rx) = mpsc::channel(queue_size);
@@ -59,7 +59,12 @@ impl RenderWorkerPool {
                     let mut svg_repo = SvgRepo::new(svg_base_path.as_ref().to_path_buf());
 
                     let mut hillshading_datasets =
-                        Some(load_hillshading_datasets(&*hillshading_base_path));
+                        hillshading_base_path
+                            .as_ref()
+                            .as_ref()
+                            .map(|hillshading_base_path| {
+                                load_hillshading_datasets(hillshading_base_path)
+                            });
 
                     loop {
                         let task = {

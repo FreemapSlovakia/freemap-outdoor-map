@@ -87,7 +87,7 @@ pub struct Cli {
 
     /// Path to hillshading datasets.
     #[arg(long, env = "MAPRENDER_HILLSHADING_BASE_PATH")]
-    pub hillshading_base_path: PathBuf,
+    pub hillshading_base_path: Option<PathBuf>,
 
     /// Number of rendering worker threads.
     #[arg(long, env = "MAPRENDER_WORKER_COUNT")]
