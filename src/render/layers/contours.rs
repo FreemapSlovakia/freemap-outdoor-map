@@ -20,59 +20,7 @@ pub async fn query(
     client: &tokio_postgres::Client,
     country: Option<&str>,
 ) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
-    let zoom = ctx.zoom;
-
-    // TODO measure performance impact of simplification, if it makes something faster
-    let width_case = match zoom {
-        12 => "CASE WHEN height_m % 50 = 0 THEN 0.2 ELSE 0.0 END",
-        13 | 14 => {
-            "CASE
-                WHEN height_m % 100 = 0 THEN 0.4
-                WHEN height_m % 20 = 0 THEN 0.2
-                ELSE 0.0
-            END"
-        }
-        _ => {
-            "CASE
-                WHEN height_m % 100 = 0 THEN 0.6
-                WHEN height_m % 10 = 0 THEN 0.3
-                WHEN height_m % 50 = 0 AND height_m % 100 <> 0 THEN 0.0
-                ELSE 0.0
-            END"
-        }
-    };
-
-    let sql = {
-        let table: Cow<_> = if let Some(country) = country {
-            format!("contour_{country}_split").into()
-        } else {
-            "cont_dmr_split".into()
-        };
-
-        #[cfg_attr(any(), rustfmt::skip)]
-        format!("
-            WITH contours AS (
-                SELECT
-                    ST_SimplifyVW(wkb_geometry, $6) AS geometry,
-                    height_m,
-                    ({width_case})::double precision AS width
-                FROM
-                    {table}
-                WHERE
-                    wkb_geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            )
-            SELECT
-                geometry,
-                height_m,
-                width
-            FROM
-                contours
-            WHERE
-                width > 0
-        ")
-    };
-
-    let simplify_factor: f64 = match zoom {
+    let simplify_factor: f64 = match ctx.zoom {
         ..=12 => 2000.0,
         13 => 1000.0,
         14 => 200.0,
@@ -80,12 +28,53 @@ pub async fn query(
         _ => 0.0,
     };
 
-    client.query(
-        &sql,
-        &ctx.bbox_query_params(Some(8.0))
-            .push(simplify_factor)
-            .as_params(),
-    ).await
+    let (height_filter, width_case) = match ctx.zoom {
+        12 => (
+            "height_m % 50 = 0",
+            "CASE WHEN height_m % 50 = 0 THEN 0.2 ELSE 0.0 END",
+        ),
+        13 | 14 => (
+            "height_m % 20 = 0",
+            "CASE WHEN height_m % 100 = 0 THEN 0.4 WHEN height_m % 20 = 0 THEN 0.2 ELSE 0.0 END",
+        ),
+        _ => (
+            "height_m % 10 = 0",
+            "CASE WHEN height_m % 100 = 0 THEN 0.6 WHEN height_m % 10 = 0 THEN 0.3 ELSE 0.0 END",
+        ),
+    };
+
+    let params = ctx.bbox_query_params(Some(8.0));
+
+    let (geometry_expr, params) = if simplify_factor > 0.0 {
+        (
+            "ST_SimplifyVW(wkb_geometry, $6)",
+            params.push(simplify_factor),
+        )
+    } else {
+        ("wkb_geometry", params)
+    };
+
+    let table: Cow<_> = if let Some(country) = country {
+        format!("contour_{country}_split").into()
+    } else {
+        "cont_dmr_split".into()
+    };
+
+    let sql = format!(
+        "
+        SELECT
+            {geometry_expr} AS geometry,
+            height_m,
+            ({width_case})::double precision AS width
+        FROM
+            {table}
+        WHERE
+            wkb_geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            AND {height_filter}
+        "
+    );
+
+    client.query(&sql, &params.as_params()).await
 }
 
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {

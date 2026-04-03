@@ -18,7 +18,6 @@ use std::{
     path::Path,
     sync::{Arc, Mutex},
 };
-use tokio::signal;
 #[cfg(unix)]
 use tokio::signal::unix::{SignalKind, signal as unix_signal};
 use tokio::sync::broadcast;
