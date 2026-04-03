@@ -1,13 +1,13 @@
-use std::collections::HashSet;
-use std::sync::Arc;
-
 use crate::render::{image_format::ImageFormat, legend::LegendItemData};
 use clap::ValueEnum;
+use enumset::EnumSetType;
 use geo::Geometry;
 use geo::Rect;
 use geojson::Feature;
+use std::collections::HashSet;
+use std::sync::Arc;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Debug, Hash, ValueEnum, EnumSetType)]
 pub enum RenderLayer {
     Shading,
     Contours,
@@ -28,7 +28,7 @@ pub struct RenderRequest {
     pub zoom: u8,
     pub scale: f64,
     pub format: ImageFormat,
-    pub render: HashSet<RenderLayer>,
+    pub to_render: HashSet<RenderLayer>,
     pub coverage_geometry: Option<Arc<Geometry>>,
     pub featues: Option<Vec<Feature>>,
     pub legend: Option<LegendItemData>,
@@ -40,7 +40,7 @@ impl RenderRequest {
         zoom: u8,
         scale: f64,
         format: ImageFormat,
-        render: HashSet<RenderLayer>,
+        to_render: HashSet<RenderLayer>,
         coverage_geometry: Option<Arc<Geometry>>,
     ) -> Self {
         Self {
@@ -48,7 +48,7 @@ impl RenderRequest {
             zoom,
             scale,
             format,
-            render,
+            to_render,
             coverage_geometry,
             featues: None,
             legend: None,

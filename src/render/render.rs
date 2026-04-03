@@ -43,8 +43,6 @@ pub fn render(
             size,
             svg_repo,
             hillshading_datasets,
-            request.coverage_geometry.as_deref(),
-            request.scale,
         )
     };
 

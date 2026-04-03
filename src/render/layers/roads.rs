@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use crate::render::{
     Feature, FeatureError,
     colors::{self, Color, ContextExt},
@@ -11,6 +9,7 @@ use crate::render::{
 };
 use cairo::Context;
 use postgres::Client;
+use std::borrow::Cow;
 
 pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
     ctx.legend_features("roads", || {

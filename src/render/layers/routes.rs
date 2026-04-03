@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use crate::render::{
     Feature, RenderLayer,
     collision::Collision,
@@ -18,6 +16,7 @@ use crate::render::{
 use cairo::Context;
 use colorsys::{Rgb, RgbRatio};
 use postgres::Client;
+use std::collections::HashSet;
 
 const COLOR_SQL: &str = r#"
   CASE
@@ -312,7 +311,7 @@ pub fn render_marking(
     ctx: &Ctx,
     context: &Context,
     rows: Vec<Feature>,
-    render: &HashSet<RenderLayer>,
+    to_render: HashSet<RenderLayer>,
     svg_repo: &mut SvgRepo,
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("routes::render_marking");
@@ -331,7 +330,7 @@ pub fn render_marking(
         let df = 1.25;
 
         for color in COLORS.iter() {
-            if render.contains(&RenderLayer::RoutesHorse) {
+            if to_render.contains(&RenderLayer::RoutesHorse) {
                 let off = row.get_i32(&format!("r_{}", color.0))?;
 
                 if off > 0 {
@@ -359,7 +358,7 @@ pub fn render_marking(
                 }
             }
 
-            if render.contains(&RenderLayer::RoutesSki) {
+            if to_render.contains(&RenderLayer::RoutesSki) {
                 let off = row.get_i32(&format!("s_{}", color.0))?;
 
                 if off > 0 {
@@ -389,9 +388,7 @@ pub fn render_marking(
                 }
             }
 
-            let context = context;
-
-            if render.contains(&RenderLayer::RoutesBicycle) {
+            if to_render.contains(&RenderLayer::RoutesBicycle) {
                 let off = row.get_i32(&format!("b_{}", color.0))?;
 
                 if off > 0 {
@@ -419,8 +416,8 @@ pub fn render_marking(
                 }
             }
 
-            if render.contains(&RenderLayer::RoutesHiking)
-                || render.contains(&RenderLayer::RoutesHikingKst)
+            if to_render.contains(&RenderLayer::RoutesHiking)
+                || to_render.contains(&RenderLayer::RoutesHikingKst)
             {
                 {
                     let off = row.get_i32(&format!("h_{}", color.0))?;

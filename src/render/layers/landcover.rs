@@ -1,5 +1,3 @@
-use std::{collections::HashMap, sync::LazyLock};
-
 use super::landcover_z_order::build_landcover_z_order_case;
 use crate::render::{
     Feature,
@@ -13,6 +11,7 @@ use crate::render::{
 };
 use cairo::{Context, Extend, Matrix, SurfacePattern};
 use postgres::Client;
+use std::{collections::HashMap, sync::LazyLock};
 
 pub enum Paint {
     Fill(Color),

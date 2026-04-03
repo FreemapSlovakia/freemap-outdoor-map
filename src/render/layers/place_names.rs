@@ -137,7 +137,6 @@ pub fn render(
                     } else {
                         pango::Style::Normal
                     },
-                    ..FontAndLayoutOptions::default()
                 },
                 halo_width: halo_width * scale / 30.0,
                 halo_opacity: 0.9,

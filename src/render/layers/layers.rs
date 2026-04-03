@@ -1,8 +1,3 @@
-use std::collections::HashMap;
-use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, Mutex};
-use std::thread;
-
 use crate::render::colors::ContextExt;
 use crate::render::projectable::TileProjectable;
 use crate::render::{
@@ -19,11 +14,14 @@ use crate::render::{
 };
 use crate::render::{RenderLayer, colors};
 use cairo::{Context, Surface};
-use geo::Geometry;
 use geo::Rect;
 use postgres::{Client, NoTls};
 use r2d2::Pool;
 use r2d2_postgres::PostgresConnectionManager;
+use std::collections::HashMap;
+use std::ops::{Deref, DerefMut};
+use std::sync::{Arc, Mutex};
+use std::thread;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -117,17 +115,10 @@ impl QueryHandle {
     }
 }
 
+type Pender<'a> = Box<dyn FnOnce(Params) -> Result<(), RenderError> + 'a>;
+
 struct Prefetcher<'a> {
-    pending: Vec<
-        Box<
-            dyn FnOnce(
-                    &mut SvgRepo,
-                    Option<&mut HillshadingDatasets>,
-                    &mut Collision,
-                ) -> Result<(), RenderError>
-                + 'a,
-        >,
-    >,
+    pending: Vec<Pender<'a>>,
     pool: Pool<PostgresConnectionManager<NoTls>>,
     ctx: Arc<Ctx>,
 }
@@ -190,55 +181,33 @@ impl<'a> Prefetcher<'a> {
 
                 pool.get()?
             };
+
             query_fn(&ctx, &mut conn)
         });
 
-        self.pending.push(Box::new(move |svg_repo, hsd, collision| {
+        self.pending.push(Box::new(move |params| {
             let rows = jh
                 .join()
                 .map_err(|_| RenderError::ThreadPanic)?
                 .with_layer(name)?;
 
-            render_fn(
-                rows,
-                Params {
-                    collision,
-                    svg_repo,
-                    hsd,
-                },
-            )
-            .with_layer(name)
+            render_fn(rows, params).with_layer(name)
         }));
     }
 
     fn add_with(
         &mut self,
         handle: QueryHandle,
-        render_fn: impl FnOnce(
-            &Ctx,
-            Arc<Vec<Feature>>,
-            &mut SvgRepo,
-            Option<&mut HillshadingDatasets>,
-        ) -> LayerRenderResult
-        + 'a,
+        render_fn: impl FnOnce(Arc<Vec<Feature>>, Params) -> LayerRenderResult + 'a,
     ) {
-        let ctx = self.ctx.clone();
-
-        self.pending
-            .push(Box::new(move |svg_repo, hsd, _collision| {
-                let rows = handle.resolve()?;
-                render_fn(&ctx, rows, svg_repo, hsd).with_layer(handle.name)
-            }));
+        self.pending.push(Box::new(move |params| {
+            let rows = handle.resolve()?;
+            render_fn(rows, params).with_layer(handle.name)
+        }));
     }
 
     fn push(&mut self, render_fn: impl FnOnce(Params) -> Result<(), RenderError> + 'a) {
-        self.pending.push(Box::new(move |svg_repo, hsd, collision| {
-            render_fn(Params {
-                svg_repo,
-                hsd,
-                collision,
-            })
-        }));
+        self.pending.push(Box::new(move |params| render_fn(params)));
     }
 
     fn run(
@@ -248,7 +217,11 @@ impl<'a> Prefetcher<'a> {
         collision: &mut Collision,
     ) -> Result<(), RenderError> {
         for layer in self.pending {
-            layer(svg_repo, hsd.as_deref_mut(), collision)?;
+            layer(Params {
+                svg_repo,
+                hsd: hsd.as_deref_mut(),
+                collision,
+            })?;
         }
         Ok(())
     }
@@ -262,12 +235,12 @@ pub fn render(
     size: Size<u32>,
     svg_repo: &mut SvgRepo,
     mut hillshading_datasets: Option<&mut HillshadingDatasets>,
-    coverage_geometry: Option<&Geometry>,
-    scale: f64,
 ) -> Result<(), RenderError> {
     let _span = tracy_client::span!("render_tile::draw");
 
     let context = &Context::new(surface)?;
+
+    let scale = request.scale;
 
     if scale != 1.0 {
         context.scale(scale, scale);
@@ -276,6 +249,11 @@ pub fn render(
     let collision = &mut Collision::new(Some(context));
 
     let zoom = request.zoom;
+
+    let to_render = &request.to_render;
+
+    let do_shading = to_render.contains(&RenderLayer::Shading);
+    let do_contours = to_render.contains(&RenderLayer::Contours);
 
     let legend = request.legend.clone();
 
@@ -290,7 +268,7 @@ pub fn render(
 
     let coverage_geometry = if ctx.legend.is_none()
         && matches!(request.format, ImageFormat::Jpeg | ImageFormat::Png)
-        && let Some(coverage_geometry) = coverage_geometry
+        && let Some(ref coverage_geometry) = request.coverage_geometry
     {
         context.set_source_rgb(0.82, 0.80, 0.78);
         context.paint().unwrap();
@@ -328,8 +306,8 @@ pub fn render(
     if zoom >= 13
         && let Some(handle) = feature_lines.clone()
     {
-        prefetcher.add_with(handle, |ctx, rows, svg, _hsd| {
-            layers::feature_lines::render(ctx, context, 1, &rows, svg, None)
+        prefetcher.add_with(handle, |rows, params| {
+            layers::feature_lines::render(&ctx, context, 1, &rows, params.svg_repo, None)
         });
     }
 
@@ -368,15 +346,14 @@ pub fn render(
     if zoom >= 12
         && let Some(handle) = feature_lines.clone()
     {
-        let shading = request.render.contains(&RenderLayer::Shading);
-        prefetcher.add_with(handle, move |ctx, rows, svg, hsd| {
+        prefetcher.add_with(handle, |rows, params| {
             layers::feature_lines::render(
-                ctx,
+                &ctx,
                 context,
                 2,
                 &rows,
-                svg,
-                shading.then(|| hsd).flatten(),
+                params.svg_repo,
+                do_shading.then_some(params.hsd).flatten(),
             )
         });
     }
@@ -413,8 +390,8 @@ pub fn render(
     if zoom >= 11
         && let Some(handle) = feature_lines.clone()
     {
-        prefetcher.add_with(handle, |ctx, rows, svg, _hsd| {
-            layers::feature_lines::render(ctx, context, 3, &rows, svg, None)
+        prefetcher.add_with(handle, |rows, params| {
+            layers::feature_lines::render(&ctx, context, 3, &rows, params.svg_repo, None)
         });
     }
 
@@ -431,9 +408,7 @@ pub fn render(
         None,
     ];
 
-    if request.render.contains(&RenderLayer::Shading)
-        || request.render.contains(&RenderLayer::Contours)
-    {
+    if do_shading || do_contours {
         let bridge = prefetcher.prefetch("bridge_areas_mask", |ctx, conn| {
             layers::bridge_areas::query(ctx, conn).map_err(Into::into)
         });
@@ -448,8 +423,6 @@ pub fn render(
             )
         });
 
-        let do_shading = request.render.contains(&RenderLayer::Shading);
-        let do_contours = request.render.contains(&RenderLayer::Contours);
         let ctx_arc = ctx.clone();
 
         prefetcher.push(move |params| {
@@ -496,8 +469,8 @@ pub fn render(
     if zoom >= 12
         && let Some(handle) = feature_lines.clone()
     {
-        prefetcher.add_with(handle, |ctx, rows, svg, _hsd| {
-            layers::feature_lines::render(ctx, context, 4, &rows, svg, None)
+        prefetcher.add_with(handle, |rows, params| {
+            layers::feature_lines::render(&ctx, context, 4, &rows, params.svg_repo, None)
         });
     }
 
@@ -540,7 +513,7 @@ pub fn render(
         );
     }
 
-    if zoom >= 8 && request.render.contains(&RenderLayer::CountryBorders) {
+    if zoom >= 8 && to_render.contains(&RenderLayer::CountryBorders) {
         prefetcher.add(
             "borders",
             |ctx, conn| layers::borders::query(ctx, conn).map_err(Into::into),
@@ -549,32 +522,29 @@ pub fn render(
     }
 
     {
-        let render_clone = request.render.clone();
-        let min_zoom = if request.render.contains(&RenderLayer::RoutesHikingKst) {
+        let to_render = to_render.clone();
+        let to_render1 = to_render.clone();
+
+        let min_zoom = if to_render.contains(&RenderLayer::RoutesHikingKst) {
             8
         } else {
             9
         };
+
         if zoom >= min_zoom {
             prefetcher.add(
                 "routes_marking",
                 move |ctx, conn| {
-                    layers::routes::query_marking(ctx, conn, &render_clone).map_err(Into::into)
+                    layers::routes::query_marking(ctx, conn, &to_render).map_err(Into::into)
                 },
                 |rows, params| {
-                    layers::routes::render_marking(
-                        &ctx,
-                        context,
-                        rows,
-                        &request.render,
-                        params.svg_repo,
-                    )
+                    layers::routes::render_marking(&ctx, context, rows, to_render1, params.svg_repo)
                 },
             );
         }
     }
 
-    if (9..=11).contains(&zoom) && request.render.contains(&RenderLayer::Geonames) {
+    if (9..=11).contains(&zoom) && to_render.contains(&RenderLayer::Geonames) {
         prefetcher.add(
             "geonames",
             |ctx, conn| layers::geonames::query(ctx, conn).map_err(Into::into),
@@ -653,7 +623,7 @@ pub fn render(
     }
 
     if zoom >= 10 {
-        let kst = request.render.contains(&RenderLayer::RoutesHikingKst);
+        let kst = to_render.contains(&RenderLayer::RoutesHikingKst);
         prefetcher.add(
             "pois",
             move |ctx, conn| layers::pois::query(ctx, conn, kst).map_err(Into::into),
@@ -726,7 +696,7 @@ pub fn render(
     }
 
     if zoom >= 14 {
-        let render_clone = request.render.clone();
+        let render_clone = to_render.clone();
         prefetcher.add(
             "routes_labels",
             move |ctx, conn| {
@@ -762,7 +732,7 @@ pub fn render(
         );
     }
 
-    if zoom < 8 && request.render.contains(&RenderLayer::CountryNames) {
+    if zoom < 8 && to_render.contains(&RenderLayer::CountryNames) {
         let rect = ctx.bbox.project_to_tile(&ctx.tile_projector);
 
         prefetcher.push(move |_params| {
@@ -788,7 +758,7 @@ pub fn render(
         );
     }
 
-    if let Some(coverage_geometry) = coverage_geometry {
+    if let Some(ref coverage_geometry) = coverage_geometry {
         prefetcher.push(|_params| {
             layers::blur_edges::render(&ctx, context, coverage_geometry)
                 .with_layer("blur_edges")?;

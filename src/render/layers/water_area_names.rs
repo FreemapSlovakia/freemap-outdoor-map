@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 use crate::render::{
     Feature,
     collision::Collision,
@@ -17,6 +15,7 @@ use cairo::Context;
 use pangocairo::pango::Style;
 use postgres::Client;
 use regex::Regex;
+use std::sync::LazyLock;
 
 static REPLACEMENTS: LazyLock<Vec<Replacement>> =
     LazyLock::new(|| vec![(Regex::new("[Vv]odná [Nn]ádrž").expect("regex"), "v. n.")]);
