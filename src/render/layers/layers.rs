@@ -409,40 +409,45 @@ pub fn render(
     ];
 
     if do_shading || do_contours {
-        let bridge_handle = prefetcher.prefetch(|ctx, conn| {
-            async move {
-                Ok(layers::bridge_areas::query(&ctx, &conn)
-                    .await?
-                    .into_iter()
-                    .map(Feature::from)
-                    .collect())
-            }
-            .boxed()
-        });
+        let mut handles: Vec<(BatchKey, JoinHandle<_>)> = Vec::with_capacity(11);
 
-        let contour_handles: [(BatchKey, JoinHandle<_>); 10] = CONTOUR_COUNTRIES.map(|country| {
-            (
-                country,
-                prefetcher.prefetch(move |ctx, conn| {
-                    async move {
-                        Ok(layers::contours::query(&ctx, &conn, country)
-                            .await?
-                            .into_iter()
-                            .map(Feature::from)
-                            .collect())
-                    }
-                    .boxed()
-                }),
-            )
-        });
+        if zoom >= 15 {
+            let bridge_handle = prefetcher.prefetch(|ctx, conn| {
+                async move {
+                    Ok(layers::bridge_areas::query(&ctx, &conn)
+                        .await?
+                        .into_iter()
+                        .map(Feature::from)
+                        .collect())
+                }
+                .boxed()
+            });
+            handles.push((Some("__bridge__"), bridge_handle));
+        }
+
+        if do_contours && zoom >= 12 {
+            let contour_handles: [(BatchKey, JoinHandle<_>); 10] =
+                CONTOUR_COUNTRIES.map(|country| {
+                    (
+                        country,
+                        prefetcher.prefetch(move |ctx, conn| {
+                            async move {
+                                Ok(layers::contours::query(&ctx, &conn, country)
+                                    .await?
+                                    .into_iter()
+                                    .map(Feature::from)
+                                    .collect())
+                            }
+                            .boxed()
+                        }),
+                    )
+                });
+            for (key, jh) in contour_handles {
+                handles.push((key, jh));
+            }
+        }
 
         let ctx_arc = ctx.clone();
-
-        let mut handles: Vec<(BatchKey, JoinHandle<_>)> = Vec::with_capacity(11);
-        handles.push((Some("__bridge__"), bridge_handle));
-        for (key, jh) in contour_handles {
-            handles.push((key, jh));
-        }
 
         prefetcher.layers.push(PendingLayer::Batch {
             handles,
