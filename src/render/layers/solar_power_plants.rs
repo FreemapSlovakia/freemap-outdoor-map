@@ -1,18 +1,16 @@
 use crate::render::{
+    Feature,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{hatch::hatch_geometry, path_geom::path_geometry},
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
+use cairo::Context;
 use postgres::Client;
 
-pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
-    let _span = tracy_client::span!("solar_power_plants::render");
-
-    let zoom = ctx.zoom;
-
-    let rows = ctx.legend_features("solar_power_plants", || {
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("solar_power_plants", || {
         let sql = "
             SELECT
                 geometry FROM osm_power_generators
@@ -24,9 +22,13 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         ";
 
         client.query(sql, &ctx.bbox_query_params(None).as_params())
-    })?;
+    })
+}
 
-    let context = ctx.context;
+pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
+    let _span = tracy_client::span!("solar_power_plants::render");
+
+    let zoom = ctx.zoom;
 
     let tile_projector = &ctx.tile_projector;
 

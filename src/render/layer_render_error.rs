@@ -22,6 +22,9 @@ pub enum LayerRenderError {
     #[error("Cairo borrow error: {0}")]
     CairoBorrow(#[from] cairo::BorrowError),
 
+    #[error("DB pool error: {0}")]
+    Pool(#[from] r2d2::Error),
+
     #[error("Feature error: {0}")]
     FeatureError(#[from] FeatureError),
 }

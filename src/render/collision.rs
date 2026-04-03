@@ -3,9 +3,9 @@ use geo::{Coord, Intersects, Rect};
 
 const DEBUG: bool = false;
 
-pub struct Collision<'a> {
+pub struct Collision<'ctx> {
     items: Vec<Rect>,
-    context: Option<&'a Context>,
+    context: Option<&'ctx Context>,
 }
 
 const EPSILON: f64 = 0.001;

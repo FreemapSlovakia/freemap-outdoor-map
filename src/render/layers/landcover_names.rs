@@ -1,5 +1,6 @@
 use super::landcover_z_order::build_landcover_z_order_case;
 use crate::render::{
+    Feature,
     collision::Collision,
     colors,
     ctx::Ctx,
@@ -12,6 +13,7 @@ use crate::render::{
     projectable::TileProjectable,
     regex_replacer::{Replacement, replace},
 };
+use cairo::Context;
 use geo::{Centroid, Geometry};
 use pangocairo::pango::Style;
 use postgres::Client;
@@ -32,10 +34,8 @@ static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
     ]
 });
 
-pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
-    let _span = tracy_client::span!("landcover_names::render");
-
-    let rows = ctx.legend_features("landcovers", || {
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("landcovers", || {
         let z_order_case = build_landcover_z_order_case("type");
 
         // TODO include types (`type IN`), don't exclude (`type NOT IN`)
@@ -75,7 +75,16 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
                 .push(2_400_000.0f32 / (2.0f32 * (ctx.zoom as f32 - 10.0)).exp2())
                 .as_params(),
         )
-    })?;
+    })
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    collision: &mut Collision,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("landcover_names::render");
 
     let mut text_options = TextOptions {
         flo: FontAndLayoutOptions {
@@ -133,7 +142,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         };
 
         draw_text(
-            ctx.context,
+            context,
             Some(collision),
             &g.project_to_tile(&ctx.tile_projector),
             &replace(row.get_string("name")?, &REPLACEMENTS),

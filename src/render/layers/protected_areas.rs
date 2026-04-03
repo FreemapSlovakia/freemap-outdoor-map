@@ -1,5 +1,5 @@
 use crate::render::{
-    FeatureError, GeomError,
+    Feature, FeatureError, GeomError,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{
@@ -11,14 +11,13 @@ use crate::render::{
     projectable::TileProjectable,
     svg_repo::SvgRepo,
 };
+use cairo::Context;
 use postgres::Client;
 
-pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRenderResult {
-    let _span = tracy_client::span!("protected_areas::render");
+pub fn query_areas(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("protected_areas", || {
+        let zoom = ctx.zoom;
 
-    let zoom = ctx.zoom;
-
-    let rows = ctx.legend_features("protected_areas", || {
         let extra_where = if zoom < 12 {
             " AND NOT (
                 type = 'nature_reserve' OR
@@ -43,11 +42,63 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             ");
 
         client.query(sql, &ctx.bbox_query_params(Some(10.0)).as_params())
-    })?;
+    })
+}
 
+pub fn query_borders(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("protected_areas", || {
+        let zoom = ctx.zoom;
+
+        let w = if zoom < 12 {
+            " AND NOT (type = 'nature_reserve' OR type = 'protected_area' AND tags->'protect_class' <> '2')"
+        } else {
+            ""
+        };
+
+        let snap = (26f64 - zoom as f64).exp2();
+
+        // NOTE we do ST_Intersection to prevent memory error for very long borders on bigger zooms
+
+        #[cfg_attr(any(), rustfmt::skip)]
+        let sql = &format!("
+            SELECT
+                type,
+                COALESCE(tags->'protect_class', '') AS protect_class,
+                ST_Intersection(
+                    geometry,
+                    ST_Expand(ST_MakeEnvelope($6, $7, $8, $9, 3857), 50000)
+                ) AS geometry
+            FROM
+                osm_landcovers
+            WHERE
+                type IN ('national_park', 'protected_area', 'leisure', 'nature_reserve') AND
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+                {w}
+        ");
+
+        client.query(
+            sql,
+            &ctx.bbox_query_params(Some(10.0))
+                .push(((ctx.bbox.min().x - snap) / snap).floor() * snap)
+                .push(((ctx.bbox.min().y - snap) / snap).floor() * snap)
+                .push(((ctx.bbox.max().x + snap) / snap).ceil() * snap)
+                .push(((ctx.bbox.max().y + snap) / snap).ceil() * snap)
+                .as_params(),
+        )
+    })
+}
+
+pub fn render_areas(
+    ctx: &Ctx,
+    context: &Context,
+    areas: Vec<Feature>,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("protected_areas::render_areas");
+
+    let zoom = ctx.zoom;
     let tile_projector = &ctx.tile_projector;
 
-    let geometries: Vec<_> = rows
+    let geometries: Vec<_> = areas
         .iter()
         .map(|row| {
             Ok((
@@ -58,9 +109,6 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         })
         .collect::<Result<Vec<_>, FeatureError>>()?;
 
-    let context = ctx.context;
-
-    // hatching
     if zoom <= 11 {
         context.save()?;
 
@@ -91,46 +139,20 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         context.restore()?;
     }
 
-    let w = if zoom < 12 {
-        " AND NOT (type = 'nature_reserve' OR type = 'protected_area' AND tags->'protect_class' <> '2')"
-    } else {
-        ""
-    };
+    Ok(())
+}
 
-    let snap = (26f64 - ctx.zoom as f64).exp2();
+pub fn render_borders(
+    ctx: &Ctx,
+    context: &Context,
+    borders: Vec<Feature>,
+    svg_repo: &mut SvgRepo,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("protected_areas::render_borders");
 
-    let rows = ctx.legend_features("protected_areas", || {
-        // NOTE we do ST_Intersection to prevent memory error for very long borders on bigger zooms
+    let zoom = ctx.zoom;
 
-        #[cfg_attr(any(), rustfmt::skip)]
-        let sql = &format!("
-            SELECT
-                type,
-                COALESCE(tags->'protect_class', '') AS protect_class,
-                ST_Intersection(
-                    geometry,
-                    ST_Expand(ST_MakeEnvelope($6, $7, $8, $9, 3857), 50000)
-                ) AS geometry
-            FROM
-                osm_landcovers
-            WHERE
-                type IN ('national_park', 'protected_area', 'leisure', 'nature_reserve') AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-                {w}
-        ");
-
-        client.query(
-            sql,
-            &ctx.bbox_query_params(Some(10.0))
-                .push(((ctx.bbox.min().x - snap) / snap).floor() * snap)
-                .push(((ctx.bbox.min().y - snap) / snap).floor() * snap)
-                .push(((ctx.bbox.max().x + snap) / snap).ceil() * snap)
-                .push(((ctx.bbox.max().y + snap) / snap).ceil() * snap)
-                .as_params(),
-        )
-    })?;
-
-    let geometries: Vec<_> = rows
+    let geometries: Vec<_> = borders
         .iter()
         .filter_map(|row| {
             let geom = match row.get_geometry() {
@@ -147,7 +169,6 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         })
         .collect::<Result<Vec<_>, FeatureError>>()?;
 
-    // border
     for (projected, _, row) in &geometries {
         let typ = row.get_string("type")?;
         let protect_class = row.get_string("protect_class")?;
@@ -156,7 +177,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             let sample = svg_repo.get("protected_area")?;
 
             walk_geometry_line_strings(projected, &mut |line_string| {
-                draw_line_pattern(ctx.context, ctx.size, line_string, 0.8, sample)
+                draw_line_pattern(context, ctx.size, line_string, 0.8, sample)
             })?;
         }
     }

@@ -7,14 +7,12 @@ use crate::render::{
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
-use cairo::{Format, ImageSurface, Operator};
+use cairo::{Context, Format, ImageSurface, Operator};
 use geo::Geometry;
 use image::{GrayImage, imageops};
 
-pub fn render(ctx: &Ctx, coverage_polygon_merc: &Geometry) -> LayerRenderResult {
+pub fn render(ctx: &Ctx, context: &Context, coverage_polygon_merc: &Geometry) -> LayerRenderResult {
     let _span = tracy_client::span!("blur_edges::render");
-
-    let context = ctx.context;
 
     match tile_touches_coverage(coverage_polygon_merc, ctx.bbox, ctx.meters_per_pixel()) {
         TileCoverageRelation::Crosses => {

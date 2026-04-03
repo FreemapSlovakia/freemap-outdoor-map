@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use super::landcover_z_order::build_landcover_z_order_case;
 use crate::render::{
+    Feature,
     colors::{self, Color, ContextExt, *},
     ctx::Ctx,
     draw::path_geom::{path_geometry, path_line_string_with_offset, walk_geometry_line_strings},
@@ -10,7 +11,7 @@ use crate::render::{
     svg_repo::SvgRepo,
     xyz::to_absolute_pixel_coords,
 };
-use cairo::{Extend, Matrix, SurfacePattern};
+use cairo::{Context, Extend, Matrix, SurfacePattern};
 use postgres::Client;
 
 pub enum Paint {
@@ -78,19 +79,11 @@ pub static PAINTS: LazyLock<HashMap<&'static str, &'static [Paint]>> = LazyLock:
     paint_map
 });
 
-pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRenderResult {
-    let _span = tracy_client::span!("landcover::render");
-
-    let context = ctx.context;
-
-    let min = ctx.bbox.min();
-
-    let zoom = ctx.zoom;
-
-    let rows = ctx.legend_features("landcovers", || {
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("landcovers", || {
         let a = "'pitch', 'playground', 'golf_course', 'track'";
 
-        let excl_types = match zoom {
+        let excl_types = match ctx.zoom {
             ..12 => &format!("type NOT IN ({a}) AND"),
             12..13 => {
                 &format!("type NOT IN ({a}, 'parking', 'bunker_silo', 'storage_tank', 'silo') AND")
@@ -98,7 +91,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
             _ => "",
         };
 
-        let table_suffix = match zoom {
+        let table_suffix = match ctx.zoom {
             ..=9 => "_gen0",
             10..=11 => "_gen1",
             12.. => "",
@@ -129,7 +122,20 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         ");
 
         client.query(query, &ctx.bbox_query_params(Some(4.0)).as_params())
-    })?;
+    })
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    svg_repo: &mut SvgRepo,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("landcover::render");
+
+    let min = ctx.bbox.min();
+
+    let zoom = ctx.zoom;
 
     context.save()?;
 

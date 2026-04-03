@@ -1,4 +1,5 @@
 use crate::render::{
+    Feature,
     collision::Collision,
     colors::{self},
     ctx::Ctx,
@@ -11,6 +12,7 @@ use crate::render::{
     projectable::TileProjectable,
     regex_replacer::{Replacement, replace},
 };
+use cairo::Context;
 use pangocairo::pango::Style;
 use postgres::Client;
 use regex::Regex;
@@ -23,10 +25,8 @@ static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
     ]
 });
 
-pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
-    let _span = tracy_client::span!("water_line_names::render");
-
-    let rows = ctx.legend_features("water_lines", || {
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("water_lines", || {
         let w = if ctx.zoom < 14 {
             "AND type = 'river'"
         } else {
@@ -62,7 +62,16 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         ");
 
         client.query(&sql, &ctx.bbox_query_params(Some(2048.0)).as_params())
-    })?;
+    })
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    collision: &mut Collision,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("water_line_names::render");
 
     let mut options = TextOnLineOptions {
         flo: FontAndLayoutOptions {
@@ -88,7 +97,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         let name = replace(row.get_string("name")?, &REPLACEMENTS);
 
         walk_geometry_line_strings(&geom, &mut |geom| {
-            let _drawn = draw_text_on_line(ctx.context, geom, &name, Some(collision), &options)?;
+            let _drawn = draw_text_on_line(context, geom, &name, Some(collision), &options)?;
 
             cairo::Result::Ok(())
         })?;

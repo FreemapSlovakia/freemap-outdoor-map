@@ -1,13 +1,16 @@
 use crate::render::{
-    ctx::Ctx, draw::line_pattern::draw_line_pattern, layer_render_error::LayerRenderResult,
-    projectable::TileProjectable, svg_repo::SvgRepo,
+    Feature,
+    ctx::Ctx,
+    draw::line_pattern::draw_line_pattern,
+    layer_render_error::LayerRenderResult,
+    projectable::TileProjectable,
+    svg_repo::SvgRepo,
 };
+use cairo::Context;
 use postgres::Client;
 
-pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRenderResult {
-    let _span = tracy_client::span!("embankments::render");
-
-    let rows = ctx.legend_features("embankments", || {
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("embankments", || {
         let sql = "
             SELECT
                 geometry
@@ -19,18 +22,21 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         ";
 
         client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())
-    })?;
+    })
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    svg_repo: &mut SvgRepo,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("embankments::render");
 
     for row in rows {
         let geom = row.get_line_string()?.project_to_tile(&ctx.tile_projector);
 
-        draw_line_pattern(
-            ctx.context,
-            ctx.size,
-            &geom,
-            0.8,
-            svg_repo.get("embankment")?,
-        )?;
+        draw_line_pattern(context, ctx.size, &geom, 0.8, svg_repo.get("embankment")?)?;
     }
 
     Ok(())

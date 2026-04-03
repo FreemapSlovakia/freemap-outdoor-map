@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use crate::render::{
-    FeatureError,
+    Feature, FeatureError,
     colors::{self, Color, ContextExt},
     ctx::Ctx,
     draw::{markers_on_path::draw_markers_on_path, path_geom::path_line_string},
@@ -9,16 +9,13 @@ use crate::render::{
     projectable::TileProjectable,
     svg_repo::SvgRepo,
 };
+use cairo::Context;
 use postgres::Client;
 
-pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRenderResult {
-    let _span = tracy_client::span!("roads::render");
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("roads", || {
+        let zoom = ctx.zoom;
 
-    let context = ctx.context;
-
-    let zoom = ctx.zoom;
-
-    let rows = ctx.legend_features("roads", || {
         let table = match zoom {
             ..=9 => "osm_roads_gen0",
             10..=11 => "osm_roads_gen1",
@@ -73,7 +70,18 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         ");
 
         client.query(&query, &ctx.bbox_query_params(Some(128.0)).as_params())
-    })?;
+    })
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    svg_repo: &mut SvgRepo,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("roads::render");
+
+    let zoom = ctx.zoom;
 
     let apply_highway_defaults = |width: f64| {
         context.set_dash(&[], 0.0);

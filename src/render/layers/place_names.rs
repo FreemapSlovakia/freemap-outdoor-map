@@ -1,4 +1,5 @@
 use crate::render::{
+    Feature,
     collision::Collision,
     colors,
     ctx::Ctx,
@@ -9,19 +10,14 @@ use crate::render::{
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
+use cairo::Context;
 use pangocairo::pango::Weight;
 use postgres::Client;
 
-pub fn render(
-    ctx: &Ctx,
-    client: &mut Client,
-    collision: &mut Option<&mut Collision>,
-) -> LayerRenderResult {
-    let _span = tracy_client::span!("place_names::render");
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("place_names", || {
+        let zoom = ctx.zoom;
 
-    let zoom = ctx.zoom;
-
-    let rows = ctx.legend_features("place_names", || {
         let by_zoom = match zoom {
             8 => "a.type IN('city', 'islet', 'island')",
             9..=10 => "a.type IN('islet', 'island', 'city', 'town')",
@@ -51,7 +47,18 @@ pub fn render(
         ");
 
         client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
-    })?;
+    })
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    collision: &mut Option<&mut Collision>,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("place_names::render");
+
+    let zoom = ctx.zoom;
 
     let positions = [
         (0.0, -10.0),
@@ -113,7 +120,7 @@ pub fn render(
         }
 
         draw_text(
-            ctx.context,
+            context,
             collision.as_deref_mut(),
             &row.get_point()?.project_to_tile(&ctx.tile_projector),
             row.get_string("name")?,

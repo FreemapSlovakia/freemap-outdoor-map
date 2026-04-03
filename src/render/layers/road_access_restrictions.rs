@@ -1,27 +1,17 @@
 use crate::render::{
+    Feature,
     ctx::Ctx,
     draw::{markers_on_path::draw_markers_on_path, path_geom::path_line_string},
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
     svg_repo::SvgRepo,
 };
+use cairo::Context;
 use postgres::Client;
 use std::cell::Cell;
 
-pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRenderResult {
-    let _span = tracy_client::span!("road_access_restrictions::render");
-
-    // TODO lazy
-
-    let no_bicycle_icon = &svg_repo.get("no_bicycle")?.clone();
-
-    let no_foot_icon = &svg_repo.get("no_foot")?.clone();
-
-    let no_bicycle_rect = no_bicycle_icon.extents().expect("surface extents");
-
-    let no_foot_rect = no_foot_icon.extents().expect("surface extents");
-
-    let rows = ctx.legend_features("road_access_restrictions", || {
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("road_access_restrictions", || {
         let sql = "
             SELECT
                 CASE
@@ -58,9 +48,26 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         ";
 
         client.query(sql, &ctx.bbox_query_params(Some(32.0)).as_params())
-    })?;
+    })
+}
 
-    let context = ctx.context;
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    svg_repo: &mut SvgRepo,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("road_access_restrictions::render");
+
+    // TODO lazy
+
+    let no_bicycle_icon = &svg_repo.get("no_bicycle")?.clone();
+
+    let no_foot_icon = &svg_repo.get("no_foot")?.clone();
+
+    let no_bicycle_rect = no_bicycle_icon.extents().expect("surface extents");
+
+    let no_foot_rect = no_foot_icon.extents().expect("surface extents");
 
     for row in rows {
         let geom = row.get_line_string()?.project_to_tile(&ctx.tile_projector);

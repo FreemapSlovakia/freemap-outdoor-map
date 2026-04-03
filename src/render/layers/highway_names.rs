@@ -1,4 +1,5 @@
 use crate::render::{
+    Feature,
     collision::Collision,
     colors::{self},
     ctx::Ctx,
@@ -9,12 +10,11 @@ use crate::render::{
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
+use cairo::Context;
 use postgres::Client;
 
-pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
-    let _span = tracy_client::span!("highway_names::render");
-
-    let rows = ctx.legend_features("roads", || {
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("roads", || {
         let sql = "
             WITH merged AS (
                 SELECT
@@ -43,7 +43,16 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         ";
 
         client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
-    })?;
+    })
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    collision: &mut Collision,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("highway_names::render");
 
     let options = TextOnLineOptions {
         distribution: Distribution::Align {
@@ -62,7 +71,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         let name = row.get_string("name")?;
 
         walk_geometry_line_strings(&geom, &mut |geom| {
-            let _drawn = draw_text_on_line(ctx.context, geom, name, Some(collision), &options)?;
+            let _drawn = draw_text_on_line(context, geom, name, Some(collision), &options)?;
 
             cairo::Result::Ok(())
         })?;

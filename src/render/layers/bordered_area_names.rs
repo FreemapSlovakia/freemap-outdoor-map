@@ -1,4 +1,5 @@
 use crate::render::{
+    Feature,
     collision::Collision,
     colors,
     ctx::Ctx,
@@ -13,13 +14,12 @@ use crate::render::{
     projectable::TileProjectable,
     regex_replacer::replace,
 };
+use cairo::Context;
 use pangocairo::pango::Style;
 use postgres::Client;
 
-pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
-    let _span = tracy_client::span!("protected_area_names::render");
-
-    let rows = ctx.legend_features("protected_areas", || {
+pub fn query_centroids(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("protected_areas", || {
         let sql = "
             SELECT
                 name,
@@ -34,29 +34,11 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         ";
 
         client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
-    })?;
+    })
+}
 
-    let text_options = TextOptions {
-        flo: FontAndLayoutOptions {
-            style: Style::Italic,
-            ..FontAndLayoutOptions::default()
-        },
-        halo_opacity: 0.75,
-        color: colors::PROTECTED,
-        ..TextOptions::default()
-    };
-
-    for row in rows {
-        draw_text(
-            ctx.context,
-            Some(collision),
-            &row.get_point()?.project_to_tile(&ctx.tile_projector),
-            row.get_string("name")?,
-            &text_options,
-        )?;
-    }
-
-    let rows = ctx.legend_features("protected_areas", || {
+pub fn query_borders(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("protected_areas", || {
         let sql = "
             SELECT
                 type,
@@ -73,7 +55,47 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         ";
 
         client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
-    })?;
+    })
+}
+
+pub fn render_centroids(
+    ctx: &Ctx,
+    context: &Context,
+    centroids: Vec<Feature>,
+    collision: &mut Collision,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("protected_area_names::render_centroids");
+
+    let text_options = TextOptions {
+        flo: FontAndLayoutOptions {
+            style: Style::Italic,
+            ..FontAndLayoutOptions::default()
+        },
+        halo_opacity: 0.75,
+        color: colors::PROTECTED,
+        ..TextOptions::default()
+    };
+
+    for row in centroids {
+        draw_text(
+            context,
+            Some(collision),
+            &row.get_point()?.project_to_tile(&ctx.tile_projector),
+            row.get_string("name")?,
+            &text_options,
+        )?;
+    }
+
+    Ok(())
+}
+
+pub fn render_borders(
+    ctx: &Ctx,
+    context: &Context,
+    borders: Vec<Feature>,
+    collision: &mut Collision,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("protected_area_names::render_borders");
 
     let mut text_options = TextOnLineOptions {
         flo: FontAndLayoutOptions {
@@ -91,7 +113,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         ..TextOnLineOptions::default()
     };
 
-    for row in rows {
+    for row in borders {
         text_options.color = match row.get_string("type")? {
             "national_park" | "protected_area" => colors::PROTECTED,
             "winter_sports" => colors::WATER,
@@ -104,7 +126,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
 
         walk_geometry_line_strings(&geom, &mut |geom| {
             let _drawn = draw_text_on_line(
-                ctx.context,
+                context,
                 geom,
                 &replace(name, &REPLACEMENTS),
                 Some(collision),

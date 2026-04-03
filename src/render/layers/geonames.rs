@@ -1,4 +1,5 @@
 use crate::render::{
+    Feature,
     colors::{self},
     ctx::Ctx,
     draw::{
@@ -8,13 +9,12 @@ use crate::render::{
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
+use cairo::Context;
 use pangocairo::pango::Style;
 use postgres::Client;
 
-pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
-    let _span = tracy_client::span!("geonames::render");
-
-    let rows = ctx.legend_features("geonames", || {
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("geonames", || {
         let sql = "
             SELECT
                 name,
@@ -28,7 +28,11 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         ";
 
         client.query(sql, &ctx.bbox_query_params(Some(20.0)).as_params())
-    })?;
+    })
+}
+
+pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
+    let _span = tracy_client::span!("geonames::render");
 
     let options = TextOnLineOptions {
         flo: FontAndLayoutOptions {
@@ -44,8 +48,6 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         halo_width: 2.0,
         ..TextOnLineOptions::default()
     };
-
-    let context = ctx.context;
 
     context.push_group();
 

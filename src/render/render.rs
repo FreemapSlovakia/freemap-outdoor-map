@@ -8,6 +8,9 @@ use crate::render::{
 use cairo::{Format, ImageSurface, PdfSurface, Surface, SvgSurface};
 use image::codecs::jpeg::JpegEncoder;
 use image::{ExtendedColorType, ImageEncoder};
+use postgres::NoTls;
+use r2d2::Pool;
+use r2d2_postgres::PostgresConnectionManager;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RenderError {
@@ -23,7 +26,7 @@ pub enum RenderError {
 
 pub fn render(
     request: &RenderRequest,
-    client: &mut postgres::Client,
+    pool: Pool<PostgresConnectionManager<NoTls>>,
     svg_repo: &mut SvgRepo,
     hillshading_datasets: Option<&mut HillshadingDatasets>,
 ) -> Result<Vec<u8>, RenderError> {
@@ -35,7 +38,7 @@ pub fn render(
         layers::render(
             surface,
             request,
-            client,
+            pool,
             request.bbox,
             size,
             svg_repo,

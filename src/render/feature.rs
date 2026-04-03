@@ -10,10 +10,12 @@ use std::collections::HashMap;
 pub enum LegendValue {
     String(&'static str),
     Bool(bool),
+    #[allow(dead_code)]
     F32(f32),
     F64(f64),
     I16(i16),
     I32(i32),
+    #[allow(dead_code)]
     I64(i64),
     Hstore(HashMap<String, Option<String>>),
     Point(Point),
@@ -130,6 +132,7 @@ pub enum FeatureError {
     PgError(#[from] postgres::Error),
 }
 
+#[derive(Debug)]
 pub enum Feature {
     Row(Row),
     LegendData(HashMap<String, LegendValue>),
@@ -291,6 +294,7 @@ impl Feature {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn get_i64(&self, arg: &str) -> Result<i64, FeatureError> {
         match self {
             Self::Row(row) => Ok(row.try_get(arg)?),

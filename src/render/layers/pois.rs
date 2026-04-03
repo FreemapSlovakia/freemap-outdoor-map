@@ -1,5 +1,6 @@
 use super::poi_z_order::build_poi_z_order_case;
 use crate::render::{
+    Feature,
     categories::Category,
     collision::Collision,
     colors::{self, Color},
@@ -13,6 +14,7 @@ use crate::render::{
     regex_replacer::{Replacement, build_replacements, replace},
     svg_repo::{Options, SvgRepo},
 };
+use cairo::Context;
 use core::f64;
 use geo::{Point, Rect};
 use pangocairo::pango::{AttrList, AttrSize, SCALE, Style, Weight};
@@ -442,18 +444,14 @@ static OFFSETS: LazyLock<[(f64, f64); 33]> = LazyLock::new(|| {
     offsets
 });
 
-pub fn render(
+pub fn query(
     ctx: &Ctx,
     client: &mut Client,
-    collision: &mut Collision,
-    svg_repo: &mut SvgRepo,
     kst_only: bool,
-) -> LayerRenderResult {
-    let _span = tracy_client::span!("pois::render");
+) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("pois", || {
+        let zoom = ctx.zoom;
 
-    let zoom = ctx.zoom;
-
-    let rows = ctx.legend_features("pois", || {
         let mut selects = vec![];
 
         // TODO add hiking-only
@@ -715,11 +713,21 @@ pub fn render(
         let _span = tracy_client::span!("features::query");
 
         client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
-    })?;
+    })
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    collision: &mut Collision,
+    svg_repo: &mut SvgRepo,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("pois::render");
+
+    let zoom = ctx.zoom;
 
     let mut to_label = Vec::<(Point, f64, String, Option<String>, usize, &Def)>::new();
-
-    let context = ctx.context;
 
     {
         let _span = tracy_client::span!("features::paint_svgs");

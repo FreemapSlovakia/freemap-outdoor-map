@@ -1,4 +1,5 @@
 use crate::render::{
+    Feature,
     collision::Collision,
     colors,
     ctx::Ctx,
@@ -10,6 +11,7 @@ use crate::render::{
     projectable::TileProjectable,
     regex_replacer::{Replacement, replace},
 };
+use cairo::Context;
 use pangocairo::pango::Style;
 use postgres::Client;
 use regex::Regex;
@@ -28,10 +30,8 @@ pub static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
     ]
 });
 
-pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
-    let _span = tracy_client::span!("national_park_names::render");
-
-    let rows = ctx.legend_features("national_park_names", || {
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("national_park_names", || {
         let sql = "
             SELECT
                 type,
@@ -51,7 +51,16 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         ";
 
         client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())
-    })?;
+    })
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    collision: &mut Collision,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("national_park_names::render");
 
     let text_options = TextOptions {
         flo: FontAndLayoutOptions {
@@ -65,7 +74,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
 
     for row in rows {
         draw_text(
-            ctx.context,
+            context,
             Some(collision),
             &row.get_point()?.project_to_tile(&ctx.tile_projector),
             &replace(row.get_string("name")?, &REPLACEMENTS),

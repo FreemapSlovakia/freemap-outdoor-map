@@ -1,6 +1,7 @@
 use std::sync::LazyLock;
 
 use crate::render::{
+    Feature,
     collision::Collision,
     colors,
     ctx::Ctx,
@@ -12,6 +13,7 @@ use crate::render::{
     projectable::TileProjectable,
     regex_replacer::{Replacement, replace},
 };
+use cairo::Context;
 use pangocairo::pango::Style;
 use postgres::Client;
 use regex::Regex;
@@ -19,20 +21,8 @@ use regex::Regex;
 static REPLACEMENTS: LazyLock<Vec<Replacement>> =
     LazyLock::new(|| vec![(Regex::new("[Vv]odná [Nn]ádrž").expect("regex"), "v. n.")]);
 
-pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
-    let _span = tracy_client::span!("water_area_names::render");
-
-    let text_options = TextOptions {
-        flo: FontAndLayoutOptions {
-            style: Style::Italic,
-            ..FontAndLayoutOptions::default()
-        },
-        color: colors::WATER_LABEL,
-        halo_color: colors::WATER_LABEL_HALO,
-        ..TextOptions::default()
-    };
-
-    let rows = ctx.legend_features("water_areas", || {
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("water_areas", || {
         let sql = "
             SELECT
                 name,
@@ -53,11 +43,30 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
                 .push(ctx.zoom as i32)
                 .as_params(),
         )
-    })?;
+    })
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    collision: &mut Collision,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("water_area_names::render");
+
+    let text_options = TextOptions {
+        flo: FontAndLayoutOptions {
+            style: Style::Italic,
+            ..FontAndLayoutOptions::default()
+        },
+        color: colors::WATER_LABEL,
+        halo_color: colors::WATER_LABEL_HALO,
+        ..TextOptions::default()
+    };
 
     for row in rows {
         draw_text(
-            ctx.context,
+            context,
             Some(collision),
             &row.get_point()?.project_to_tile(&ctx.tile_projector),
             &replace(row.get_string("name")?, &REPLACEMENTS),

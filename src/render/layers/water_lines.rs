@@ -1,4 +1,5 @@
 use crate::render::{
+    Feature,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{markers_on_path::draw_markers_on_path, smooth_line::path_smooth_bezier_spline},
@@ -6,22 +7,19 @@ use crate::render::{
     projectable::TileProjectable,
     svg_repo::SvgRepo,
 };
+use cairo::Context;
 use postgres::Client;
 
-pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRenderResult {
-    let _span = tracy_client::span!("water_lines::render");
-
-    let zoom = ctx.zoom;
-
-    let rows = ctx.legend_features("water_lines", || {
-        let geom_query = match zoom {
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("water_lines", || {
+        let geom_query = match ctx.zoom {
             12 => "ST_Segmentize(ST_Simplify(geometry, 24), 200) AS geometry",
             13 => "ST_Segmentize(ST_Simplify(geometry, 12), 200) AS geometry",
             14 => "ST_Segmentize(ST_Simplify(geometry, 6), 200) AS geometry",
             _ => "geometry",
         };
 
-        let table = match zoom {
+        let table = match ctx.zoom {
             ..=9 => "osm_waterways_gen0",
             10..=11 => "osm_waterways_gen1",
             _ => "osm_waterways",
@@ -41,7 +39,18 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         ");
 
         client.query(&sql, &ctx.bbox_query_params(Some(8.0)).as_params())
-    })?;
+    })
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    svg_repo: &mut SvgRepo,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("water_lines::render");
+
+    let zoom = ctx.zoom;
 
     // TODO lazy
     let arrow = svg_repo.get("waterway-arrow")?;
@@ -51,8 +60,6 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
 
         (-rect.width() / 2.0, -rect.height() / 2.0)
     };
-
-    let context = ctx.context;
 
     context.save()?;
 

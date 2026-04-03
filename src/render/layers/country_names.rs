@@ -1,5 +1,5 @@
 use crate::render::{
-    colors::{self, ContextExt},
+    Feature, colors,
     ctx::Ctx,
     draw::{
         create_pango_layout::FontAndLayoutOptions,
@@ -7,26 +7,31 @@ use crate::render::{
         text_on_line::{Distribution, TextOnLineOptions, draw_text_on_line},
     },
     layer_render_error::LayerRenderResult,
-    layers::borders,
     projectable::TileProjectable,
 };
+use cairo::Context;
 use postgres::Client;
 use std::f64;
 
-pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("country_names", || {
+        let sql = r#"
+            SELECT
+                name,
+                "name:en",
+                geometry
+            FROM
+                country_names_smooth
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        "#;
+
+        client.query(sql, &ctx.bbox_query_params(Some(128.0)).as_params())
+    })
+}
+
+pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
     let _span = tracy_client::span!("country_names::render");
-
-    let context = ctx.context;
-
-    let rect = ctx.bbox.project_to_tile(&ctx.tile_projector);
-
-    context.save()?;
-    context.rectangle(rect.min().x, rect.min().y, rect.width(), rect.height());
-    context.set_source_color_a(colors::WHITE, 0.33);
-    context.fill()?;
-    context.restore()?;
-
-    borders::render(ctx, client)?;
 
     let sr = 1.5f64.powf(ctx.zoom as f64 - 6.0).max(0.66);
 
@@ -56,21 +61,6 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         concave_spacing_factor: 0.0,
         ..Default::default()
     };
-
-    let rows = ctx.legend_features("country_names", || {
-        let sql = r#"
-            SELECT
-                name,
-                "name:en",
-                geometry
-            FROM
-                country_names_smooth
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        "#;
-
-        client.query(sql, &ctx.bbox_query_params(Some(128.0)).as_params())
-    })?;
 
     for row in rows {
         let name = row.get_string("name")?;

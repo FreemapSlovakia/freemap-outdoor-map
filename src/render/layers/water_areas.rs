@@ -1,19 +1,17 @@
 use crate::render::{
+    Feature,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{hatch::hatch_geometry, path_geom::path_geometry},
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
+use cairo::Context;
 use postgres::Client;
 
-pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
-    let _span = tracy_client::span!("water_areas::render");
-
-    let zoom = ctx.zoom;
-
-    let rows = ctx.legend_features("water_areas", || {
-        let table_suffix = match zoom {
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("water_areas", || {
+        let table_suffix = match ctx.zoom {
             ..=9 => "_gen0",
             10..=11 => "_gen1",
             12.. => "",
@@ -31,9 +29,13 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         ");
 
         client.query(&sql, &ctx.bbox_query_params(None).as_params())
-    })?;
+    })
+}
 
-    let context = ctx.context;
+pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
+    let _span = tracy_client::span!("water_areas::render");
+
+    let zoom = ctx.zoom;
 
     let tile_projector = &ctx.tile_projector;
 

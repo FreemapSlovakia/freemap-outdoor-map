@@ -1,4 +1,5 @@
 use crate::render::{
+    Feature,
     collision::Collision,
     colors,
     ctx::Ctx,
@@ -9,12 +10,11 @@ use crate::render::{
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
+use cairo::Context;
 use postgres::Client;
 
-pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
-    let _span = tracy_client::span!("housenumbers::render");
-
-    let rows = ctx.legend_features("housenumbers", || {
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("housenumbers", || {
         let sql = r#"
             SELECT
                 COALESCE(
@@ -32,7 +32,16 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         "#;
 
         client.query(sql, &ctx.bbox_query_params(Some(128.0)).as_params())
-    })?;
+    })
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    collision: &mut Collision,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("housenumbers::render");
 
     let text_options = TextOptions {
         flo: FontAndLayoutOptions {
@@ -47,7 +56,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
 
     for row in rows {
         draw_text(
-            ctx.context,
+            context,
             Some(collision),
             &row.get_point()?.project_to_tile(&ctx.tile_projector),
             row.get_string("housenumber")?,

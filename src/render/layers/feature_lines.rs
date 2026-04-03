@@ -11,6 +11,7 @@ use crate::render::{
     projectable::TileProjectable,
     svg_repo::SvgRepo,
 };
+use cairo::Context;
 use postgres::Client;
 
 pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
@@ -84,14 +85,13 @@ pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::E
 
 pub fn render(
     ctx: &Ctx,
+    context: &Context,
     stage: u8,
     rows: &[Feature],
     svg_repo: &mut SvgRepo,
     hillshading_datasets: Option<&mut HillshadingDatasets>,
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("feature_lines::render");
-
-    let context = ctx.context;
 
     let mut draw = |maskable: bool| -> Result<bool, LayerRenderError> {
         let mut touched = false;
@@ -170,7 +170,7 @@ pub fn render(
                 }
                 (2, 13.., "tree_row", false) => {
                     draw_line_pattern_scaled(
-                        ctx.context,
+                        context,
                         ctx.size,
                         &geom,
                         0.8,
@@ -179,20 +179,14 @@ pub fn render(
                     )?;
                 }
                 (2, 15.., "earth_bank", true) => {
-                    draw_line_pattern(
-                        ctx.context,
-                        ctx.size,
-                        &geom,
-                        0.8,
-                        svg_repo.get("earth_bank")?,
-                    )?;
+                    draw_line_pattern(context, ctx.size, &geom, 0.8, svg_repo.get("earth_bank")?)?;
                 }
                 (2, 15.., "dyke", true) => {
-                    draw_line_pattern(ctx.context, ctx.size, &geom, 0.8, svg_repo.get("dyke")?)?;
+                    draw_line_pattern(context, ctx.size, &geom, 0.8, svg_repo.get("dyke")?)?;
                 }
                 (2, 15.., "embankment", true) => {
                     draw_line_pattern(
-                        ctx.context,
+                        context,
                         ctx.size,
                         &geom,
                         0.8,
@@ -200,10 +194,10 @@ pub fn render(
                     )?;
                 }
                 (2, 15.., "gully", true) => {
-                    draw_line_pattern(ctx.context, ctx.size, &geom, 0.8, svg_repo.get("gully")?)?;
+                    draw_line_pattern(context, ctx.size, &geom, 0.8, svg_repo.get("gully")?)?;
                 }
                 (2, 15.., "cliff", true) => {
-                    draw_line_pattern(ctx.context, ctx.size, &geom, 0.8, svg_repo.get("cliff")?)?;
+                    draw_line_pattern(context, ctx.size, &geom, 0.8, svg_repo.get("cliff")?)?;
 
                     context.set_source_color(colors::AREA_LABEL);
                     context.set_line_width(1.0);
@@ -341,7 +335,7 @@ pub fn render(
         context.push_group();
 
         for mask_surface in &mask_surfaces {
-            hillshading::paint_surface(ctx, mask_surface, 1.0)?;
+            hillshading::paint_surface(ctx, context, mask_surface, 1.0)?;
         }
 
         context.pop_group_to_source()?;

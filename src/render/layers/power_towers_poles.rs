@@ -1,15 +1,15 @@
 use crate::render::{
+    Feature,
     colors::{self, ContextExt},
     ctx::Ctx,
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
+use cairo::Context;
 use postgres::Client;
 
-pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
-    let _span = tracy_client::span!("power_lines::render_towers_poles");
-
-    let rows = ctx.legend_features("power_towers_poles", || {
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("power_towers_poles", || {
         let by_zoom = if ctx.zoom < 15 {
             ""
         } else {
@@ -29,9 +29,11 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         ");
 
         client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
-    })?;
+    })
+}
 
-    let context = ctx.context;
+pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
+    let _span = tracy_client::span!("power_lines::render_towers_poles");
 
     context.save()?;
 

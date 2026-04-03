@@ -1,27 +1,17 @@
 use crate::render::{
-    GeomError,
+    Feature, GeomError,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::path_geom::path_geometry,
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
+use cairo::Context;
 use postgres::Client;
 
-pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
-    let _span = tracy_client::span!("sea::render");
-
-    let context = ctx.context;
-
-    context.save()?;
-
-    context.set_source_color(colors::WATER);
-    context.paint()?;
-
-    let zoom = ctx.zoom;
-
-    let rows = ctx.legend_features("sea", || {
-        let table = match zoom {
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("sea", || {
+        let table = match ctx.zoom {
             ..=7 => "land_z5_7",
             8..=10 => "land_z8_10",
             11..=13 => "land_z11_13",
@@ -44,10 +34,21 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         client.query(
             &sql,
             &ctx.bbox_query_params(Some(2.0))
-                .push((20.0 - zoom as f64).exp2() / 25.0)
+                .push((20.0 - ctx.zoom as f64).exp2() / 25.0)
                 .as_params(),
         )
-    })?;
+    })
+}
+
+pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
+    let _span = tracy_client::span!("sea::render");
+
+    context.save()?;
+
+    context.set_source_color(colors::WATER);
+    context.paint()?;
+
+    context.set_source_color(colors::WHITE);
 
     for row in rows {
         let geom = match row.get_geometry() {
@@ -60,7 +61,6 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
 
         path_geometry(context, &geom);
 
-        context.set_source_color(colors::WHITE);
         context.fill()?;
     }
 

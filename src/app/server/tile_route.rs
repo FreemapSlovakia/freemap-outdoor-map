@@ -205,6 +205,8 @@ pub(crate) async fn serve_tile(
         variant.coverage_geometry.clone(),
     );
 
+    println!("{coord}");
+
     let rendered = match state.render_worker_pool.render(render_request).await {
         Ok(rendered) => rendered,
         Err(err) => {

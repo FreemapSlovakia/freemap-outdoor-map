@@ -76,15 +76,13 @@ impl RenderWorkerPool {
                             break;
                         };
 
-                        let result = pool.get().map_err(ReError::from).and_then(|mut client| {
-                            render::render::render(
-                                &request,
-                                &mut client,
-                                &mut svg_repo,
-                                hillshading_datasets.as_mut(),
-                            )
-                            .map_err(ReError::from)
-                        });
+                        let result = render::render::render(
+                            &request,
+                            pool.clone(),
+                            &mut svg_repo,
+                            hillshading_datasets.as_mut(),
+                        )
+                        .map_err(ReError::from);
 
                         // Ignore send errors (client dropped).
                         let _ = resp_tx.send(result);

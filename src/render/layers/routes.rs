@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::render::{
-    RenderLayer,
+    Feature, RenderLayer,
     collision::Collision,
     ctx::Ctx,
     draw::{
@@ -15,6 +15,7 @@ use crate::render::{
     projectable::TileProjectable,
     svg_repo::{Options, SvgRepo},
 };
+use cairo::Context;
 use colorsys::{Rgb, RgbRatio};
 use postgres::Client;
 
@@ -276,17 +277,14 @@ fn get_routes_query(
     ")
 }
 
-pub fn render_marking(
+pub fn query_marking(
     ctx: &Ctx,
     client: &mut Client,
     render: &HashSet<RenderLayer>,
-    svg_repo: &mut SvgRepo,
-) -> LayerRenderResult {
-    let _span = tracy_client::span!("routes::render_marking");
+) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("routes", || {
+        let zoom = ctx.zoom;
 
-    let zoom = ctx.zoom;
-
-    let rows = ctx.legend_features("routes", || {
         let z = zoom
             + if render.contains(&RenderLayer::RoutesHikingKst) {
                 2
@@ -307,7 +305,19 @@ pub fn render_marking(
         };
 
         client.query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params())
-    })?;
+    })
+}
+
+pub fn render_marking(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    render: &HashSet<RenderLayer>,
+    svg_repo: &mut SvgRepo,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("routes::render_marking");
+
+    let zoom = ctx.zoom;
 
     for row in rows {
         let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
@@ -338,7 +348,7 @@ pub fn render_marking(
 
                     walk_geometry_line_strings(&geom, &mut |part| {
                         draw_line_pattern_scaled(
-                            ctx.context,
+                            context,
                             ctx.size,
                             &offset_line_string(part, offset),
                             0.5,
@@ -366,7 +376,7 @@ pub fn render_marking(
 
                     walk_geometry_line_strings::<_, LayerRenderError>(&geom, &mut |part| {
                         draw_line_pattern_scaled(
-                            ctx.context,
+                            context,
                             ctx.size,
                             &offset_line_string(part, offset),
                             0.5,
@@ -379,7 +389,7 @@ pub fn render_marking(
                 }
             }
 
-            let context = ctx.context;
+            let context = context;
 
             if render.contains(&RenderLayer::RoutesBicycle) {
                 let off = row.get_i32(&format!("b_{}", color.0))?;
@@ -472,19 +482,25 @@ pub fn render_marking(
     Ok(())
 }
 
-pub fn render_labels(
+pub fn query_labels(
     ctx: &Ctx,
     client: &mut Client,
     render: &HashSet<RenderLayer>,
-    collision: &mut Collision,
-) -> LayerRenderResult {
-    let _span = tracy_client::span!("routes::render_labels");
-
-    let rows = ctx.legend_features("routes", || {
+) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("routes", || {
         let query = get_routes_query(render, None, "");
 
         client.query(&query, &ctx.bbox_query_params(Some(2048.0)).as_params())
-    })?;
+    })
+}
+
+pub fn render_labels(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    collision: &mut Collision,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("routes::render_labels");
 
     for row in rows {
         let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
@@ -516,7 +532,7 @@ pub fn render_labels(
             ] {
                 options.offset = offset;
 
-                let _drawn = draw_text_on_line(ctx.context, geom, refs, Some(collision), &options)?;
+                let _drawn = draw_text_on_line(context, geom, refs, Some(collision), &options)?;
             }
 
             cairo::Result::Ok(())

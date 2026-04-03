@@ -1,19 +1,18 @@
 use crate::render::{
-    FeatureError,
+    Feature, FeatureError,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{hatch::hatch_geometry, path_geom::path_geometry},
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
+use cairo::Context;
 use postgres::Client;
 
-pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
-    let _span = tracy_client::span!("military_areas::render");
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("military_areas", || {
+        let zoom = ctx.zoom;
 
-    let zoom = ctx.zoom;
-
-    let rows = ctx.legend_features("military_areas", || {
         let sql = "
             SELECT
                 geometry
@@ -31,9 +30,13 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
                 .push(zoom as i32)
                 .as_params(),
         )
-    })?;
+    })
+}
 
-    let context = ctx.context;
+pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
+    let _span = tracy_client::span!("military_areas::render");
+
+    let zoom = ctx.zoom;
 
     context.push_group();
 

@@ -1,5 +1,4 @@
 use crate::render::{legend::LegendItemData, projectable::TileProjector, size::Size};
-use cairo::Context;
 use geo::Rect;
 use postgres::types::ToSql;
 
@@ -22,17 +21,16 @@ impl SqlParams {
     }
 }
 
-pub struct Ctx<'a> {
-    pub context: &'a Context,
+pub struct Ctx {
     pub bbox: Rect<f64>,
     pub size: Size<u32>,
     pub zoom: u8,
     pub tile_projector: TileProjector,
     pub scale: f64,
-    pub legend: Option<&'a LegendItemData>,
+    pub legend: Option<LegendItemData>,
 }
 
-impl Ctx<'_> {
+impl Ctx {
     pub fn meters_per_pixel(&self) -> f64 {
         self.bbox.width() / self.size.width as f64
     }

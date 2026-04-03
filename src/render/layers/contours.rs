@@ -1,6 +1,5 @@
-use std::borrow::Cow;
-
 use crate::render::{
+    Feature,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{
@@ -13,49 +12,38 @@ use crate::render::{
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
+use cairo::Context;
 use postgres::Client;
+use std::borrow::Cow;
 
-pub fn render(ctx: &Ctx, client: &mut Client, country: Option<&str>) -> LayerRenderResult {
-    let _span = tracy_client::span!("contours::render");
+pub fn query(
+    ctx: &Ctx,
+    client: &mut Client,
+    country: Option<&str>,
+) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("contours", || {
+        let zoom = ctx.zoom;
 
-    let context = ctx.context;
-    let zoom = ctx.zoom;
+        // TODO measure performance impact of simplification, if it makes something faster
+        let width_case = match zoom {
+            12 => "CASE WHEN height_m % 50 = 0 THEN 0.2 ELSE 0.0 END",
+            13 | 14 => {
+                "CASE
+                    WHEN height_m % 100 = 0 THEN 0.4
+                    WHEN height_m % 20 = 0 THEN 0.2
+                    ELSE 0.0
+                END"
+            }
+            _ => {
+                "CASE
+                    WHEN height_m % 100 = 0 THEN 0.6
+                    WHEN height_m % 10 = 0 THEN 0.3
+                    WHEN height_m % 50 = 0 AND height_m % 100 <> 0 THEN 0.0
+                    ELSE 0.0
+                END"
+            }
+        };
 
-    if zoom < 12 {
-        return Ok(());
-    }
-
-    let simplify_factor: f64 = match zoom {
-        ..=12 => 2000.0,
-        13 => 1000.0,
-        14 => 200.0,
-        15 => 50.0,
-        _ => 0.0,
-    };
-
-    context.save()?;
-
-    // TODO measure performance impact of simplification, if it makes something faster
-    let width_case = match zoom {
-        12 => "CASE WHEN height_m % 50 = 0 THEN 0.2 ELSE 0.0 END",
-        13 | 14 => {
-            "CASE
-                WHEN height_m % 100 = 0 THEN 0.4
-                WHEN height_m % 20 = 0 THEN 0.2
-                ELSE 0.0
-            END"
-        }
-        _ => {
-            "CASE
-                WHEN height_m % 100 = 0 THEN 0.6
-                WHEN height_m % 10 = 0 THEN 0.3
-                WHEN height_m % 50 = 0 AND height_m % 100 <> 0 THEN 0.0
-                ELSE 0.0
-            END"
-        }
-    };
-
-    let rows = ctx.legend_features("contours", || {
         let sql = {
             let table: Cow<_> = if let Some(country) = country {
                 format!("contour_{country}_split").into()
@@ -86,13 +74,37 @@ pub fn render(ctx: &Ctx, client: &mut Client, country: Option<&str>) -> LayerRen
             ")
         };
 
+        let simplify_factor: f64 = match zoom {
+            ..=12 => 2000.0,
+            13 => 1000.0,
+            14 => 200.0,
+            15 => 50.0,
+            _ => 0.0,
+        };
+
         client.query(
             &sql,
             &ctx.bbox_query_params(Some(8.0))
                 .push(simplify_factor)
                 .as_params(),
         )
-    })?;
+    })
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("contours::render");
+
+    let zoom = ctx.zoom;
+
+    if zoom < 12 {
+        return Ok(());
+    }
+
+    context.save()?;
 
     for row in rows {
         let height = row.get_i16("height_m")?;

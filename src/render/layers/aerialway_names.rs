@@ -1,4 +1,5 @@
 use crate::render::{
+    Feature,
     collision::Collision,
     colors,
     ctx::Ctx,
@@ -9,12 +10,11 @@ use crate::render::{
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
+use cairo::Context;
 use postgres::Client;
 
-pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
-    let _span = tracy_client::span!("aerialway_names::render");
-
-    let rows = ctx.legend_features("feature_lines", || {
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
+    ctx.legend_features("feature_lines", || {
         let sql = "
             SELECT
                 geometry,
@@ -30,7 +30,16 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         ";
 
         client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())
-    })?;
+    })
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    collision: &mut Collision,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("aerialway_names::render");
 
     let options = TextOnLineOptions {
         distribution: Distribution::Align {
@@ -48,7 +57,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
 
         let geom = offset_line_string(&geom, 10.0);
 
-        draw_text_on_line(ctx.context, &geom, name, Some(collision), &options)?;
+        draw_text_on_line(context, &geom, name, Some(collision), &options)?;
     }
 
     Ok(())
