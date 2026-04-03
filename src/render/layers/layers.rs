@@ -551,7 +551,7 @@ pub fn render(
     if zoom >= 8 && to_render.contains(&RenderLayer::CountryBorders) {
         prefetcher.add(
             "borders",
-            None,
+            Some("country_borders"),
             |ctx, conn| async move { layers::borders::query(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::borders::render(&ctx, context, rows),
         );
