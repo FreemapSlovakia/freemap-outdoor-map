@@ -7,48 +7,46 @@ use crate::render::{
     svg_repo::SvgRepo,
 };
 use cairo::Context;
-use postgres::Client;
+use postgres::{Client, Row};
 use std::cell::Cell;
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("road_access_restrictions", || {
-        let sql = "
-            SELECT
-                CASE
-                    WHEN
-                        bicycle NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-                        OR (
-                            bicycle = '' AND
-                            vehicle NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-                        )
-                        OR (
-                            bicycle = '' AND
-                            vehicle = '' AND
-                            access NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-                        )
-                    THEN 1
-                    ELSE 0
-                END AS no_bicycle,
-                CASE
-                    WHEN
-                        foot NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-                        OR (
-                            foot = '' AND
-                            access NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-                        )
-                    THEN 1
-                    ELSE 0
-                END AS no_foot,
-                geometry
-            FROM
-                osm_roads
-            WHERE
-                type NOT IN ('trunk', 'motorway', 'trunk_link', 'motorway_link') AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ";
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error> {
+    let sql = "
+        SELECT
+            CASE
+                WHEN
+                    bicycle NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                    OR (
+                        bicycle = '' AND
+                        vehicle NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                    )
+                    OR (
+                        bicycle = '' AND
+                        vehicle = '' AND
+                        access NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                    )
+                THEN 1
+                ELSE 0
+            END AS no_bicycle,
+            CASE
+                WHEN
+                    foot NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                    OR (
+                        foot = '' AND
+                        access NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                    )
+                THEN 1
+                ELSE 0
+            END AS no_foot,
+            geometry
+        FROM
+            osm_roads
+        WHERE
+            type NOT IN ('trunk', 'motorway', 'trunk_link', 'motorway_link') AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+    ";
 
-        client.query(sql, &ctx.bbox_query_params(Some(32.0)).as_params())
-    })
+    client.query(sql, &ctx.bbox_query_params(Some(32.0)).as_params())
 }
 
 pub fn render(

@@ -7,18 +7,17 @@ use crate::render::{
     projectable::TileProjectable,
 };
 use cairo::Context;
-use postgres::Client;
+use postgres::{Client, Row};
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("sea", || {
-        let table = match ctx.zoom {
-            ..=7 => "land_z5_7",
-            8..=10 => "land_z8_10",
-            11..=13 => "land_z11_13",
-            14.. => "land_z14_plus",
-        };
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error> {
+    let table = match ctx.zoom {
+        ..=7 => "land_z5_7",
+        8..=10 => "land_z8_10",
+        11..=13 => "land_z11_13",
+        14.. => "land_z14_plus",
+    };
 
-        #[cfg_attr(any(), rustfmt::skip)]
+    #[cfg_attr(any(), rustfmt::skip)]
         let sql = format!("
             SELECT
                 ST_Intersection(
@@ -31,13 +30,12 @@ pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::E
                 geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
         ");
 
-        client.query(
-            &sql,
-            &ctx.bbox_query_params(Some(2.0))
-                .push((20.0 - ctx.zoom as f64).exp2() / 25.0)
-                .as_params(),
-        )
-    })
+    client.query(
+        &sql,
+        &ctx.bbox_query_params(Some(2.0))
+            .push((20.0 - ctx.zoom as f64).exp2() / 25.0)
+            .as_params(),
+    )
 }
 
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {

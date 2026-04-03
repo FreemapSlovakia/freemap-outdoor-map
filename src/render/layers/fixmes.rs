@@ -9,37 +9,33 @@ use crate::render::{
 use cairo::Context;
 use postgres::Client;
 
-pub fn query_points(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("fixmes", || {
-        let sql = "
-            SELECT
-                geometry
-            FROM
-                osm_fixmes
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            ORDER BY
-                osm_id
-        ";
+pub fn query_points(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let sql = "
+        SELECT
+            geometry
+        FROM
+            osm_fixmes
+        WHERE
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            osm_id
+    ";
 
-        client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())
-    })
+    client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())
 }
 
-pub fn query_lines(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("fixmes_line", || {
-        let sql = "
-            SELECT * FROM (
-                SELECT geometry, fixme FROM osm_feature_lines
-                UNION
-                SELECT geometry, fixme FROM osm_roads
-            ) foo
-            WHERE
-                fixme <> '' AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)";
+pub fn query_lines(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let sql = "
+        SELECT * FROM (
+            SELECT geometry, fixme FROM osm_feature_lines
+            UNION
+            SELECT geometry, fixme FROM osm_roads
+        ) foo
+        WHERE
+            fixme <> '' AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)";
 
-        client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())
-    })
+    client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())
 }
 
 pub fn render_points(

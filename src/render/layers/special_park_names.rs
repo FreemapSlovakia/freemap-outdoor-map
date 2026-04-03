@@ -14,24 +14,22 @@ use cairo::Context;
 use pangocairo::pango::Style;
 use postgres::Client;
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("special_park_names", || {
-        let sql = "
-            SELECT
-                name,
-                geometry
-            FROM
-                osm_pois
-            WHERE
-                name <> '' AND
-                (type = 'zoo' OR type = 'theme_park') AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            ORDER BY
-                osm_id
-        ";
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let sql = "
+        SELECT
+            name,
+            geometry
+        FROM
+            osm_pois
+        WHERE
+            name <> '' AND
+            (type = 'zoo' OR type = 'theme_park') AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            osm_id
+    ";
 
-        client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())
-    })
+    client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())
 }
 
 pub fn render(

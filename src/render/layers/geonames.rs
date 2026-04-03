@@ -13,22 +13,20 @@ use cairo::Context;
 use pangocairo::pango::Style;
 use postgres::Client;
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("geonames", || {
-        let sql = "
-            SELECT
-                name,
-                geometry
-            FROM
-                geonames_smooth
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            ORDER BY
-                ogc_fid
-        ";
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let sql = "
+        SELECT
+            name,
+            geometry
+        FROM
+            geonames_smooth
+        WHERE
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            ogc_fid
+    ";
 
-        client.query(sql, &ctx.bbox_query_params(Some(20.0)).as_params())
-    })
+    client.query(sql, &ctx.bbox_query_params(Some(20.0)).as_params())
 }
 
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {

@@ -9,19 +9,17 @@ use crate::render::{
 use cairo::Context;
 use postgres::Client;
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("country_borders", || {
-        let sql = "
-            SELECT
-                geometry
-            FROM
-                osm_country_members
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ";
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let sql = "
+        SELECT
+            geometry
+        FROM
+            osm_country_members
+        WHERE
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+    ";
 
-        client.query(sql, &ctx.bbox_query_params(Some(10.0)).as_params())
-    })
+    client.query(sql, &ctx.bbox_query_params(Some(10.0)).as_params())
 }
 
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {

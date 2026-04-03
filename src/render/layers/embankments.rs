@@ -1,28 +1,22 @@
 use crate::render::{
-    Feature,
-    ctx::Ctx,
-    draw::line_pattern::draw_line_pattern,
-    layer_render_error::LayerRenderResult,
-    projectable::TileProjectable,
-    svg_repo::SvgRepo,
+    Feature, ctx::Ctx, draw::line_pattern::draw_line_pattern,
+    layer_render_error::LayerRenderResult, projectable::TileProjectable, svg_repo::SvgRepo,
 };
 use cairo::Context;
-use postgres::Client;
+use postgres::{Client, Row};
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("embankments", || {
-        let sql = "
-            SELECT
-                geometry
-            FROM
-                osm_roads
-            WHERE
-                embankment = 1 AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ";
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error> {
+    let sql = "
+        SELECT
+            geometry
+        FROM
+            osm_roads
+        WHERE
+            embankment = 1 AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+    ";
 
-        client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())
-    })
+    client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())
 }
 
 pub fn render(

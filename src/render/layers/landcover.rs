@@ -10,7 +10,7 @@ use crate::render::{
     xyz::to_absolute_pixel_coords,
 };
 use cairo::{Context, Extend, Matrix, SurfacePattern};
-use postgres::Client;
+use postgres::{Client, Row};
 use std::{collections::HashMap, sync::LazyLock};
 
 pub enum Paint {
@@ -78,50 +78,48 @@ pub static PAINTS: LazyLock<HashMap<&'static str, &'static [Paint]>> = LazyLock:
     paint_map
 });
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("landcovers", || {
-        let a = "'pitch', 'playground', 'golf_course', 'track'";
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error> {
+    let a = "'pitch', 'playground', 'golf_course', 'track'";
 
-        let excl_types = match ctx.zoom {
-            ..12 => &format!("type NOT IN ({a}) AND"),
-            12..13 => {
-                &format!("type NOT IN ({a}, 'parking', 'bunker_silo', 'storage_tank', 'silo') AND")
-            }
-            _ => "",
-        };
+    let excl_types = match ctx.zoom {
+        ..12 => &format!("type NOT IN ({a}) AND"),
+        12..13 => {
+            &format!("type NOT IN ({a}, 'parking', 'bunker_silo', 'storage_tank', 'silo') AND")
+        }
+        _ => "",
+    };
 
-        let table_suffix = match ctx.zoom {
-            ..=9 => "_gen0",
-            10..=11 => "_gen1",
-            12.. => "",
-        };
+    let table_suffix = match ctx.zoom {
+        ..=9 => "_gen0",
+        10..=11 => "_gen1",
+        12.. => "",
+    };
 
-        let z_order_case = build_landcover_z_order_case("type");
+    let z_order_case = build_landcover_z_order_case("type");
 
-        let query = &format!("
-            SELECT
-                CASE
-                    WHEN
-                        type = 'wetland' AND
-                        tags->'wetland' IN ('bog', 'reedbed', 'marsh', 'swamp', 'wet_meadow', 'mangrove', 'fen')
-                    THEN tags->'wetland'
-                    ELSE type
-                END AS type,
-                geometry,
-                osm_id,
-                {z_order_case} AS z_order
-            FROM
-                osm_landcovers{table_suffix}
-            WHERE
-                {excl_types}
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            ORDER BY
-                z_order DESC NULLS LAST,
-                osm_id
-        ");
+    let query = &format!("
+        SELECT
+            CASE
+                WHEN
+                    type = 'wetland' AND
+                    tags->'wetland' IN ('bog', 'reedbed', 'marsh', 'swamp', 'wet_meadow', 'mangrove', 'fen')
+                THEN tags->'wetland'
+                ELSE type
+            END AS type,
+            geometry,
+            osm_id,
+            {z_order_case} AS z_order
+        FROM
+            osm_landcovers{table_suffix}
+        WHERE
+            {excl_types}
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            z_order DESC NULLS LAST,
+            osm_id
+    ");
 
-        client.query(query, &ctx.bbox_query_params(Some(4.0)).as_params())
-    })
+    client.query(query, &ctx.bbox_query_params(Some(4.0)).as_params())
 }
 
 pub fn render(

@@ -14,40 +14,38 @@ use cairo::Context;
 use pangocairo::pango::Weight;
 use postgres::Client;
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("place_names", || {
-        let zoom = ctx.zoom;
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let zoom = ctx.zoom;
 
-        let by_zoom = match zoom {
-            8 => "a.type IN('city', 'islet', 'island')",
-            9..=10 => "a.type IN('islet', 'island', 'city', 'town')",
-            11 => "a.type IN ('islet', 'island', 'city', 'town', 'village')",
-            12.. => "a.type <> 'locality'",
-            _ => return Ok(Vec::new()),
-        };
+    let by_zoom = match zoom {
+        8 => "a.type IN('city', 'islet', 'island')",
+        9..=10 => "a.type IN('islet', 'island', 'city', 'town')",
+        11 => "a.type IN ('islet', 'island', 'city', 'town', 'village')",
+        12.. => "a.type <> 'locality'",
+        _ => return Ok(Vec::new()),
+    };
 
-        #[cfg_attr(any(), rustfmt::skip)]
-        let sql = format!("
-            SELECT
-                a.name,
-                a.type,
-                COALESCE(a.area, 0) AS area,
-                ST_PointOnSurface(a.geometry) AS geometry
-            FROM
-                osm_places a LEFT JOIN osm_places b ON a.name = b.name AND a.osm_id <> b.osm_id AND ST_Contains(b.geometry, a.geometry)
-            WHERE
-                 {by_zoom} AND
-                 a.name <> '' AND
-                 a.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                 b.osm_id IS NULL
-            ORDER BY
-                a.z_order DESC,
-                a.population DESC,
-                a.osm_id
-        ");
+    #[cfg_attr(any(), rustfmt::skip)]
+    let sql = format!("
+        SELECT
+            a.name,
+            a.type,
+            COALESCE(a.area, 0) AS area,
+            ST_PointOnSurface(a.geometry) AS geometry
+        FROM
+            osm_places a LEFT JOIN osm_places b ON a.name = b.name AND a.osm_id <> b.osm_id AND ST_Contains(b.geometry, a.geometry)
+        WHERE
+                {by_zoom} AND
+                a.name <> '' AND
+                a.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                b.osm_id IS NULL
+        ORDER BY
+            a.z_order DESC,
+            a.population DESC,
+            a.osm_id
+    ");
 
-        client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
-    })
+    client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
 }
 
 pub fn render(

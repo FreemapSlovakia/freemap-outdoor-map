@@ -8,38 +8,36 @@ use crate::render::{
     svg_repo::SvgRepo,
 };
 use cairo::Context;
-use postgres::Client;
+use postgres::{Client, Row};
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("water_lines", || {
-        let geom_query = match ctx.zoom {
-            12 => "ST_Segmentize(ST_Simplify(geometry, 24), 200) AS geometry",
-            13 => "ST_Segmentize(ST_Simplify(geometry, 12), 200) AS geometry",
-            14 => "ST_Segmentize(ST_Simplify(geometry, 6), 200) AS geometry",
-            _ => "geometry",
-        };
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error> {
+    let geom_query = match ctx.zoom {
+        12 => "ST_Segmentize(ST_Simplify(geometry, 24), 200) AS geometry",
+        13 => "ST_Segmentize(ST_Simplify(geometry, 12), 200) AS geometry",
+        14 => "ST_Segmentize(ST_Simplify(geometry, 6), 200) AS geometry",
+        _ => "geometry",
+    };
 
-        let table = match ctx.zoom {
-            ..=9 => "osm_waterways_gen0",
-            10..=11 => "osm_waterways_gen1",
-            _ => "osm_waterways",
-        };
+    let table = match ctx.zoom {
+        ..=9 => "osm_waterways_gen0",
+        10..=11 => "osm_waterways_gen1",
+        _ => "osm_waterways",
+    };
 
-        #[cfg_attr(any(), rustfmt::skip)]
-        let sql = format!("
-            SELECT
-                {geom_query},
-                type,
-                seasonal OR intermittent AS tmp,
-                tunnel
-            FROM
-                {table}
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ");
+    #[cfg_attr(any(), rustfmt::skip)]
+    let sql = format!("
+        SELECT
+            {geom_query},
+            type,
+            seasonal OR intermittent AS tmp,
+            tunnel
+        FROM
+            {table}
+        WHERE
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+    ");
 
-        client.query(&sql, &ctx.bbox_query_params(Some(8.0)).as_params())
-    })
+    client.query(&sql, &ctx.bbox_query_params(Some(8.0)).as_params())
 }
 
 pub fn render(

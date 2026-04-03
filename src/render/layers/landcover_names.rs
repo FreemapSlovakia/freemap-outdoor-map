@@ -34,48 +34,46 @@ static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
     ]
 });
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("landcovers", || {
-        let z_order_case = build_landcover_z_order_case("type");
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let z_order_case = build_landcover_z_order_case("type");
 
-        // TODO include types (`type IN`), don't exclude (`type NOT IN`)
-        // TODO ... or maybe merge with bordered_area_names
-        // nested sql is to remove duplicate entries imported by imposm because we use `mappings` in yaml
-        let sql = format!(
-            "
-            WITH main AS (
-                SELECT DISTINCT ON (osm_id)
-                    geometry,
-                    name,
-                    type,
-                    osm_id AS osm_id
-                FROM
-                    osm_landcovers
-                WHERE
-                    type NOT IN ('zoo', 'theme_park', 'winter_sports', 'national_park', 'protected_area', 'nature_reserve', 'aquaculture') AND
-                    name <> '' AND
-                    area >= $6 AND
-                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            )
-            SELECT
+    // TODO include types (`type IN`), don't exclude (`type NOT IN`)
+    // TODO ... or maybe merge with bordered_area_names
+    // nested sql is to remove duplicate entries imported by imposm because we use `mappings` in yaml
+    let sql = format!(
+        "
+        WITH main AS (
+            SELECT DISTINCT ON (osm_id)
+                geometry,
                 name,
                 type,
-                ST_PointOnSurface(geometry) AS geometry
+                osm_id AS osm_id
             FROM
-                main
-            ORDER BY
-                {z_order_case} DESC,
-                osm_id
-        "
-        );
-
-        client.query(
-            &sql,
-            &ctx.bbox_query_params(Some(512.0))
-                .push(2_400_000.0f32 / (2.0f32 * (ctx.zoom as f32 - 10.0)).exp2())
-                .as_params(),
+                osm_landcovers
+            WHERE
+                type NOT IN ('zoo', 'theme_park', 'winter_sports', 'national_park', 'protected_area', 'nature_reserve', 'aquaculture') AND
+                name <> '' AND
+                area >= $6 AND
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
         )
-    })
+        SELECT
+            name,
+            type,
+            ST_PointOnSurface(geometry) AS geometry
+        FROM
+            main
+        ORDER BY
+            {z_order_case} DESC,
+            osm_id
+    "
+    );
+
+    client.query(
+        &sql,
+        &ctx.bbox_query_params(Some(512.0))
+            .push(2_400_000.0f32 / (2.0f32 * (ctx.zoom as f32 - 10.0)).exp2())
+            .as_params(),
+    )
 }
 
 pub fn render(

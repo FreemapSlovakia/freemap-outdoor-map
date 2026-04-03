@@ -1,39 +1,34 @@
 use crate::render::{
-    Feature,
-    ctx::Ctx,
-    layer_render_error::LayerRenderResult,
-    projectable::TileProjectable,
+    Feature, ctx::Ctx, layer_render_error::LayerRenderResult, projectable::TileProjectable,
     svg_repo::SvgRepo,
 };
 use cairo::Context;
-use postgres::Client;
+use postgres::{Client, Row};
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("trees", || {
-        let sql = "
-            SELECT
-                type,
-                geometry
-            FROM
-                osm_pois
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error> {
+    let sql = "
+        SELECT
+            type,
+            geometry
+        FROM
+            osm_pois
+        WHERE
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+            (
                 (
-                    (
-                        type = 'tree' AND
-                        (NOT (tags ? 'protected') OR tags->'protected' = 'no') AND
-                        (NOT (tags ? 'denotation') OR tags->'denotation' <> 'natural_monument')
-                    )
-                    OR type = 'shrub'
+                    type = 'tree' AND
+                    (NOT (tags ? 'protected') OR tags->'protected' = 'no') AND
+                    (NOT (tags ? 'denotation') OR tags->'denotation' <> 'natural_monument')
                 )
-            ORDER BY
-                type,
-                st_x(geometry),
-                osm_id
-        ";
+                OR type = 'shrub'
+            )
+        ORDER BY
+            type,
+            st_x(geometry),
+            osm_id
+    ";
 
-        client.query(sql, &ctx.bbox_query_params(Some(32.0)).as_params())
-    })
+    client.query(sql, &ctx.bbox_query_params(Some(32.0)).as_params())
 }
 
 pub fn render(

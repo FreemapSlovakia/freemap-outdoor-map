@@ -13,89 +13,83 @@ use crate::render::{
     projectable::TileProjectable,
 };
 use cairo::Context;
-use postgres::Client;
+use postgres::{Client, Row};
 use std::borrow::Cow;
 
 pub fn query(
     ctx: &Ctx,
     client: &mut Client,
     country: Option<&str>,
-) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("contours", || {
-        let zoom = ctx.zoom;
+) -> Result<Vec<Row>, postgres::Error> {
+    let zoom = ctx.zoom;
 
-        // TODO measure performance impact of simplification, if it makes something faster
-        let width_case = match zoom {
-            12 => "CASE WHEN height_m % 50 = 0 THEN 0.2 ELSE 0.0 END",
-            13 | 14 => {
-                "CASE
-                    WHEN height_m % 100 = 0 THEN 0.4
-                    WHEN height_m % 20 = 0 THEN 0.2
-                    ELSE 0.0
-                END"
-            }
-            _ => {
-                "CASE
-                    WHEN height_m % 100 = 0 THEN 0.6
-                    WHEN height_m % 10 = 0 THEN 0.3
-                    WHEN height_m % 50 = 0 AND height_m % 100 <> 0 THEN 0.0
-                    ELSE 0.0
-                END"
-            }
+    // TODO measure performance impact of simplification, if it makes something faster
+    let width_case = match zoom {
+        12 => "CASE WHEN height_m % 50 = 0 THEN 0.2 ELSE 0.0 END",
+        13 | 14 => {
+            "CASE
+                WHEN height_m % 100 = 0 THEN 0.4
+                WHEN height_m % 20 = 0 THEN 0.2
+                ELSE 0.0
+            END"
+        }
+        _ => {
+            "CASE
+                WHEN height_m % 100 = 0 THEN 0.6
+                WHEN height_m % 10 = 0 THEN 0.3
+                WHEN height_m % 50 = 0 AND height_m % 100 <> 0 THEN 0.0
+                ELSE 0.0
+            END"
+        }
+    };
+
+    let sql = {
+        let table: Cow<_> = if let Some(country) = country {
+            format!("contour_{country}_split").into()
+        } else {
+            "cont_dmr_split".into()
         };
 
-        let sql = {
-            let table: Cow<_> = if let Some(country) = country {
-                format!("contour_{country}_split").into()
-            } else {
-                "cont_dmr_split".into()
-            };
-
-            #[cfg_attr(any(), rustfmt::skip)]
-            format!("
-                WITH contours AS (
-                    SELECT
-                        ST_SimplifyVW(wkb_geometry, $6) AS geometry,
-                        height_m,
-                        ({width_case})::double precision AS width
-                    FROM
-                        {table}
-                    WHERE
-                        wkb_geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-                )
+        #[cfg_attr(any(), rustfmt::skip)]
+        format!("
+            WITH contours AS (
                 SELECT
-                    geometry,
+                    ST_SimplifyVW(wkb_geometry, $6) AS geometry,
                     height_m,
-                    width
+                    ({width_case})::double precision AS width
                 FROM
-                    contours
+                    {table}
                 WHERE
-                    width > 0
-            ")
-        };
+                    wkb_geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            )
+            SELECT
+                geometry,
+                height_m,
+                width
+            FROM
+                contours
+            WHERE
+                width > 0
+        ")
+    };
 
-        let simplify_factor: f64 = match zoom {
-            ..=12 => 2000.0,
-            13 => 1000.0,
-            14 => 200.0,
-            15 => 50.0,
-            _ => 0.0,
-        };
+    let simplify_factor: f64 = match zoom {
+        ..=12 => 2000.0,
+        13 => 1000.0,
+        14 => 200.0,
+        15 => 50.0,
+        _ => 0.0,
+    };
 
-        client.query(
-            &sql,
-            &ctx.bbox_query_params(Some(8.0))
-                .push(simplify_factor)
-                .as_params(),
-        )
-    })
+    client.query(
+        &sql,
+        &ctx.bbox_query_params(Some(8.0))
+            .push(simplify_factor)
+            .as_params(),
+    )
 }
 
-pub fn render(
-    ctx: &Ctx,
-    context: &Context,
-    rows: Vec<Feature>,
-) -> LayerRenderResult {
+pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
     let _span = tracy_client::span!("contours::render");
 
     let zoom = ctx.zoom;

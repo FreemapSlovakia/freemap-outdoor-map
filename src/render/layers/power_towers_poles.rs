@@ -8,28 +8,26 @@ use crate::render::{
 use cairo::Context;
 use postgres::Client;
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("power_towers_poles", || {
-        let by_zoom = if ctx.zoom < 15 {
-            ""
-        } else {
-            ", 'pylon', 'pole'"
-        };
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let by_zoom = if ctx.zoom < 15 {
+        ""
+    } else {
+        ", 'pylon', 'pole'"
+    };
 
-        #[cfg_attr(any(), rustfmt::skip)]
-        let sql = format!("
-            SELECT
-                geometry,
-                type
-            FROM
-                osm_pois
-            WHERE
-                type IN ('power_tower'{by_zoom}) AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ");
+    #[cfg_attr(any(), rustfmt::skip)]
+    let sql = format!("
+        SELECT
+            geometry,
+            type
+        FROM
+            osm_pois
+        WHERE
+            type IN ('power_tower'{by_zoom}) AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+    ");
 
-        client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
-    })
+    client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
 }
 
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {

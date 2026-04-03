@@ -14,85 +14,78 @@ use crate::render::{
 use cairo::Context;
 use postgres::Client;
 
-pub fn query_areas(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("protected_areas", || {
-        let zoom = ctx.zoom;
+pub fn query_areas(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let extra_where = if ctx.zoom < 12 {
+        " AND NOT (
+            type = 'nature_reserve' OR
+            type = 'protected_area' AND tags->'protect_class' <> '2'
+        )"
+    } else {
+        ""
+    };
 
-        let extra_where = if zoom < 12 {
-            " AND NOT (
-                type = 'nature_reserve' OR
-                type = 'protected_area' AND tags->'protect_class' <> '2'
-            )"
-        } else {
-            ""
-        };
-
-        #[cfg_attr(any(), rustfmt::skip)]
-        let sql = &format!("
-            SELECT
-                type,
-                COALESCE(tags->'protect_class', '') AS protect_class,
-                geometry
-            FROM
-                osm_landcovers
-            WHERE
-                type IN ('national_park', 'protected_area', 'leisure', 'nature_reserve') AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-                {extra_where}
-            ");
-
-        client.query(sql, &ctx.bbox_query_params(Some(10.0)).as_params())
-    })
-}
-
-pub fn query_borders(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("protected_areas", || {
-        let zoom = ctx.zoom;
-
-        let w = if zoom < 12 {
-            " AND NOT (type = 'nature_reserve' OR type = 'protected_area' AND tags->'protect_class' <> '2')"
-        } else {
-            ""
-        };
-
-        let snap = (26f64 - zoom as f64).exp2();
-
-        // NOTE we do ST_Intersection to prevent memory error for very long borders on bigger zooms
-
-        #[cfg_attr(any(), rustfmt::skip)]
-        let sql = &format!("
-            SELECT
-                type,
-                COALESCE(tags->'protect_class', '') AS protect_class,
-                ST_Intersection(
-                    geometry,
-                    ST_Expand(ST_MakeEnvelope($6, $7, $8, $9, 3857), 50000)
-                ) AS geometry
-            FROM
-                osm_landcovers
-            WHERE
-                type IN ('national_park', 'protected_area', 'leisure', 'nature_reserve') AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-                {w}
+    #[cfg_attr(any(), rustfmt::skip)]
+    let sql = &format!("
+        SELECT
+            type,
+            COALESCE(tags->'protect_class', '') AS protect_class,
+            geometry
+        FROM
+            osm_landcovers
+        WHERE
+            type IN ('national_park', 'protected_area', 'leisure', 'nature_reserve') AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            {extra_where}
         ");
 
-        client.query(
-            sql,
-            &ctx.bbox_query_params(Some(10.0))
-                .push(((ctx.bbox.min().x - snap) / snap).floor() * snap)
-                .push(((ctx.bbox.min().y - snap) / snap).floor() * snap)
-                .push(((ctx.bbox.max().x + snap) / snap).ceil() * snap)
-                .push(((ctx.bbox.max().y + snap) / snap).ceil() * snap)
-                .as_params(),
-        )
-    })
+    client.query(sql, &ctx.bbox_query_params(Some(10.0)).as_params())
 }
 
-pub fn render_areas(
+pub fn query_borders(
     ctx: &Ctx,
-    context: &Context,
-    areas: Vec<Feature>,
-) -> LayerRenderResult {
+    client: &mut Client,
+) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let zoom = ctx.zoom;
+
+    let w = if zoom < 12 {
+        " AND NOT (type = 'nature_reserve' OR type = 'protected_area' AND tags->'protect_class' <> '2')"
+    } else {
+        ""
+    };
+
+    let snap = (26f64 - zoom as f64).exp2();
+
+    // NOTE we do ST_Intersection to prevent memory error for very long borders on bigger zooms
+
+    #[cfg_attr(any(), rustfmt::skip)]
+    let sql = &format!("
+        SELECT
+            type,
+            COALESCE(tags->'protect_class', '') AS protect_class,
+            ST_Intersection(
+                geometry,
+                ST_Expand(ST_MakeEnvelope($6, $7, $8, $9, 3857), 50000)
+            ) AS geometry
+        FROM
+            osm_landcovers
+        WHERE
+            type IN ('national_park', 'protected_area', 'leisure', 'nature_reserve') AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            {w}
+    ");
+
+    client.query(
+        sql,
+        &ctx.bbox_query_params(Some(10.0))
+            .push(((ctx.bbox.min().x - snap) / snap).floor() * snap)
+            .push(((ctx.bbox.min().y - snap) / snap).floor() * snap)
+            .push(((ctx.bbox.max().x + snap) / snap).ceil() * snap)
+            .push(((ctx.bbox.max().y + snap) / snap).ceil() * snap)
+            .as_params(),
+    )
+}
+
+pub fn render_areas(ctx: &Ctx, context: &Context, areas: Vec<Feature>) -> LayerRenderResult {
     let _span = tracy_client::span!("protected_areas::render_areas");
 
     let zoom = ctx.zoom;

@@ -7,17 +7,16 @@ use crate::render::{
     projectable::TileProjectable,
 };
 use cairo::Context;
-use postgres::Client;
+use postgres::{Client, Row};
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("water_areas", || {
-        let table_suffix = match ctx.zoom {
-            ..=9 => "_gen0",
-            10..=11 => "_gen1",
-            12.. => "",
-        };
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error> {
+    let table_suffix = match ctx.zoom {
+        ..=9 => "_gen0",
+        10..=11 => "_gen1",
+        12.. => "",
+    };
 
-        #[cfg_attr(any(), rustfmt::skip)]
+    #[cfg_attr(any(), rustfmt::skip)]
         let sql = format!("
             SELECT
                 geometry,
@@ -28,8 +27,7 @@ pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::E
                 geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
         ");
 
-        client.query(&sql, &ctx.bbox_query_params(None).as_params())
-    })
+    client.query(&sql, &ctx.bbox_query_params(None).as_params())
 }
 
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {

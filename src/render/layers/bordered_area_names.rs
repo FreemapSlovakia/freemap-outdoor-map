@@ -18,44 +18,46 @@ use cairo::Context;
 use pangocairo::pango::Style;
 use postgres::Client;
 
-pub fn query_centroids(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("protected_areas", || {
-        let sql = "
-            SELECT
-                name,
-                ST_Centroid(geometry) AS geometry
-            FROM
-                osm_landcovers
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                (type = 'nature_reserve' OR (type = 'protected_area' AND tags->'protect_class' <> '2'))
-            ORDER BY
-                area DESC
-        ";
+pub fn query_centroids(
+    ctx: &Ctx,
+    client: &mut Client,
+) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let sql = "
+        SELECT
+            name,
+            ST_Centroid(geometry) AS geometry
+        FROM
+            osm_landcovers
+        WHERE
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+            (type = 'nature_reserve' OR (type = 'protected_area' AND tags->'protect_class' <> '2'))
+        ORDER BY
+            area DESC
+    ";
 
-        client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
-    })
+    client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
 }
 
-pub fn query_borders(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("protected_areas", || {
-        let sql = "
-            SELECT
-                type,
-                name,
-                ST_Boundary(geometry) AS geometry
-            FROM
-                osm_landcovers
-            WHERE
-                (type IN ('national_park', 'winter_sports') OR (type = 'protected_area' AND tags->'protect_class' = '2')) AND
-                name <> '' AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            ORDER BY
-                area DESC
-        ";
+pub fn query_borders(
+    ctx: &Ctx,
+    client: &mut Client,
+) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let sql = "
+        SELECT
+            type,
+            name,
+            ST_Boundary(geometry) AS geometry
+        FROM
+            osm_landcovers
+        WHERE
+            (type IN ('national_park', 'winter_sports') OR (type = 'protected_area' AND tags->'protect_class' = '2')) AND
+            name <> '' AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            area DESC
+    ";
 
-        client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
-    })
+    client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
 }
 
 pub fn render_centroids(

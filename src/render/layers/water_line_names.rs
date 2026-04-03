@@ -25,44 +25,44 @@ static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
     ]
 });
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("water_lines", || {
-        let w = if ctx.zoom < 14 {
-            "AND type = 'river'"
-        } else {
-            ""
-        };
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let w = if ctx.zoom < 14 {
+        "AND type = 'river'"
+    } else {
+        ""
+    };
 
-        let sql = format!("
-            WITH merged AS (
-                SELECT
-                    ST_LineMerge(ST_Collect(ST_Segmentize(ST_Simplify(geometry, 24), 200))) AS geometry,
-                    name,
-                    type,
-                    MIN(osm_id) AS osm_id
-                FROM
-                    osm_waterways
-                WHERE
-                    name <> '' AND
-                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-                    {w}
-                GROUP BY
-                    name,
-                    type
-            )
+    let sql = format!(
+        "
+        WITH merged AS (
             SELECT
+                ST_LineMerge(ST_Collect(ST_Segmentize(ST_Simplify(geometry, 24), 200))) AS geometry,
                 name,
                 type,
-                geometry
+                MIN(osm_id) AS osm_id
             FROM
-                merged
-            ORDER BY
-                type <> 'river',
-                osm_id
-        ");
+                osm_waterways
+            WHERE
+                name <> '' AND
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+                {w}
+            GROUP BY
+                name,
+                type
+        )
+        SELECT
+            name,
+            type,
+            geometry
+        FROM
+            merged
+        ORDER BY
+            type <> 'river',
+            osm_id
+    "
+    );
 
-        client.query(&sql, &ctx.bbox_query_params(Some(2048.0)).as_params())
-    })
+    client.query(&sql, &ctx.bbox_query_params(Some(2048.0)).as_params())
 }
 
 pub fn render(

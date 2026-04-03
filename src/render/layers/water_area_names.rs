@@ -20,29 +20,27 @@ use std::sync::LazyLock;
 static REPLACEMENTS: LazyLock<Vec<Replacement>> =
     LazyLock::new(|| vec![(Regex::new("[Vv]odná [Nn]ádrž").expect("regex"), "v. n.")]);
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("water_areas", || {
-        let sql = "
-            SELECT
-                name,
-                ST_PointOnSurface(osm_waterareas.geometry) AS geometry
-            FROM
-                osm_waterareas
-            WHERE
-                osm_waterareas.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                osm_waterareas.name <> '' AND
-                osm_waterareas.type <> 'riverbank' AND
-                osm_waterareas.water NOT IN ('river', 'stream', 'canal', 'ditch') AND
-                ($6 >= 17 OR osm_waterareas.area > 800000 / POWER(2, (2 * ($6 - 10))))
-            ";
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let sql = "
+        SELECT
+            name,
+            ST_PointOnSurface(osm_waterareas.geometry) AS geometry
+        FROM
+            osm_waterareas
+        WHERE
+            osm_waterareas.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+            osm_waterareas.name <> '' AND
+            osm_waterareas.type <> 'riverbank' AND
+            osm_waterareas.water NOT IN ('river', 'stream', 'canal', 'ditch') AND
+            ($6 >= 17 OR osm_waterareas.area > 800000 / POWER(2, (2 * ($6 - 10))))
+        ";
 
-        client.query(
-            sql,
-            &ctx.bbox_query_params(Some(1024.0))
-                .push(ctx.zoom as i32)
-                .as_params(),
-        )
-    })
+    client.query(
+        sql,
+        &ctx.bbox_query_params(Some(1024.0))
+            .push(ctx.zoom as i32)
+            .as_params(),
+    )
 }
 
 pub fn render(

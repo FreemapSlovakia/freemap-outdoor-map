@@ -26,47 +26,46 @@ static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
     ]
 });
 
-pub fn query_valleys(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("valleys_ridges", || {
-        let dir = if ctx.zoom > 14 { "ASC" } else { "DESC" };
+pub fn query_valleys(
+    ctx: &Ctx,
+    client: &mut Client,
+) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let dir = if ctx.zoom > 14 { "ASC" } else { "DESC" };
 
-        #[cfg_attr(any(), rustfmt::skip)]
-        let sql = format!("
-            SELECT
-                geometry,
-                name,
-                LEAST(1.2, ST_Length(geometry) / 5000) AS offset_factor
-            FROM
-                osm_feature_lines
-            WHERE
-                type = 'valley' AND
-                name <> '' AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            ORDER BY
-                ST_Length(geometry) {dir}
-        ");
+    #[cfg_attr(any(), rustfmt::skip)]
+    let sql = format!("
+        SELECT
+            geometry,
+            name,
+            LEAST(1.2, ST_Length(geometry) / 5000) AS offset_factor
+        FROM
+            osm_feature_lines
+        WHERE
+            type = 'valley' AND
+            name <> '' AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            ST_Length(geometry) {dir}
+    ");
 
-        client.query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params())
-    })
+    client.query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params())
 }
 
-pub fn query_ridges(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("valleys_ridges", || {
-        let sql = "
-            SELECT
-                geometry, name, 0::double precision AS offset_factor
-            FROM
-                osm_feature_lines
-            WHERE
-                type = 'ridge' AND
-                name <> '' AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            ORDER BY
-                ST_Length(geometry) DESC
-        ";
+pub fn query_ridges(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let sql = "
+        SELECT
+            geometry, name, 0::double precision AS offset_factor
+        FROM
+            osm_feature_lines
+        WHERE
+            type = 'ridge' AND
+            name <> '' AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            ST_Length(geometry) DESC
+    ";
 
-        client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())
-    })
+    client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())
 }
 
 fn render_rows(

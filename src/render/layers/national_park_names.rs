@@ -30,28 +30,26 @@ pub static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
     ]
 });
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("national_park_names", || {
-        let sql = "
-            SELECT
-                type,
-                name,
-                COALESCE(tags->'protect_class', '') AS protect_class,
-                ST_PointOnSurface(geometry) AS geometry
-            FROM
-                osm_landcovers
-            WHERE
-                name <> '' AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                (type = 'national_park' OR (type = 'protected_area' AND tags->'protect_class' = '2'))
-            ORDER BY
-                name LIKE ('Ochranné pásmo %'),
-                area DESC,
-                osm_id
-        ";
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let sql = "
+        SELECT
+            type,
+            name,
+            COALESCE(tags->'protect_class', '') AS protect_class,
+            ST_PointOnSurface(geometry) AS geometry
+        FROM
+            osm_landcovers
+        WHERE
+            name <> '' AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+            (type = 'national_park' OR (type = 'protected_area' AND tags->'protect_class' = '2'))
+        ORDER BY
+            name LIKE ('Ochranné pásmo %'),
+            area DESC,
+            osm_id
+    ";
 
-        client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())
-    })
+    client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())
 }
 
 pub fn render(

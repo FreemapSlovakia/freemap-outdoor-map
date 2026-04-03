@@ -9,34 +9,28 @@ use crate::render::{
 use cairo::Context;
 use postgres::Client;
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("military_areas", || {
-        let zoom = ctx.zoom;
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let sql = "
+        SELECT
+            geometry
+        FROM
+            osm_landcovers
+        WHERE
+            type = 'military'
+            AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            AND area / POWER(4, 19 - $6) > 10
+    ";
 
-        let sql = "
-            SELECT
-                geometry
-            FROM
-                osm_landcovers
-            WHERE
-                type = 'military'
-                AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-                AND area / POWER(4, 19 - $6) > 10
-        ";
-
-        client.query(
-            sql,
-            &ctx.bbox_query_params(Some(10.0))
-                .push(zoom as i32)
-                .as_params(),
-        )
-    })
+    client.query(
+        sql,
+        &ctx.bbox_query_params(Some(10.0))
+            .push(ctx.zoom as i32)
+            .as_params(),
+    )
 }
 
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
     let _span = tracy_client::span!("military_areas::render");
-
-    let zoom = ctx.zoom;
 
     context.push_group();
 
@@ -64,7 +58,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
         context.set_dash(&[], 0.0);
         context.set_line_width(1.5);
 
-        hatch_geometry(context, unprojected, tile_projector, zoom, 10.0, -45.0)?;
+        hatch_geometry(context, unprojected, tile_projector, ctx.zoom, 10.0, -45.0)?;
 
         context.stroke()?;
 

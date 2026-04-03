@@ -44,8 +44,6 @@ pub(crate) fn start() {
     };
 
     let render_worker_pool = {
-        println!("{}", cli.pool_max_size);
-
         let connection_pool = r2d2::Pool::builder()
             .max_size(cli.pool_max_size)
             .build(PostgresConnectionManager::new(

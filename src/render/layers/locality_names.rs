@@ -13,26 +13,24 @@ use crate::render::{
 use cairo::Context;
 use postgres::Client;
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("locality_names", || {
-        let sql = "
-            SELECT
-                name,
-                geometry
-            FROM
-                osm_places
-            WHERE
-                name <> '' AND
-                type IN ('locality', 'city_block', 'plot') AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            ORDER BY
-                z_order DESC,
-                population DESC,
-                osm_id
-        ";
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let sql = "
+        SELECT
+            name,
+            geometry
+        FROM
+            osm_places
+        WHERE
+            name <> '' AND
+            type IN ('locality', 'city_block', 'plot') AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            z_order DESC,
+            population DESC,
+            osm_id
+    ";
 
-        client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
-    })
+    client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
 }
 
 pub fn render(

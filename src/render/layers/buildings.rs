@@ -7,22 +7,20 @@ use crate::render::{
     projectable::TileProjectable,
 };
 use cairo::Context;
-use postgres::Client;
+use postgres::{Client, Row};
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("buildings", || {
-        let sql = "
-            SELECT
-                type,
-                geometry
-            FROM
-                osm_buildings
-            WHERE
-                geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
-        ";
+pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error> {
+    let sql = "
+        SELECT
+            type,
+            geometry
+        FROM
+            osm_buildings
+        WHERE
+            geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
+    ";
 
-        client.query(sql, &ctx.bbox_query_params(None).as_params())
-    })
+    client.query(sql, &ctx.bbox_query_params(None).as_params())
 }
 
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {

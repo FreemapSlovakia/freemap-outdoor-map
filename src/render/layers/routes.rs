@@ -280,31 +280,29 @@ pub fn query_marking(
     ctx: &Ctx,
     client: &mut Client,
     render: &HashSet<RenderLayer>,
-) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("routes", || {
-        let zoom = ctx.zoom;
+) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let zoom = ctx.zoom;
 
-        let z = zoom
-            + if render.contains(&RenderLayer::RoutesHikingKst) {
-                2
-            } else {
-                0
-            };
-
-        let sql = match z {
-            9 => get_routes_query(render, Some(vec!["iwn", "icn"]), "_gen0"),
-            10 => get_routes_query(render, Some(vec!["iwn", "nwn", "icn", "ncn"]), "_gen1"),
-            11 => get_routes_query(
-                render,
-                Some(vec!["iwn", "nwn", "rwn", "icn", "ncn", "rcn"]),
-                "_gen1",
-            ),
-            12.. => get_routes_query(render, None, ""),
-            _ => return Ok(Vec::new()),
+    let z = zoom
+        + if render.contains(&RenderLayer::RoutesHikingKst) {
+            2
+        } else {
+            0
         };
 
-        client.query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params())
-    })
+    let sql = match z {
+        9 => get_routes_query(render, Some(vec!["iwn", "icn"]), "_gen0"),
+        10 => get_routes_query(render, Some(vec!["iwn", "nwn", "icn", "ncn"]), "_gen1"),
+        11 => get_routes_query(
+            render,
+            Some(vec!["iwn", "nwn", "rwn", "icn", "ncn", "rcn"]),
+            "_gen1",
+        ),
+        12.. => get_routes_query(render, None, ""),
+        _ => return Ok(Vec::new()),
+    };
+
+    client.query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params())
 }
 
 pub fn render_marking(
@@ -483,12 +481,10 @@ pub fn query_labels(
     ctx: &Ctx,
     client: &mut Client,
     render: &HashSet<RenderLayer>,
-) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("routes", || {
-        let query = get_routes_query(render, None, "");
+) -> Result<Vec<postgres::Row>, postgres::Error> {
+    let query = get_routes_query(render, None, "");
 
-        client.query(&query, &ctx.bbox_query_params(Some(2048.0)).as_params())
-    })
+    client.query(&query, &ctx.bbox_query_params(Some(2048.0)).as_params())
 }
 
 pub fn render_labels(
