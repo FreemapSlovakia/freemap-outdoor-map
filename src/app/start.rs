@@ -194,26 +194,44 @@ fn tile_variant_input_to_server_variant(
 }
 
 async fn shutdown_signal(shutdown_tx: broadcast::Sender<()>) {
-    let ctrl_c = async {
-        signal::ctrl_c().await.expect("install Ctrl+C handler");
-    };
-
     #[cfg(unix)]
-    let terminate = async {
+    {
+        let mut sigint = unix_signal(SignalKind::interrupt()).expect("install SIGINT handler");
         let mut sigterm = unix_signal(SignalKind::terminate()).expect("install SIGTERM handler");
-        sigterm.recv().await;
-    };
 
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
+        tokio::select! {
+            _ = sigint.recv() => {},
+            _ = sigterm.recv() => {},
+        }
 
-    tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
+        if let Err(err) = shutdown_tx.send(()) {
+            eprintln!("Error sending shutdown signal: {err}");
+        }
+
+        eprintln!("Graceful shutdown initiated. Press Ctrl+C again to force quit.");
+
+        tokio::select! {
+            _ = sigint.recv() => {},
+            _ = sigterm.recv() => {},
+        }
+
+        eprintln!("Force quit.");
+        std::process::exit(1);
     }
 
-    if let Err(err) = shutdown_tx.send(()) {
-        eprintln!("Error sending shutdown signal: {err}");
+    #[cfg(not(unix))]
+    {
+        signal::ctrl_c().await.expect("install Ctrl+C handler");
+
+        if let Err(err) = shutdown_tx.send(()) {
+            eprintln!("Error sending shutdown signal: {err}");
+        }
+
+        eprintln!("Graceful shutdown initiated. Press Ctrl+C again to force quit.");
+
+        signal::ctrl_c().await.expect("install Ctrl+C handler");
+        eprintln!("Force quit.");
+        std::process::exit(1);
     }
 }
 
