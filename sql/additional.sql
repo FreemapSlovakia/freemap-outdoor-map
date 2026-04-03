@@ -26,6 +26,8 @@ CREATE INDEX CONCURRENTLY osm_landcovers_type ON osm_landcovers (type);
 
 CREATE INDEX CONCURRENTLY osm_places_type ON osm_places (type);
 
+CREATE INDEX CONCURRENTLY osm_places_name ON osm_places (name);
+
 CREATE INDEX CONCURRENTLY osm_route_members_idx1 ON osm_route_members (member);
 
 CREATE INDEX CONCURRENTLY osm_route_members_idx2 ON osm_route_members (type);
