@@ -66,21 +66,12 @@ struct Params<'p, 'ctx> {
     hsd: Option<&'p mut HillshadingDatasets>,
 }
 
-/// Key used to index batch results (contours + bridge).
-type BatchKey = Option<&'static str>;
-
 enum PendingLayer<'a> {
     /// A DB query running as its own tokio task (own pool connection → true parallelism).
     Query {
         name: &'static str,
         jh: JoinHandle<Result<Vec<Feature>, LayerRenderError>>,
         render_fn: Box<dyn FnOnce(Vec<Feature>, Params) -> LayerRenderResult + 'a>,
-    },
-    /// Multiple independent pre-spawned queries collected into one render call
-    /// (used for contours + bridge_areas_mask running in parallel).
-    Batch {
-        handles: Vec<(BatchKey, JoinHandle<Result<Vec<Feature>, LayerRenderError>>)>,
-        render_fn: Box<dyn FnOnce(HashMap<BatchKey, Vec<Feature>>, Params) -> LayerRenderResult + 'a>,
     },
     /// Render-only step (push_group, pop_group, blur_edges, custom, …)
     Push(Box<dyn FnOnce(Params) -> Result<(), RenderError> + 'a>),
@@ -116,7 +107,12 @@ impl<'a> Prefetcher<'a> {
         &mut self,
         name: &'static str,
         legend_name: Option<&'static str>,
-        query_fn: impl FnOnce(Arc<Ctx>, deadpool_postgres::Object) -> BoxFuture<'static, Result<Vec<Row>, tokio_postgres::Error>> + Send + 'static,
+        query_fn: impl FnOnce(
+            Arc<Ctx>,
+            deadpool_postgres::Object,
+        ) -> BoxFuture<'static, Result<Vec<Row>, tokio_postgres::Error>>
+        + Send
+        + 'static,
         render_fn: impl FnOnce(Vec<Feature>, Params) -> LayerRenderResult + 'a,
     ) {
         if let Some(ref legend) = self.ctx.legend {
@@ -151,19 +147,6 @@ impl<'a> Prefetcher<'a> {
         });
     }
 
-    /// Spawn an independent background task for a batch (contours/bridge).
-    fn prefetch(
-        &self,
-        query_fn: impl FnOnce(Arc<Ctx>, deadpool_postgres::Object) -> BoxFuture<'static, Result<Vec<Feature>, LayerRenderError>> + Send + 'static,
-    ) -> JoinHandle<Result<Vec<Feature>, LayerRenderError>> {
-        let pool = self.pool.clone();
-        let ctx = self.ctx.clone();
-        self.handle.spawn(async move {
-            let conn = pool.get().await.map_err(LayerRenderError::from)?;
-            query_fn(ctx, conn).await
-        })
-    }
-
     fn push(&mut self, render_fn: impl FnOnce(Params) -> Result<(), RenderError> + 'a) {
         self.layers.push(PendingLayer::Push(Box::new(render_fn)));
     }
@@ -183,27 +166,25 @@ impl<'a> Prefetcher<'a> {
                 };
 
                 match layer {
-                    PendingLayer::Query { name, jh, render_fn } => {
+                    PendingLayer::Query {
+                        name,
+                        jh,
+                        render_fn,
+                    } => {
                         // Awaiting in order: while we wait for this result, all other tasks
                         // are running in parallel on the tokio executor.
                         let features = jh
                             .await
                             .map_err(|_| RenderError::TaskPanic)?
                             .with_layer(name)?;
+
                         render_fn(features, params).with_layer(name)?;
                     }
-                    PendingLayer::Batch { handles, render_fn } => {
-                        let mut results = HashMap::with_capacity(handles.len());
-                        for (key, jh) in handles {
-                            let features = jh
-                                .await
-                                .map_err(|_| RenderError::TaskPanic)?
-                                .with_layer("batch")?;
-                            results.insert(key, features);
-                        }
-                        render_fn(results, params).with_layer("batch")?;
-                    }
-                    PendingLayer::Legend { name, features, render_fn } => {
+                    PendingLayer::Legend {
+                        name,
+                        features,
+                        render_fn,
+                    } => {
                         render_fn(features, params).with_layer(name)?;
                     }
                     PendingLayer::Push(f) => {
@@ -374,10 +355,9 @@ pub fn render(
         prefetcher.add(
             "road_access_restrictions",
             None,
-            |ctx, conn| async move {
-                layers::road_access_restrictions::query(&ctx, &conn).await
-            }
-            .boxed(),
+            |ctx, conn| {
+                async move { layers::road_access_restrictions::query(&ctx, &conn).await }.boxed()
+            },
             |rows, params| {
                 layers::road_access_restrictions::render(&ctx, context, rows, params.svg_repo)
             },
@@ -409,70 +389,82 @@ pub fn render(
     ];
 
     if do_shading || do_contours {
-        let mut handles: Vec<(BatchKey, JoinHandle<_>)> = Vec::with_capacity(11);
+        use std::sync::Mutex;
+
+        let results: Arc<Mutex<HashMap<Option<&'static str>, Vec<Feature>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
 
         if zoom >= 15 {
-            let bridge_handle = prefetcher.prefetch(|ctx, conn| {
-                async move {
-                    Ok(layers::bridge_areas::query(&ctx, &conn)
-                        .await?
-                        .into_iter()
-                        .map(Feature::from)
-                        .collect())
-                }
-                .boxed()
-            });
-            handles.push((Some("__bridge__"), bridge_handle));
+            let acc = results.clone();
+
+            prefetcher.add(
+                "bridge_for_shading",
+                None,
+                |ctx, conn| async move { layers::bridge_areas::query(&ctx, &conn).await }.boxed(),
+                move |features, _params| {
+                    acc.lock().unwrap().insert(Some("__bridge__"), features);
+                    Ok(())
+                },
+            );
         }
 
         if do_contours && zoom >= 12 {
-            let contour_handles: [(BatchKey, JoinHandle<_>); 10] =
-                CONTOUR_COUNTRIES.map(|country| {
-                    (
-                        country,
-                        prefetcher.prefetch(move |ctx, conn| {
-                            async move {
-                                Ok(layers::contours::query(&ctx, &conn, country)
-                                    .await?
-                                    .into_iter()
-                                    .map(Feature::from)
-                                    .collect())
-                            }
-                            .boxed()
-                        }),
-                    )
-                });
-            for (key, jh) in contour_handles {
-                handles.push((key, jh));
+            const CONTOUR_LAYER_NAMES: [&str; 10] = [
+                "contours_at",
+                "contours_it",
+                "contours_ch",
+                "contours_si",
+                "contours_cz",
+                "contours_pl",
+                "contours_sk",
+                "contours_fr",
+                "contours_no",
+                "contours_fallback",
+            ];
+
+            for (country, layer_name) in CONTOUR_COUNTRIES.into_iter().zip(CONTOUR_LAYER_NAMES) {
+                let acc = results.clone();
+
+                prefetcher.add(
+                    layer_name,
+                    Some("contours"),
+                    move |ctx, conn| {
+                        async move { layers::contours::query(&ctx, &conn, country).await }.boxed()
+                    },
+                    move |features, _params| {
+                        acc.lock().unwrap().insert(country, features);
+                        Ok(())
+                    },
+                );
             }
         }
 
-        let ctx_arc = ctx.clone();
+        prefetcher.push(|params| {
+            let Some(hsd) = params.hsd else { return Ok(()) };
 
-        prefetcher.layers.push(PendingLayer::Batch {
-            handles,
-            render_fn: Box::new(move |mut results, params| {
-                let Some(hsd) = params.hsd else { return Ok(()) };
+            let mut results = Arc::try_unwrap(results)
+                .expect("all accumulator render_fns already dropped")
+                .into_inner()
+                .expect("mutex not poisoned");
 
-                let bridge_rows = results.remove(&Some("__bridge__")).unwrap_or_default();
+            let bridge_rows = results.remove(&Some("__bridge__")).unwrap_or_default();
+            let contour_rows = CONTOUR_COUNTRIES
+                .into_iter()
+                .map(|c| (c, results.remove(&c).unwrap_or_default()))
+                .collect();
 
-                let mut contour_rows: HashMap<Option<&'static str>, Vec<Feature>> =
-                    HashMap::new();
+            layers::shading_and_contours::render(
+                &ctx,
+                context,
+                bridge_rows,
+                contour_rows,
+                hsd,
+                do_shading,
+                do_contours,
+            )
+            .with_layer("shading_and_contours")?;
 
-                for country in CONTOUR_COUNTRIES {
-                    contour_rows.insert(country, results.remove(&country).unwrap_or_default());
-                }
-
-                layers::shading_and_contours::render(
-                    &ctx_arc,
-                    context,
-                    bridge_rows,
-                    contour_rows,
-                    hsd,
-                    do_shading,
-                    do_contours,
-                )
-            }),
+            Ok(())
         });
     }
 
@@ -518,13 +510,17 @@ pub fn render(
         prefetcher.add(
             "protected_areas_areas",
             Some("protected_areas"),
-            |ctx, conn| async move { layers::protected_areas::query_areas(&ctx, &conn).await }.boxed(),
+            |ctx, conn| {
+                async move { layers::protected_areas::query_areas(&ctx, &conn).await }.boxed()
+            },
             |rows, _params| layers::protected_areas::render_areas(&ctx, context, rows),
         );
         prefetcher.add(
             "protected_areas_borders",
             Some("protected_areas"),
-            |ctx, conn| async move { layers::protected_areas::query_borders(&ctx, &conn).await }.boxed(),
+            |ctx, conn| {
+                async move { layers::protected_areas::query_borders(&ctx, &conn).await }.boxed()
+            },
             |rows, params| {
                 layers::protected_areas::render_borders(&ctx, context, rows, params.svg_repo)
             },
@@ -572,11 +568,9 @@ pub fn render(
             prefetcher.add(
                 "routes_marking",
                 Some("routes"),
-                move |ctx, conn| {
-                    async move {
-                        layers::routes::query_marking(&ctx, &conn, &to_render).await
-                    }
-                    .boxed()
+                |ctx, conn| {
+                    async move { layers::routes::query_marking(&ctx, &conn, &to_render).await }
+                        .boxed()
                 },
                 |rows, params| {
                     layers::routes::render_marking(&ctx, context, rows, to_render1, params.svg_repo)
@@ -612,7 +606,7 @@ pub fn render(
     if zoom >= 13 {
         let opacity = 0.5 - (zoom as f64 - 13.0) / 10.0;
 
-        prefetcher.push(move |_params| {
+        prefetcher.push(|_params| {
             context.push_group();
             Ok(())
         });
@@ -620,14 +614,18 @@ pub fn render(
         prefetcher.add(
             "valleys",
             Some("valleys_ridges"),
-            |ctx, conn| async move { layers::valleys_ridges::query_valleys(&ctx, &conn).await }.boxed(),
+            |ctx, conn| {
+                async move { layers::valleys_ridges::query_valleys(&ctx, &conn).await }.boxed()
+            },
             |rows, _params| layers::valleys_ridges::render_valleys(&ctx, context, rows),
         );
 
         prefetcher.add(
             "ridges",
             Some("valleys_ridges"),
-            |ctx, conn| async move { layers::valleys_ridges::query_ridges(&ctx, &conn).await }.boxed(),
+            |ctx, conn| {
+                async move { layers::valleys_ridges::query_ridges(&ctx, &conn).await }.boxed()
+            },
             |rows, _params| layers::valleys_ridges::render_ridges(&ctx, context, rows),
         );
 
@@ -653,7 +651,9 @@ pub fn render(
         prefetcher.add(
             "national_park_names",
             None,
-            |ctx, conn| async move { layers::national_park_names::query(&ctx, &conn).await }.boxed(),
+            |ctx, conn| {
+                async move { layers::national_park_names::query(&ctx, &conn).await }.boxed()
+            },
             |rows, params| {
                 layers::national_park_names::render(&ctx, context, rows, params.collision)
             },
@@ -705,10 +705,10 @@ pub fn render(
         prefetcher.add(
             "bordered_area_names_centroids",
             Some("protected_areas"),
-            |ctx, conn| async move {
-                layers::bordered_area_names::query_centroids(&ctx, &conn).await
-            }
-            .boxed(),
+            |ctx, conn| {
+                async move { layers::bordered_area_names::query_centroids(&ctx, &conn).await }
+                    .boxed()
+            },
             |rows, params| {
                 layers::bordered_area_names::render_centroids(&ctx, context, rows, params.collision)
             },
@@ -716,10 +716,9 @@ pub fn render(
         prefetcher.add(
             "bordered_area_names_borders",
             Some("protected_areas"),
-            |ctx, conn| async move {
-                layers::bordered_area_names::query_borders(&ctx, &conn).await
-            }
-            .boxed(),
+            |ctx, conn| {
+                async move { layers::bordered_area_names::query_borders(&ctx, &conn).await }.boxed()
+            },
             |rows, params| {
                 layers::bordered_area_names::render_borders(&ctx, context, rows, params.collision)
             },
@@ -765,10 +764,8 @@ pub fn render(
             "routes_labels",
             Some("routes"),
             move |ctx, conn| {
-                async move {
-                    layers::routes::query_labels(&ctx, &conn, &render_clone).await
-                }
-                .boxed()
+                async move { layers::routes::query_labels(&ctx, &conn, &render_clone).await }
+                    .boxed()
             },
             |rows, params| layers::routes::render_labels(&ctx, context, rows, params.collision),
         );
@@ -835,6 +832,7 @@ pub fn render(
         prefetcher.push(|_params| {
             layers::blur_edges::render(&ctx, context, coverage_geometry)
                 .with_layer("blur_edges")?;
+
             context.pop_group_to_source()?;
             context.paint()?;
 
