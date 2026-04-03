@@ -1,4 +1,5 @@
 use crate::render::{
+    Feature,
     collision::Collision,
     colors::{self},
     ctx::Ctx,
@@ -11,8 +12,8 @@ use crate::render::{
     projectable::TileProjectable,
     regex_replacer::{Replacement, replace},
 };
+use cairo::Context;
 use pangocairo::pango::Style;
-use postgres::Client;
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -23,46 +24,53 @@ static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
     ]
 });
 
-pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
-    let _span = tracy_client::span!("water_line_names::render");
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+    let w = if ctx.zoom < 14 {
+        "AND type = 'river'"
+    } else {
+        ""
+    };
 
-    let rows = ctx.legend_features("water_lines", || {
-        let w = if ctx.zoom < 14 {
-            "AND type = 'river'"
-        } else {
-            ""
-        };
-
-        let sql = format!("
-            WITH merged AS (
-                SELECT
-                    ST_LineMerge(ST_Collect(ST_Segmentize(ST_Simplify(geometry, 24), 200))) AS geometry,
-                    name,
-                    type,
-                    MIN(osm_id) AS osm_id
-                FROM
-                    osm_waterways
-                WHERE
-                    name <> '' AND
-                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-                    {w}
-                GROUP BY
-                    name,
-                    type
-            )
+    let sql = format!(
+        "
+        WITH merged AS (
             SELECT
+                ST_LineMerge(ST_Collect(ST_Segmentize(ST_Simplify(geometry, 24), 200))) AS geometry,
                 name,
                 type,
-                geometry
+                MIN(osm_id) AS osm_id
             FROM
-                merged
-            ORDER BY
-                type <> 'river',
-                osm_id
-        ");
+                osm_waterways
+            WHERE
+                name <> '' AND
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+                {w}
+            GROUP BY
+                name,
+                type
+        )
+        SELECT
+            name,
+            type,
+            geometry
+        FROM
+            merged
+        ORDER BY
+            type <> 'river',
+            osm_id
+    "
+    );
 
-        client.query(&sql, &ctx.bbox_query_params(Some(2048.0)).as_params())
-    })?;
+    client.query(&sql, &ctx.bbox_query_params(Some(2048.0)).as_params()).await
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    collision: &mut Collision,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("water_line_names::render");
 
     let mut options = TextOnLineOptions {
         flo: FontAndLayoutOptions {
@@ -88,7 +96,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         let name = replace(row.get_string("name")?, &REPLACEMENTS);
 
         walk_geometry_line_strings(&geom, &mut |geom| {
-            let _drawn = draw_text_on_line(ctx.context, geom, &name, Some(collision), &options)?;
+            let _drawn = draw_text_on_line(context, geom, &name, Some(collision), &options)?;
 
             cairo::Result::Ok(())
         })?;

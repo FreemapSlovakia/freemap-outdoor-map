@@ -1,9 +1,11 @@
 use crate::render::{
+    Feature,
     ctx::Ctx,
     layer_render_error::LayerRenderResult,
     layers::{bridge_areas, contours, hillshading, hillshading_datasets::HillshadingDatasets},
 };
-use postgres::Client;
+use cairo::Context;
+use std::collections::HashMap;
 
 const HILLSHADING_HIERARCHY: [(&str, &[&str]); 9] = [
     ("at", &["sk", "si", "cz"]),
@@ -19,21 +21,21 @@ const HILLSHADING_HIERARCHY: [(&str, &[&str]); 9] = [
 
 pub fn render(
     ctx: &Ctx,
-    client: &mut Client,
+    context: &Context,
+    bridge_rows: Vec<Feature>,
+    mut contour_rows: HashMap<Option<&'static str>, Vec<Feature>>,
     hillshading_datasets: &mut HillshadingDatasets,
     shading: bool,
-    contours: bool,
+    do_contours: bool,
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("shading_and_contours::render");
 
     let fade_alpha = 1.0f64.min(1.0 - (ctx.zoom as f64 - 7.0).ln() / 5.0);
 
-    let context = ctx.context;
-
     context.push_group(); // top
 
     if ctx.zoom >= 15 {
-        bridge_areas::render(ctx, client, true)?; // mask
+        bridge_areas::render(ctx, context, bridge_rows, true)?; // mask
     }
 
     // CC = (mask, (contours-$cc, final-$cc):src-in, mask-$cut1:dst-out, mask-$cut2:dst-out, ...):src-over
@@ -50,13 +52,14 @@ pub fn render(
 
         context.push_group(); // country-contours-and-shading
 
-        hillshading::paint_surface(ctx, &mask_surface, 1.0)?;
+        hillshading::paint_surface(ctx, context, &mask_surface, 1.0)?;
 
         context.push_group(); // contours-and-shading
 
-        if contours && ctx.zoom >= 12 {
+        if do_contours && ctx.zoom >= 12 {
             context.push_group(); // contours
-            contours::render(ctx, client, Some(country))?;
+            let rows = contour_rows.remove(&Some(country)).unwrap_or_default();
+            contours::render(ctx, context, rows)?;
             context.pop_group_to_source()?; // contours
             context.paint_with_alpha(0.33)?;
         }
@@ -64,6 +67,7 @@ pub fn render(
         if shading {
             hillshading::load_and_paint(
                 ctx,
+                context,
                 country,
                 fade_alpha,
                 hillshading_datasets,
@@ -81,6 +85,7 @@ pub fn render(
 
                 hillshading::load_and_paint(
                     ctx,
+                    context,
                     better_country,
                     1.0,
                     hillshading_datasets,
@@ -108,7 +113,7 @@ pub fn render(
         context.push_group(); // mask
 
         for mask_surface in &mask_surfaces {
-            hillshading::paint_surface(ctx, mask_surface, 1.0)?;
+            hillshading::paint_surface(ctx, context, mask_surface, 1.0)?;
         }
 
         context.push_group(); // fallback
@@ -116,9 +121,10 @@ pub fn render(
         {
             let _span = tracy_client::span!("shading_and_contours::contours");
 
-            if contours && ctx.zoom >= 12 {
+            if do_contours && ctx.zoom >= 12 {
                 context.push_group(); // contours
-                contours::render(ctx, client, None)?;
+                let rows = contour_rows.remove(&None).unwrap_or_default();
+                contours::render(ctx, context, rows)?;
                 context.pop_group_to_source()?; // contours
                 context.paint_with_alpha(0.33)?;
             }
@@ -127,6 +133,7 @@ pub fn render(
         if shading {
             hillshading::load_and_paint(
                 ctx,
+                context,
                 "_",
                 fade_alpha,
                 hillshading_datasets,

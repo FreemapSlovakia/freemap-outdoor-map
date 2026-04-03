@@ -3,16 +3,19 @@ use geo::{
 };
 use geo_postgis::FromPostgis;
 use postgis::ewkb::GeometryT as EwkbGeometry;
-use postgres::Row;
+use tokio_postgres::Row;
 use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
 pub enum LegendValue {
     String(&'static str),
     Bool(bool),
+    #[allow(dead_code)]
+    F32(f32),
     F64(f64),
     I16(i16),
     I32(i32),
+    #[allow(dead_code)]
     I64(i64),
     Hstore(HashMap<String, Option<String>>),
     Point(Point),
@@ -103,6 +106,7 @@ fn legend_value_type(value: &LegendValue) -> &'static str {
         LegendValue::String(_) => "String",
         LegendValue::Bool(_) => "Bool",
         LegendValue::F64(_) => "F64",
+        LegendValue::F32(_) => "F32",
         LegendValue::I16(_) => "I16",
         LegendValue::I32(_) => "I32",
         LegendValue::I64(_) => "I64",
@@ -125,9 +129,10 @@ pub enum FeatureError {
         expected: &'static str,
     },
     #[error("Error getting value from database: {0}")]
-    PgError(#[from] postgres::Error),
+    PgError(#[from] tokio_postgres::Error),
 }
 
+#[derive(Debug)]
 pub enum Feature {
     Row(Row),
     LegendData(HashMap<String, LegendValue>),
@@ -250,6 +255,19 @@ impl Feature {
         }
     }
 
+    pub(crate) fn get_f32(&self, arg: &str) -> Result<f32, FeatureError> {
+        match self {
+            Self::Row(row) => Ok(row.try_get(arg)?),
+            Self::LegendData(data) => match data.get(arg).ok_or(FeatureError::MissingValue {
+                field: arg.to_string(),
+                expected: "F32",
+            })? {
+                LegendValue::F32(value) => Ok(*value),
+                other => Err(WrongTypeError::new(arg, "f32", legend_value_type(other)).into()),
+            },
+        }
+    }
+
     pub(crate) fn get_i16(&self, arg: &str) -> Result<i16, FeatureError> {
         match self {
             Self::Row(row) => Ok(row.try_get(arg)?),
@@ -276,6 +294,7 @@ impl Feature {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn get_i64(&self, arg: &str) -> Result<i64, FeatureError> {
         match self {
             Self::Row(row) => Ok(row.try_get(arg)?),
@@ -320,7 +339,7 @@ impl From<Row> for Feature {
 #[derive(thiserror::Error, Debug)]
 pub enum GeomError {
     #[error("Error getting geometry from database: {0}")]
-    PgError(#[from] postgres::Error),
+    PgError(#[from] tokio_postgres::Error),
     #[error("Empty or null geometry")]
     GeomIsEmpty,
     #[error("Unexpected geometry type: expected {expected}, got {got}")]

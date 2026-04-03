@@ -1,16 +1,19 @@
 use crate::render::{legend::LegendItemData, projectable::TileProjector, size::Size};
-use cairo::Context;
 use geo::Rect;
-use postgres::types::ToSql;
+use tokio_postgres::types::ToSql;
 
 pub struct SqlParams {
     params: Vec<Box<dyn ToSql + Sync>>,
 }
 
+// SAFETY: all values are inserted via `push` which requires `T: Send`,
+// so every stored value is guaranteed to be Send.
+unsafe impl Send for SqlParams {}
+
 impl SqlParams {
     pub fn push<T>(mut self, value: T) -> Self
     where
-        T: ToSql + Sync + 'static,
+        T: ToSql + Sync + Send + 'static,
     {
         self.params.push(Box::new(value));
 
@@ -22,17 +25,16 @@ impl SqlParams {
     }
 }
 
-pub struct Ctx<'a> {
-    pub context: &'a Context,
+pub struct Ctx {
     pub bbox: Rect<f64>,
     pub size: Size<u32>,
     pub zoom: u8,
     pub tile_projector: TileProjector,
     pub scale: f64,
-    pub legend: Option<&'a LegendItemData>,
+    pub legend: Option<LegendItemData>,
 }
 
-impl Ctx<'_> {
+impl Ctx {
     pub fn meters_per_pixel(&self) -> f64 {
         self.bbox.width() / self.size.width as f64
     }

@@ -1,7 +1,5 @@
-use std::collections::HashSet;
-
 use crate::render::{
-    RenderLayer,
+    Feature, RenderLayer,
     collision::Collision,
     ctx::Ctx,
     draw::{
@@ -15,8 +13,9 @@ use crate::render::{
     projectable::TileProjectable,
     svg_repo::{Options, SvgRepo},
 };
+use cairo::Context;
 use colorsys::{Rgb, RgbRatio};
-use postgres::Client;
+use std::collections::HashSet;
 
 const COLOR_SQL: &str = r#"
   CASE
@@ -276,38 +275,45 @@ fn get_routes_query(
     ")
 }
 
+pub async fn query_marking(
+    ctx: &Ctx,
+    client: &tokio_postgres::Client,
+    render: &HashSet<RenderLayer>,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+    let zoom = ctx.zoom;
+
+    let z = zoom
+        + if render.contains(&RenderLayer::RoutesHikingKst) {
+            2
+        } else {
+            0
+        };
+
+    let sql = match z {
+        9 => get_routes_query(render, Some(vec!["iwn", "icn"]), "_gen0"),
+        10 => get_routes_query(render, Some(vec!["iwn", "nwn", "icn", "ncn"]), "_gen1"),
+        11 => get_routes_query(
+            render,
+            Some(vec!["iwn", "nwn", "rwn", "icn", "ncn", "rcn"]),
+            "_gen1",
+        ),
+        12.. => get_routes_query(render, None, ""),
+        _ => return Ok(Vec::new()),
+    };
+
+    client.query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params()).await
+}
+
 pub fn render_marking(
     ctx: &Ctx,
-    client: &mut Client,
-    render: &HashSet<RenderLayer>,
+    context: &Context,
+    rows: Vec<Feature>,
+    to_render: HashSet<RenderLayer>,
     svg_repo: &mut SvgRepo,
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("routes::render_marking");
 
     let zoom = ctx.zoom;
-
-    let rows = ctx.legend_features("routes", || {
-        let z = zoom
-            + if render.contains(&RenderLayer::RoutesHikingKst) {
-                2
-            } else {
-                0
-            };
-
-        let sql = match z {
-            9 => get_routes_query(render, Some(vec!["iwn", "icn"]), "_gen0"),
-            10 => get_routes_query(render, Some(vec!["iwn", "nwn", "icn", "ncn"]), "_gen1"),
-            11 => get_routes_query(
-                render,
-                Some(vec!["iwn", "nwn", "rwn", "icn", "ncn", "rcn"]),
-                "_gen1",
-            ),
-            12.. => get_routes_query(render, None, ""),
-            _ => return Ok(Vec::new()),
-        };
-
-        client.query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params())
-    })?;
 
     for row in rows {
         let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
@@ -321,7 +327,7 @@ pub fn render_marking(
         let df = 1.25;
 
         for color in COLORS.iter() {
-            if render.contains(&RenderLayer::RoutesHorse) {
+            if to_render.contains(&RenderLayer::RoutesHorse) {
                 let off = row.get_i32(&format!("r_{}", color.0))?;
 
                 if off > 0 {
@@ -338,7 +344,7 @@ pub fn render_marking(
 
                     walk_geometry_line_strings(&geom, &mut |part| {
                         draw_line_pattern_scaled(
-                            ctx.context,
+                            context,
                             ctx.size,
                             &offset_line_string(part, offset),
                             0.5,
@@ -349,7 +355,7 @@ pub fn render_marking(
                 }
             }
 
-            if render.contains(&RenderLayer::RoutesSki) {
+            if to_render.contains(&RenderLayer::RoutesSki) {
                 let off = row.get_i32(&format!("s_{}", color.0))?;
 
                 if off > 0 {
@@ -366,7 +372,7 @@ pub fn render_marking(
 
                     walk_geometry_line_strings::<_, LayerRenderError>(&geom, &mut |part| {
                         draw_line_pattern_scaled(
-                            ctx.context,
+                            context,
                             ctx.size,
                             &offset_line_string(part, offset),
                             0.5,
@@ -379,9 +385,7 @@ pub fn render_marking(
                 }
             }
 
-            let context = ctx.context;
-
-            if render.contains(&RenderLayer::RoutesBicycle) {
+            if to_render.contains(&RenderLayer::RoutesBicycle) {
                 let off = row.get_i32(&format!("b_{}", color.0))?;
 
                 if off > 0 {
@@ -409,8 +413,8 @@ pub fn render_marking(
                 }
             }
 
-            if render.contains(&RenderLayer::RoutesHiking)
-                || render.contains(&RenderLayer::RoutesHikingKst)
+            if to_render.contains(&RenderLayer::RoutesHiking)
+                || to_render.contains(&RenderLayer::RoutesHikingKst)
             {
                 {
                     let off = row.get_i32(&format!("h_{}", color.0))?;
@@ -472,19 +476,23 @@ pub fn render_marking(
     Ok(())
 }
 
+pub async fn query_labels(
+    ctx: &Ctx,
+    client: &tokio_postgres::Client,
+    render: &HashSet<RenderLayer>,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+    let query = get_routes_query(render, None, "");
+
+    client.query(&query, &ctx.bbox_query_params(Some(2048.0)).as_params()).await
+}
+
 pub fn render_labels(
     ctx: &Ctx,
-    client: &mut Client,
-    render: &HashSet<RenderLayer>,
+    context: &Context,
+    rows: Vec<Feature>,
     collision: &mut Collision,
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("routes::render_labels");
-
-    let rows = ctx.legend_features("routes", || {
-        let query = get_routes_query(render, None, "");
-
-        client.query(&query, &ctx.bbox_query_params(Some(2048.0)).as_params())
-    })?;
 
     for row in rows {
         let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
@@ -516,7 +524,7 @@ pub fn render_labels(
             ] {
                 options.offset = offset;
 
-                let _drawn = draw_text_on_line(ctx.context, geom, refs, Some(collision), &options)?;
+                let _drawn = draw_text_on_line(context, geom, refs, Some(collision), &options)?;
             }
 
             cairo::Result::Ok(())

@@ -1,5 +1,6 @@
 use super::poi_z_order::build_poi_z_order_case;
 use crate::render::{
+    Feature,
     categories::Category,
     collision::Collision,
     colors::{self, Color},
@@ -13,10 +14,10 @@ use crate::render::{
     regex_replacer::{Replacement, build_replacements, replace},
     svg_repo::{Options, SvgRepo},
 };
+use cairo::Context;
 use core::f64;
 use geo::{Point, Rect};
 use pangocairo::pango::{AttrList, AttrSize, SCALE, Style, Weight};
-use postgres::Client;
 use std::borrow::Cow;
 use std::{
     collections::{HashMap, HashSet},
@@ -154,11 +155,8 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
             ]),
             ..Extra::default()
         }),
-        (14, 15, Y, N, Poi, "historic_mine", Extra { icon: Some("disused_mine"), ..Extra::default() }),
         (14, 15, Y, N, Poi, "adit", Extra { icon: Some("mine"), ..Extra::default() }),
         (14, 15, Y, N, Poi, "mineshaft", Extra { icon: Some("mine"), ..Extra::default() }),
-        (14, 15, Y, N, Poi, "disused_adit", Extra { icon: Some("disused_mine"), ..Extra::default() }),
-        (14, 15, Y, N, Poi, "disused_mineshaft", Extra { icon: Some("disused_mine"), ..Extra::default() }),
         (14, 15, Y, N, Accommodation, "hotel", Extra {
             replacements: build_replacements(&[(r"^[Hh]otel\b *", "")]),
             ..Extra::default()
@@ -221,6 +219,13 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (15, NN, Y, N, Poi, "guidepost_noname", Extra { icon: Some("guidepost_x"), ..Extra::default() }),
         (15, 15, Y, Y, NaturalPoi, "saddle", Extra { font_size: 13.0, halo: false, ..Extra::default() }),
         (15, 15, Y, Y, NaturalPoi, "mountain_pass", Extra { icon: Some("saddle"), font_size: 13.0, halo: false, ..Extra::default() }),
+        (15, 16, Y, N, Poi, "historic_mine", Extra { icon: Some("disused_mine"), ..Extra::default() }),
+        (15, 16, Y, N, Poi, "mine_shaft", Extra { icon: Some("disused_mine"), ..Extra::default() }),
+        (15, 16, Y, N, Poi, "mine_adit", Extra { icon: Some("disused_mine"), ..Extra::default() }),
+        (15, 16, Y, N, Poi, "disused_adit", Extra { icon: Some("disused_mine"), ..Extra::default() }),
+        (15, 16, Y, N, Poi, "disused_mineshaft", Extra { icon: Some("disused_mine"), ..Extra::default() }),
+        (15, 16, Y, N, Poi, "abandoned_adit", Extra { icon: Some("disused_mine"), ..Extra::default() }),
+        (15, 16, Y, N, Poi, "abandoned_mineshaft", Extra { icon: Some("disused_mine"), ..Extra::default() }),
         (15, 16, N, N, Poi, "ruins", Extra::default()),
         (15, 16, N, N, Poi, "generator_wind", Extra::default()),
         (15, 16, N, N, Poi, "chimney", Extra::default()),
@@ -438,87 +443,87 @@ static OFFSETS: LazyLock<[(f64, f64); 33]> = LazyLock::new(|| {
     offsets
 });
 
-pub fn render(
+pub async fn query(
     ctx: &Ctx,
-    client: &mut Client,
-    collision: &mut Collision,
-    svg_repo: &mut SvgRepo,
+    client: &tokio_postgres::Client,
     kst_only: bool,
-) -> LayerRenderResult {
-    let _span = tracy_client::span!("pois::render");
-
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let zoom = ctx.zoom;
 
-    let rows = ctx.legend_features("pois", || {
-        let mut selects = vec![];
+    let mut selects = vec![];
 
-        // TODO add hiking-only
-        let kst_cond = if kst_only { r"AND (type <> 'guidepost' OR tags->'operator' ~* '\ykst\y|\ytanap\y')"} else { "" };
+    // TODO add hiking-only
+    let kst_cond = if kst_only {
+        r"AND (type <> 'guidepost' OR tags->'operator' ~* '\ykst\y|\ytanap\y')"
+    } else {
+        ""
+    };
 
+    selects.push(
+        "SELECT
+            osm_id,
+            geometry,
+            name,
+            hstore(ARRAY['ele', tags->'ele', 'isolation', tags->'isolation']) AS extra,
+            CASE WHEN isolation > 4500 THEN 'peak1'
+                WHEN isolation BETWEEN 3000 AND 4500 THEN 'peak2'
+                WHEN isolation BETWEEN 1500 AND 3000 THEN 'peak3'
+                ELSE 'peak'
+            END AS type
+        FROM
+            osm_pois
+        NATURAL LEFT JOIN
+            isolations
+        WHERE
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+            type = 'peak' AND
+            name <> ''
+        ",
+    );
+
+    let gte_z13_sql;
+
+    if zoom >= 13 {
+        gte_z13_sql = format!(
+            "SELECT
+                osm_id,
+                geometry,
+                name,
+                hstore('ele', tags->'ele') AS extra,
+                CASE WHEN type = 'guidepost' AND name = '' THEN 'guidepost_noname' ELSE type END
+            FROM
+                osm_pois
+            WHERE
+                type = 'guidepost' AND
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+                {kst_cond}
+            "
+        );
+
+        selects.push(&gte_z13_sql);
+    }
+
+    if (12..=13).contains(&zoom) {
         selects.push(
             "SELECT
                 osm_id,
                 geometry,
                 name,
-                hstore(ARRAY['ele', tags->'ele', 'isolation', tags->'isolation']) AS extra,
-                CASE WHEN isolation > 4500 THEN 'peak1'
-                    WHEN isolation BETWEEN 3000 AND 4500 THEN 'peak2'
-                    WHEN isolation BETWEEN 1500 AND 3000 THEN 'peak3'
-                    ELSE 'peak'
-                END AS type
+                hstore('ele', tags->'ele') AS extra,
+                type
             FROM
                 osm_pois
-            NATURAL LEFT JOIN
-                isolations
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                type = 'peak' AND
-                name <> ''
+                type = 'aerodrome' AND
+                tags ? 'icao'
             ",
         );
+    }
 
-        let gte_z13_sql;
+    let z14_sql;
 
-        if zoom >= 13 {
-            gte_z13_sql = format!("SELECT
-                    osm_id,
-                    geometry,
-                    name,
-                    hstore('ele', tags->'ele') AS extra,
-                    CASE WHEN type = 'guidepost' AND name = '' THEN 'guidepost_noname' ELSE type END
-                FROM
-                    osm_pois
-                WHERE
-                    type = 'guidepost' AND
-                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-                    {kst_cond}
-                ");
-
-            selects.push(&gte_z13_sql);
-        }
-
-        if (12..=13).contains(&zoom) {
-            selects.push(
-                "SELECT
-                    osm_id,
-                    geometry,
-                    name,
-                    hstore('ele', tags->'ele') AS extra,
-                    type
-                FROM
-                    osm_pois
-                WHERE
-                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                    type = 'aerodrome' AND
-                    tags ? 'icao'
-                ",
-            );
-        }
-
-        let z14_sql;
-
-        if zoom >= 14 {
-
+    if zoom >= 14 {
         let w = {
             let mut omit_types = vec!["'peak'".to_string()];
 
@@ -535,187 +540,203 @@ pub fn render(
             format!("AND type NOT IN ({})", omit_types.join(", "))
         };
 
-        z14_sql = format!("
+        z14_sql = format!(
+            "
+        SELECT
+            osm_id,
+            geometry,
+            COALESCE(NULLIF(name, ''), tags->'ref', '') AS name,
+            hstore(ARRAY[
+                'ele', tags->'ele',
+                'access', tags->'access',
+                'hot', (type = 'hot_spring')::text,
+                'drinkable', tags->'drinking_water',
+                'refitted', tags->'refitted',
+                'intermittent', COALESCE(tags->'intermittent', tags->'seasonal'),
+                'water_characteristic', tags->'water_characteristic'
+            ]) AS extra,
+            CASE
+                WHEN
+                    type = 'guidepost' AND
+                    name = ''
+                THEN 'guidepost_noname'
+                WHEN
+                    type = 'tree' AND
+                    tags->'protected' <> 'no'
+                THEN 'tree_protected'
+                WHEN
+                    type = 'shelter' AND
+                    tags->'shelter_type' IN (
+                        'shopping_cart', 'lean_to', 'public_transport', 'picnic_shelter',
+                        'basic_hut', 'weather_shelter'
+                    )
+                THEN tags->'shelter_type'
+                WHEN
+                    type IN ('adit', 'mineshaft') AND
+                    tags->'disused' <> 'no'
+                THEN 'disused_' || type
+                WHEN type IN ('hot_spring', 'geyser', 'spring_box')
+                THEN 'spring'
+                WHEN type IN ('tower', 'mast')
+                THEN
+                    type || CASE tags->'tower:type'
+                        WHEN 'communication' THEN '_communication'
+                        WHEN 'observation' THEN '_observation'
+                        WHEN 'bell_tower' THEN '_bell_tower'
+                        ELSE ''
+                    END
+                ELSE type
+            END AS type
+        FROM
+            osm_pois
+        WHERE
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+            (
+                type <> 'saddle' OR
+                NOT EXISTS (
+                    SELECT 1
+                    FROM osm_pois b
+                    WHERE
+                        type = 'mountain_pass' AND
+                        osm_pois.osm_id = b.osm_id
+                )
+            ) AND
+            (
+                type <> 'tree' OR
+                tags->'protected' NOT IN ('', 'no') OR
+                tags->'denotation' = 'natural_monument'
+            ) AND
+            (
+                type NOT IN ('saddle', 'mountain_pass') OR
+                COALESCE(NULLIF(name, ''), tags->'ref', '') <> ''
+            )
+            {w} {kst_cond}
+        "
+        );
+
+        selects.push(&z14_sql);
+
+        // TODO filter only used sports
+        selects.push("
             SELECT
                 osm_id,
                 geometry,
-                COALESCE(NULLIF(name, ''), tags->'ref', '') AS name,
+                name,
                 hstore(ARRAY[
-                    'ele', tags->'ele',
-                    'access', tags->'access',
-                    'hot', (type = 'hot_spring')::text,
-                    'drinkable', tags->'drinking_water',
-                    'refitted', tags->'refitted',
-                    'intermittent', COALESCE(tags->'intermittent', tags->'seasonal'),
-                    'water_characteristic', tags->'water_characteristic'
+                    'access', tags->'access'
                 ]) AS extra,
-                CASE
-                    WHEN
-                        type = 'guidepost' AND
-                        name = ''
-                    THEN 'guidepost_noname'
-                    WHEN
-                        type = 'tree' AND
-                        tags->'protected' <> 'no'
-                    THEN 'tree_protected'
-                    WHEN
-                        type = 'shelter' AND
-                        tags->'shelter_type' IN (
-                            'shopping_cart', 'lean_to', 'public_transport', 'picnic_shelter',
-                            'basic_hut', 'weather_shelter'
-                        )
-                    THEN tags->'shelter_type'
-                    WHEN
-                        type IN ('adit', 'mineshaft') AND
-                        tags->'disused' <> 'no'
-                    THEN 'disused_' || type
-                    WHEN type IN ('hot_spring', 'geyser', 'spring_box')
-                    THEN 'spring'
-                    WHEN type IN ('tower', 'mast')
-                    THEN
-                        type || CASE tags->'tower:type'
-                            WHEN 'communication' THEN '_communication'
-                            WHEN 'observation' THEN '_observation'
-                            WHEN 'bell_tower' THEN '_bell_tower'
-                            ELSE ''
-                        END
-                    ELSE type
-                END AS type
+                type
             FROM
-                osm_pois
+                osm_sports
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                (
-                    type <> 'saddle' OR
-                    NOT EXISTS (
-                        SELECT 1
-                        FROM osm_pois b
-                        WHERE
-                            type = 'mountain_pass' AND
-                            osm_pois.osm_id = b.osm_id
-                    )
-                ) AND
-                (
-                    type <> 'tree' OR
-                    tags->'protected' NOT IN ('', 'no') OR
-                    tags->'denotation' = 'natural_monument'
-                ) AND
-                (
-                    type NOT IN ('saddle', 'mountain_pass') OR
-                    COALESCE(NULLIF(name, ''), tags->'ref', '') <> ''
-                )
-                {w} {kst_cond}
-            ");
+                osm_id NOT IN (SELECT osm_id FROM osm_pois WHERE type IN ('leisure_miniature_golf', 'leisure_horse_riding'))
+        ");
 
-            selects.push(&z14_sql);
-
-            // TODO filter only used sports
-            selects.push("
-                SELECT
-                    osm_id,
-                    geometry,
-                    name,
-                    hstore(ARRAY[
-                        'access', tags->'access'
-                    ]) AS extra,
-                    type
-                FROM
-                    osm_sports
-                WHERE
-                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                    osm_id NOT IN (SELECT osm_id FROM osm_pois WHERE type IN ('leisure_miniature_golf', 'leisure_horse_riding'))
-            ");
-
-            selects.push("
-                SELECT
-                    osm_id,
-                    geometry,
-                    name,
-                    hstore('') as extra,
-                    building AS type
-                FROM
-                    osm_place_of_worships
-                WHERE
-                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                    building IN ('chapel', 'church', 'temple', 'mosque', 'cathedral', 'synagogue')
-            ");
-        }
-
-        if zoom >= 15 {
-            selects.push("
-                SELECT
-                    osm_id,
-                    ST_PointOnSurface(geometry) AS geometry,
-                    name,
-                    hstore('') AS extra,
-                    'generator_wind' AS type
-                FROM
-                    osm_power_generators
-                WHERE
-                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                    (source = 'wind' OR method = 'wind_turbine')
-            ");
-
-            selects.push("
-                SELECT
-                    osm_id,
-                    geometry,
-                    name,
-                    hstore('') AS extra,
-                    type
-                FROM
-                    osm_shops
-                WHERE
-                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                    type IN (
-                        'convenience', 'confectionery', 'pastry', 'bicycle', 'supermarket', 'greengrocer', 'farm'
-                    )
-            ");
-
-            selects.push("
-                SELECT
-                    osm_id,
-                    ST_LineInterpolatePoint(geometry, 0.5) AS geometry,
-                    name,
-                    hstore('') AS extra,
-                    type
-                FROM
-                    osm_feature_lines
-                WHERE
-                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                    type IN ('dam', 'weir', 'ford')
-            ");
-        }
-
-        let z_order_case = build_poi_z_order_case("type");
-
-        let sql = format!(r"
+        selects.push(
+            "
             SELECT
-                *
+                osm_id,
+                geometry,
+                name,
+                hstore('') as extra,
+                building AS type
             FROM
-                ({}) AS tmp
-            ORDER BY
-                {z_order_case},
-                extra->'isolation' DESC NULLS LAST,
-                CASE
-                    WHEN (extra->'ele') ~ '^\s*-?\d+(\.\d+)?\s*$' THEN (extra->'ele')::real
-                    ELSE NULL
-                END DESC NULLS LAST,
-                osm_id
-            ",
-            selects.join(" UNION ALL ")
+                osm_place_of_worships
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                building IN ('chapel', 'church', 'temple', 'mosque', 'cathedral', 'synagogue')
+        ",
+        );
+    }
+
+    if zoom >= 15 {
+        selects.push(
+            "
+            SELECT
+                osm_id,
+                ST_PointOnSurface(geometry) AS geometry,
+                name,
+                hstore('') AS extra,
+                'generator_wind' AS type
+            FROM
+                osm_power_generators
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                (source = 'wind' OR method = 'wind_turbine')
+        ",
         );
 
-        drop(selects);
+        selects.push("
+            SELECT
+                osm_id,
+                geometry,
+                name,
+                hstore('') AS extra,
+                type
+            FROM
+                osm_shops
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                type IN (
+                    'convenience', 'confectionery', 'pastry', 'bicycle', 'supermarket', 'greengrocer', 'farm'
+                )
+        ");
 
-        let _span = tracy_client::span!("features::query");
+        selects.push(
+            "
+            SELECT
+                osm_id,
+                ST_LineInterpolatePoint(geometry, 0.5) AS geometry,
+                name,
+                hstore('') AS extra,
+                type
+            FROM
+                osm_feature_lines
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                type IN ('dam', 'weir', 'ford')
+        ",
+        );
+    }
 
-        client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
-    })?;
+    let z_order_case = build_poi_z_order_case("type");
+
+    let sql = format!(
+        r"
+        SELECT
+            *
+        FROM
+            ({}) AS tmp
+        ORDER BY
+            {z_order_case},
+            extra->'isolation' DESC NULLS LAST,
+            CASE
+                WHEN (extra->'ele') ~ '^\s*-?\d+(\.\d+)?\s*$' THEN (extra->'ele')::real
+                ELSE NULL
+            END DESC NULLS LAST,
+            osm_id
+        ",
+        selects.join(" UNION ALL ")
+    );
+
+    drop(selects);
+
+    client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params()).await
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    collision: &mut Collision,
+    svg_repo: &mut SvgRepo,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("pois::render");
+
+    let zoom = ctx.zoom;
 
     let mut to_label = Vec::<(Point, f64, String, Option<String>, usize, &Def)>::new();
-
-    let context = ctx.context;
 
     {
         let _span = tracy_client::span!("features::paint_svgs");

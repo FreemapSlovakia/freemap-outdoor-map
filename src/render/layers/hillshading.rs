@@ -3,7 +3,7 @@ use crate::render::{
     layer_render_error::{LayerRenderError, LayerRenderResult},
     layers::hillshading_datasets::HillshadingDatasets,
 };
-use cairo::{Format, ImageSurface};
+use cairo::{Context, Format, ImageSurface};
 use gdal::Dataset;
 
 pub enum Mode {
@@ -298,9 +298,12 @@ pub fn load_surface(
     Ok(surface)
 }
 
-pub fn paint_surface(ctx: &Ctx, surface: &ImageSurface, alpha: f64) -> LayerRenderResult {
-    let context = ctx.context;
-
+pub fn paint_surface(
+    ctx: &Ctx,
+    context: &Context,
+    surface: &ImageSurface,
+    alpha: f64,
+) -> LayerRenderResult {
     context.save()?;
 
     if ctx.scale != 1.0 {
@@ -370,6 +373,7 @@ pub fn mask_covers_tile(surfaces: &mut [ImageSurface]) -> Result<bool, LayerRend
 
 pub fn load_and_paint(
     ctx: &Ctx,
+    context: &Context,
     country: &str,
     alpha: f64,
     shading_data: &mut HillshadingDatasets,
@@ -378,7 +382,7 @@ pub fn load_and_paint(
     let surface = load_surface(ctx, country, shading_data, mode)?;
 
     if let Some(surface) = surface.as_ref() {
-        paint_surface(ctx, surface, alpha)?;
+        paint_surface(ctx, context, surface, alpha)?;
     }
 
     Ok(surface.is_some())

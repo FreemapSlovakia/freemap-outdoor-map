@@ -1,4 +1,5 @@
 use crate::render::{
+    Feature,
     collision::Collision,
     colors::{self},
     ctx::Ctx,
@@ -9,41 +10,46 @@ use crate::render::{
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
-use postgres::Client;
+use cairo::Context;
 
-pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
-    let _span = tracy_client::span!("highway_names::render");
-
-    let rows = ctx.legend_features("roads", || {
-        let sql = "
-            WITH merged AS (
-                SELECT
-                    name,
-                    ST_LineMerge(ST_Collect(geometry)) AS geometry,
-                    type,
-                    z_order,
-                    MIN(osm_id) AS osm_id
-                FROM
-                    osm_roads
-                WHERE
-                    geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                    name <> '' AND
-                    NOT (class = 'railway' AND type = 'abandoned')
-                    GROUP BY z_order, name, type
-            )
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+    let sql = "
+        WITH merged AS (
             SELECT
                 name,
-                geometry,
-                type
+                ST_LineMerge(ST_Collect(geometry)) AS geometry,
+                type,
+                z_order,
+                MIN(osm_id) AS osm_id
             FROM
-                merged
-            ORDER BY
-                z_order DESC,
-                osm_id
-        ";
+                osm_roads
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                name <> '' AND
+                NOT (class = 'railway' AND type = 'abandoned')
+                GROUP BY z_order, name, type
+        )
+        SELECT
+            name,
+            geometry,
+            type
+        FROM
+            merged
+        ORDER BY
+            z_order DESC,
+            osm_id
+    ";
 
-        client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
-    })?;
+    client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params()).await
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    collision: &mut Collision,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("highway_names::render");
 
     let options = TextOnLineOptions {
         distribution: Distribution::Align {
@@ -62,7 +68,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
         let name = row.get_string("name")?;
 
         walk_geometry_line_strings(&geom, &mut |geom| {
-            let _drawn = draw_text_on_line(ctx.context, geom, name, Some(collision), &options)?;
+            let _drawn = draw_text_on_line(context, geom, name, Some(collision), &options)?;
 
             cairo::Result::Ok(())
         })?;

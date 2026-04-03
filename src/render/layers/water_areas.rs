@@ -1,25 +1,21 @@
 use crate::render::{
+    Feature,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{hatch::hatch_geometry, path_geom::path_geometry},
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
-use postgres::Client;
+use cairo::Context;
 
-pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
-    let _span = tracy_client::span!("water_areas::render");
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+    let table_suffix = match ctx.zoom {
+        ..=9 => "_gen0",
+        10..=11 => "_gen1",
+        12.. => "",
+    };
 
-    let zoom = ctx.zoom;
-
-    let rows = ctx.legend_features("water_areas", || {
-        let table_suffix = match zoom {
-            ..=9 => "_gen0",
-            10..=11 => "_gen1",
-            12.. => "",
-        };
-
-        #[cfg_attr(any(), rustfmt::skip)]
+    #[cfg_attr(any(), rustfmt::skip)]
         let sql = format!("
             SELECT
                 geometry,
@@ -30,10 +26,13 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
                 geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
         ");
 
-        client.query(&sql, &ctx.bbox_query_params(None).as_params())
-    })?;
+    client.query(&sql, &ctx.bbox_query_params(None).as_params()).await
+}
 
-    let context = ctx.context;
+pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
+    let _span = tracy_client::span!("water_areas::render");
+
+    let zoom = ctx.zoom;
 
     let tile_projector = &ctx.tile_projector;
 

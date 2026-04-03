@@ -1,4 +1,5 @@
 use crate::render::{
+    Feature,
     collision::Collision,
     colors,
     ctx::Ctx,
@@ -9,28 +10,33 @@ use crate::render::{
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
-use postgres::Client;
+use cairo::Context;
 
-pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+    let sql = "
+        SELECT
+            geometry,
+            name
+        FROM
+            osm_feature_lines
+        WHERE
+            name <> '' AND
+            type IN ('cable_car', 'chair_lift', 'drag_lift', 'gondola', 'goods', 'j-bar', 'magic_carpet', 'mixed_lift', 'platter', 'rope_tow', 't-bar', 'zip_line') AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            osm_id
+    ";
+
+    client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params()).await
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    collision: &mut Collision,
+) -> LayerRenderResult {
     let _span = tracy_client::span!("aerialway_names::render");
-
-    let rows = ctx.legend_features("feature_lines", || {
-        let sql = "
-            SELECT
-                geometry,
-                name
-            FROM
-                osm_feature_lines
-            WHERE
-                name <> '' AND
-                type IN ('cable_car', 'chair_lift', 'drag_lift', 'gondola', 'goods', 'j-bar', 'magic_carpet', 'mixed_lift', 'platter', 'rope_tow', 't-bar', 'zip_line') AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            ORDER BY
-                osm_id
-        ";
-
-        client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())
-    })?;
 
     let options = TextOnLineOptions {
         distribution: Distribution::Align {
@@ -48,7 +54,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
 
         let geom = offset_line_string(&geom, 10.0);
 
-        draw_text_on_line(ctx.context, &geom, name, Some(collision), &options)?;
+        draw_text_on_line(context, &geom, name, Some(collision), &options)?;
     }
 
     Ok(())

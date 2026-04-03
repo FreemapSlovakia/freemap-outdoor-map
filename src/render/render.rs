@@ -6,8 +6,10 @@ use crate::render::{
     xyz::bbox_size_in_pixels,
 };
 use cairo::{Format, ImageSurface, PdfSurface, Surface, SvgSurface};
+use deadpool_postgres::Pool;
 use image::codecs::jpeg::JpegEncoder;
 use image::{ExtendedColorType, ImageEncoder};
+use tokio::runtime::Handle;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RenderError {
@@ -23,7 +25,8 @@ pub enum RenderError {
 
 pub fn render(
     request: &RenderRequest,
-    client: &mut postgres::Client,
+    pool: Pool,
+    handle: Handle,
     svg_repo: &mut SvgRepo,
     hillshading_datasets: Option<&mut HillshadingDatasets>,
 ) -> Result<Vec<u8>, RenderError> {
@@ -35,13 +38,12 @@ pub fn render(
         layers::render(
             surface,
             request,
-            client,
+            pool,
+            handle,
             request.bbox,
             size,
             svg_repo,
             hillshading_datasets,
-            request.coverage_geometry.as_deref(),
-            request.scale,
         )
     };
 

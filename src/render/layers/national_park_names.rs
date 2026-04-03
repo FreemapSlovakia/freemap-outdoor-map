@@ -1,4 +1,5 @@
 use crate::render::{
+    Feature,
     collision::Collision,
     colors,
     ctx::Ctx,
@@ -10,8 +11,8 @@ use crate::render::{
     projectable::TileProjectable,
     regex_replacer::{Replacement, replace},
 };
+use cairo::Context;
 use pangocairo::pango::Style;
-use postgres::Client;
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -28,30 +29,35 @@ pub static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
     ]
 });
 
-pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> LayerRenderResult {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+    let sql = "
+        SELECT
+            type,
+            name,
+            COALESCE(tags->'protect_class', '') AS protect_class,
+            ST_PointOnSurface(geometry) AS geometry
+        FROM
+            osm_landcovers
+        WHERE
+            name <> '' AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+            (type = 'national_park' OR (type = 'protected_area' AND tags->'protect_class' = '2'))
+        ORDER BY
+            name LIKE ('Ochranné pásmo %'),
+            area DESC,
+            osm_id
+    ";
+
+    client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params()).await
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    collision: &mut Collision,
+) -> LayerRenderResult {
     let _span = tracy_client::span!("national_park_names::render");
-
-    let rows = ctx.legend_features("national_park_names", || {
-        let sql = "
-            SELECT
-                type,
-                name,
-                COALESCE(tags->'protect_class', '') AS protect_class,
-                ST_PointOnSurface(geometry) AS geometry
-            FROM
-                osm_landcovers
-            WHERE
-                name <> '' AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                (type = 'national_park' OR (type = 'protected_area' AND tags->'protect_class' = '2'))
-            ORDER BY
-                name LIKE ('Ochranné pásmo %'),
-                area DESC,
-                osm_id
-        ";
-
-        client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())
-    })?;
 
     let text_options = TextOptions {
         flo: FontAndLayoutOptions {
@@ -65,7 +71,7 @@ pub fn render(ctx: &Ctx, client: &mut Client, collision: &mut Collision) -> Laye
 
     for row in rows {
         draw_text(
-            ctx.context,
+            context,
             Some(collision),
             &row.get_point()?.project_to_tile(&ctx.tile_projector),
             &replace(row.get_string("name")?, &REPLACEMENTS),

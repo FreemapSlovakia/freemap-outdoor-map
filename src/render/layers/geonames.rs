@@ -1,4 +1,5 @@
 use crate::render::{
+    Feature,
     colors::{self},
     ctx::Ctx,
     draw::{
@@ -8,27 +9,27 @@ use crate::render::{
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
+use cairo::Context;
 use pangocairo::pango::Style;
-use postgres::Client;
 
-pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+    let sql = "
+        SELECT
+            name,
+            geometry
+        FROM
+            geonames_smooth
+        WHERE
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            ogc_fid
+    ";
+
+    client.query(sql, &ctx.bbox_query_params(Some(20.0)).as_params()).await
+}
+
+pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
     let _span = tracy_client::span!("geonames::render");
-
-    let rows = ctx.legend_features("geonames", || {
-        let sql = "
-            SELECT
-                name,
-                geometry
-            FROM
-                geonames_smooth
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            ORDER BY
-                ogc_fid
-        ";
-
-        client.query(sql, &ctx.bbox_query_params(Some(20.0)).as_params())
-    })?;
 
     let options = TextOnLineOptions {
         flo: FontAndLayoutOptions {
@@ -44,8 +45,6 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         halo_width: 2.0,
         ..TextOnLineOptions::default()
     };
-
-    let context = ctx.context;
 
     context.push_group();
 

@@ -1,6 +1,5 @@
-use sled::Batch;
-
 use crate::app::tile_coord::TileCoord;
+use sled::Batch;
 use std::{
     collections::{HashMap, HashSet},
     fs, io,

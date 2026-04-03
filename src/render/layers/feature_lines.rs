@@ -11,87 +11,89 @@ use crate::render::{
     projectable::TileProjectable,
     svg_repo::SvgRepo,
 };
-use postgres::Client;
+use cairo::Context;
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Feature>, postgres::Error> {
-    ctx.legend_features("feature_lines", || {
-        let mut types = vec![];
+pub async fn query(
+    ctx: &Ctx,
+    client: &tokio_postgres::Client,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+    let mut types = vec![];
 
-        if ctx.zoom >= 11 {
-            types.extend(["runway", "taxiway", "parking_position", "taxilane"]);
-        }
+    if ctx.zoom >= 11 {
+        types.extend(["runway", "taxiway", "parking_position", "taxilane"]);
+    }
 
-        if ctx.zoom >= 12 {
-            types.extend([
-                "cable_car",
-                "chair_lift",
-                "drag_lift",
-                "gondola",
-                "goods",
-                "j-bar",
-                "magic_carpet",
-                "mixed_lift",
-                "platter",
-                "rope_tow",
-                "t-bar",
-                "zip_line",
-                "pipeline",
-            ]);
-        }
+    if ctx.zoom >= 12 {
+        types.extend([
+            "cable_car",
+            "chair_lift",
+            "drag_lift",
+            "gondola",
+            "goods",
+            "j-bar",
+            "magic_carpet",
+            "mixed_lift",
+            "platter",
+            "rope_tow",
+            "t-bar",
+            "zip_line",
+            "pipeline",
+        ]);
+    }
 
-        if ctx.zoom >= 12 {
-            types.extend(["cutline", "weir", "dam", "tree_row", "line"]);
-        }
+    if ctx.zoom >= 12 {
+        types.extend(["cutline", "weir", "dam", "tree_row", "line"]);
+    }
 
-        if ctx.zoom >= 14 {
-            types.push("minor_line");
-        }
+    if ctx.zoom >= 14 {
+        types.push("minor_line");
+    }
 
-        if ctx.zoom >= 15 {
-            types.extend(["earth_bank", "dyke", "embankment", "gully", "cliff"]);
-        }
+    if ctx.zoom >= 15 {
+        types.extend(["earth_bank", "dyke", "embankment", "gully", "cliff"]);
+    }
 
-        if ctx.zoom >= 16 {
-            types.extend([
-                "city_wall",
-                "hedge",
-                "ditch",
-                "fence",
-                "retaining_wall",
-                "wall",
-            ]);
-        }
+    if ctx.zoom >= 16 {
+        types.extend([
+            "city_wall",
+            "hedge",
+            "ditch",
+            "fence",
+            "retaining_wall",
+            "wall",
+        ]);
+    }
 
-        let sql = "
-            SELECT
-                geometry,
-                type,
-                tags
-            FROM
-                osm_feature_lines
-            WHERE
-                type = ANY($6)
-                AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ";
+    let sql = "
+        SELECT
+            geometry,
+            type,
+            tags
+        FROM
+            osm_feature_lines
+        WHERE
+            type = ANY($6)
+            AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+    ";
 
-        client.query(
+    client
+        .query(
             sql,
             &ctx.bbox_query_params(Some(8.0)).push(types).as_params(),
         )
-    })
+        .await
 }
 
 pub fn render(
     ctx: &Ctx,
+    context: &Context,
     stage: u8,
     rows: &[Feature],
     svg_repo: &mut SvgRepo,
     hillshading_datasets: Option<&mut HillshadingDatasets>,
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("feature_lines::render");
-
-    let context = ctx.context;
 
     let mut draw = |maskable: bool| -> Result<bool, LayerRenderError> {
         let mut touched = false;
@@ -170,7 +172,7 @@ pub fn render(
                 }
                 (2, 13.., "tree_row", false) => {
                     draw_line_pattern_scaled(
-                        ctx.context,
+                        context,
                         ctx.size,
                         &geom,
                         0.8,
@@ -179,20 +181,14 @@ pub fn render(
                     )?;
                 }
                 (2, 15.., "earth_bank", true) => {
-                    draw_line_pattern(
-                        ctx.context,
-                        ctx.size,
-                        &geom,
-                        0.8,
-                        svg_repo.get("earth_bank")?,
-                    )?;
+                    draw_line_pattern(context, ctx.size, &geom, 0.8, svg_repo.get("earth_bank")?)?;
                 }
                 (2, 15.., "dyke", true) => {
-                    draw_line_pattern(ctx.context, ctx.size, &geom, 0.8, svg_repo.get("dyke")?)?;
+                    draw_line_pattern(context, ctx.size, &geom, 0.8, svg_repo.get("dyke")?)?;
                 }
                 (2, 15.., "embankment", true) => {
                     draw_line_pattern(
-                        ctx.context,
+                        context,
                         ctx.size,
                         &geom,
                         0.8,
@@ -200,10 +196,10 @@ pub fn render(
                     )?;
                 }
                 (2, 15.., "gully", true) => {
-                    draw_line_pattern(ctx.context, ctx.size, &geom, 0.8, svg_repo.get("gully")?)?;
+                    draw_line_pattern(context, ctx.size, &geom, 0.8, svg_repo.get("gully")?)?;
                 }
                 (2, 15.., "cliff", true) => {
-                    draw_line_pattern(ctx.context, ctx.size, &geom, 0.8, svg_repo.get("cliff")?)?;
+                    draw_line_pattern(context, ctx.size, &geom, 0.8, svg_repo.get("cliff")?)?;
 
                     context.set_source_color(colors::AREA_LABEL);
                     context.set_line_width(1.0);
@@ -341,7 +337,7 @@ pub fn render(
         context.push_group();
 
         for mask_surface in &mask_surfaces {
-            hillshading::paint_surface(ctx, mask_surface, 1.0)?;
+            hillshading::paint_surface(ctx, context, mask_surface, 1.0)?;
         }
 
         context.pop_group_to_source()?;

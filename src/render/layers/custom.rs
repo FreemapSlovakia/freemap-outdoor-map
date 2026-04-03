@@ -9,15 +9,13 @@ use crate::render::{
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
-use cairo::{LineCap, LineJoin};
+use cairo::{Context, LineCap, LineJoin};
 use geo::{Geometry, InteriorPoint, Transform, Translate};
 use geojson::Feature;
 use proj::Proj;
 use serde_json::Value;
 
-pub fn render(ctx: &Ctx, features: &Vec<Feature>) -> LayerRenderResult {
-    let context = ctx.context;
-
+pub fn render(ctx: &Ctx, context: &Context, features: &Vec<Feature>) -> LayerRenderResult {
     // TODO lazy
     let proj =
         Proj::new_known_crs("EPSG:4326", "EPSG:3857", None).expect("projection 4326 -> 3857");
@@ -63,7 +61,7 @@ pub fn render(ctx: &Ctx, features: &Vec<Feature>) -> LayerRenderResult {
             }
         }
 
-        path_geometry(ctx.context, &geom);
+        path_geometry(context, &geom);
 
         context.set_line_width(width);
 
@@ -71,7 +69,7 @@ pub fn render(ctx: &Ctx, features: &Vec<Feature>) -> LayerRenderResult {
 
         context.stroke()?;
 
-        path_polygons(ctx.context, &geom);
+        path_polygons(context, &geom);
 
         context.set_source_rgba(r, g, b, 0.25);
 

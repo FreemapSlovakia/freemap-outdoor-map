@@ -22,6 +22,9 @@ pub enum LayerRenderError {
     #[error("Cairo borrow error: {0}")]
     CairoBorrow(#[from] cairo::BorrowError),
 
+    #[error("DB pool error: {0}")]
+    Pool(#[from] deadpool_postgres::PoolError),
+
     #[error("Feature error: {0}")]
     FeatureError(#[from] FeatureError),
 }
@@ -29,7 +32,7 @@ pub enum LayerRenderError {
 pub type LayerRenderResult = Result<(), LayerRenderError>;
 
 #[derive(Debug)]
-pub struct PostgresRenderError(pub postgres::Error);
+pub struct PostgresRenderError(pub tokio_postgres::Error);
 
 impl fmt::Display for PostgresRenderError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -61,14 +64,14 @@ impl std::error::Error for PostgresRenderError {
     }
 }
 
-impl From<postgres::Error> for PostgresRenderError {
-    fn from(err: postgres::Error) -> Self {
+impl From<tokio_postgres::Error> for PostgresRenderError {
+    fn from(err: tokio_postgres::Error) -> Self {
         Self(err)
     }
 }
 
-impl From<postgres::Error> for LayerRenderError {
-    fn from(err: postgres::Error) -> Self {
+impl From<tokio_postgres::Error> for LayerRenderError {
+    fn from(err: tokio_postgres::Error) -> Self {
         Self::Postgres(err.into())
     }
 }

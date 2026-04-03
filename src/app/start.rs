@@ -6,21 +6,18 @@ use crate::app::{
     tile_processor::{TileProcessingConfig, VariantConfig},
 };
 use crate::render::{RenderWorkerPool, set_mapping_path};
+use deadpool_postgres::Config;
 use dotenvy::dotenv;
 use geo::{Coord, Geometry, MapCoordsInPlace};
 use geojson::GeoJson;
-use postgres::{Config, NoTls};
 use proj::Proj;
-use r2d2_postgres::PostgresConnectionManager;
 use std::{
     cell::Cell,
     fs::File,
     io::BufReader,
     path::Path,
-    str::FromStr,
     sync::{Arc, Mutex},
 };
-use tokio::signal;
 #[cfg(unix)]
 use tokio::signal::unix::{SignalKind, signal as unix_signal};
 use tokio::sync::broadcast;
@@ -43,17 +40,31 @@ pub(crate) fn start() {
         Err(err) => panic!("invalid tile processing configuration: {err}"),
     };
 
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("tokio");
+
+    let handle = rt.handle().clone();
+
     let render_worker_pool = {
-        let connection_pool = r2d2::Pool::builder()
-            .max_size(cli.pool_max_size)
-            .build(PostgresConnectionManager::new(
-                Config::from_str(&cli.database_url).expect("parse database url"),
-                NoTls,
-            ))
-            .expect("build db pool");
+        let pool = {
+            let mut cfg = Config::new();
+            cfg.url = Some(cli.database_url.clone());
+            cfg.pool = Some(deadpool_postgres::PoolConfig {
+                max_size: cli.pool_max_size as usize,
+                ..Default::default()
+            });
+            cfg.create_pool(
+                Some(deadpool_postgres::Runtime::Tokio1),
+                tokio_postgres::NoTls,
+            )
+            .expect("build db pool")
+        };
 
         Arc::new(RenderWorkerPool::new(
-            connection_pool,
+            pool,
+            handle,
             cli.worker_count,
             Arc::from(cli.svg_base_path),
             Arc::from(cli.hillshading_base_path),
@@ -89,11 +100,6 @@ pub(crate) fn start() {
     } else if cli.expires_base_path.is_some() {
         eprintln!("imposm watcher disabled: missing --tile-cache-base-path");
     }
-
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .expect("tokio");
 
     let tile_processing_worker_for_server = tile_processing_worker.clone();
 
@@ -187,26 +193,44 @@ fn tile_variant_input_to_server_variant(
 }
 
 async fn shutdown_signal(shutdown_tx: broadcast::Sender<()>) {
-    let ctrl_c = async {
-        signal::ctrl_c().await.expect("install Ctrl+C handler");
-    };
-
     #[cfg(unix)]
-    let terminate = async {
+    {
+        let mut sigint = unix_signal(SignalKind::interrupt()).expect("install SIGINT handler");
         let mut sigterm = unix_signal(SignalKind::terminate()).expect("install SIGTERM handler");
-        sigterm.recv().await;
-    };
 
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
+        tokio::select! {
+            _ = sigint.recv() => {},
+            _ = sigterm.recv() => {},
+        }
 
-    tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
+        if let Err(err) = shutdown_tx.send(()) {
+            eprintln!("Error sending shutdown signal: {err}");
+        }
+
+        eprintln!("Graceful shutdown initiated. Press Ctrl+C again to force quit.");
+
+        tokio::select! {
+            _ = sigint.recv() => {},
+            _ = sigterm.recv() => {},
+        }
+
+        eprintln!("Force quit.");
+        std::process::exit(1);
     }
 
-    if let Err(err) = shutdown_tx.send(()) {
-        eprintln!("Error sending shutdown signal: {err}");
+    #[cfg(not(unix))]
+    {
+        signal::ctrl_c().await.expect("install Ctrl+C handler");
+
+        if let Err(err) = shutdown_tx.send(()) {
+            eprintln!("Error sending shutdown signal: {err}");
+        }
+
+        eprintln!("Graceful shutdown initiated. Press Ctrl+C again to force quit.");
+
+        signal::ctrl_c().await.expect("install Ctrl+C handler");
+        eprintln!("Force quit.");
+        std::process::exit(1);
     }
 }
 

@@ -1,33 +1,32 @@
 use crate::render::{
+    Feature,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::path_geom::{path_geometry, path_line_string_with_offset, walk_geometry_line_strings},
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
-use postgres::Client;
+use cairo::Context;
 
-pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+    let sql = "
+        SELECT
+            geometry
+        FROM
+            osm_landcovers
+        WHERE
+            type IN ('zoo', 'theme_park') AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+    ";
+
+    client.query(sql, &ctx.bbox_query_params(Some(10.0)).as_params()).await
+}
+
+pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
     let _span = tracy_client::span!("special_parks::render");
 
     // TODO consired area
     // TODO maybe move to landcovers.rs
-
-    let rows = ctx.legend_features("special_parks", || {
-        let sql = "
-            SELECT
-                geometry
-            FROM
-                osm_landcovers
-            WHERE
-                type IN ('zoo', 'theme_park') AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ";
-
-        client.query(sql, &ctx.bbox_query_params(Some(10.0)).as_params())
-    })?;
-
-    let context = ctx.context;
 
     context.push_group();
 

@@ -1,14 +1,59 @@
 use crate::render::{
+    Feature,
     ctx::Ctx,
     draw::{markers_on_path::draw_markers_on_path, path_geom::path_line_string},
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
     svg_repo::SvgRepo,
 };
-use postgres::Client;
+use cairo::Context;
 use std::cell::Cell;
 
-pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRenderResult {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+    let sql = "
+        SELECT
+            CASE
+                WHEN
+                    bicycle NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                    OR (
+                        bicycle = '' AND
+                        vehicle NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                    )
+                    OR (
+                        bicycle = '' AND
+                        vehicle = '' AND
+                        access NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                    )
+                THEN 1
+                ELSE 0
+            END AS no_bicycle,
+            CASE
+                WHEN
+                    foot NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                    OR (
+                        foot = '' AND
+                        access NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+                    )
+                THEN 1
+                ELSE 0
+            END AS no_foot,
+            geometry
+        FROM
+            osm_roads
+        WHERE
+            type NOT IN ('trunk', 'motorway', 'trunk_link', 'motorway_link') AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+    ";
+
+    client.query(sql, &ctx.bbox_query_params(Some(32.0)).as_params()).await
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    svg_repo: &mut SvgRepo,
+) -> LayerRenderResult {
     let _span = tracy_client::span!("road_access_restrictions::render");
 
     // TODO lazy
@@ -20,47 +65,6 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
     let no_bicycle_rect = no_bicycle_icon.extents().expect("surface extents");
 
     let no_foot_rect = no_foot_icon.extents().expect("surface extents");
-
-    let rows = ctx.legend_features("road_access_restrictions", || {
-        let sql = "
-            SELECT
-                CASE
-                    WHEN
-                        bicycle NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-                        OR (
-                            bicycle = '' AND
-                            vehicle NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-                        )
-                        OR (
-                            bicycle = '' AND
-                            vehicle = '' AND
-                            access NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-                        )
-                    THEN 1
-                    ELSE 0
-                END AS no_bicycle,
-                CASE
-                    WHEN
-                        foot NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-                        OR (
-                            foot = '' AND
-                            access NOT IN ('', 'yes', 'designated', 'official', 'permissive')
-                        )
-                    THEN 1
-                    ELSE 0
-                END AS no_foot,
-                geometry
-            FROM
-                osm_roads
-            WHERE
-                type NOT IN ('trunk', 'motorway', 'trunk_link', 'motorway_link') AND
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-        ";
-
-        client.query(sql, &ctx.bbox_query_params(Some(32.0)).as_params())
-    })?;
-
-    let context = ctx.context;
 
     for row in rows {
         let geom = row.get_line_string()?.project_to_tile(&ctx.tile_projector);

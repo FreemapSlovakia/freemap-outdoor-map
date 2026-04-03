@@ -1,39 +1,35 @@
 use crate::render::{
-    FeatureError,
+    Feature, FeatureError,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{hatch::hatch_geometry, path_geom::path_geometry},
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
-use postgres::Client;
+use cairo::Context;
 
-pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+    let sql = "
+        SELECT
+            geometry
+        FROM
+            osm_landcovers
+        WHERE
+            type = 'military'
+            AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            AND area / POWER(4, 19 - $6) > 10
+    ";
+
+    client.query(
+        sql,
+        &ctx.bbox_query_params(Some(10.0))
+            .push(ctx.zoom as i32)
+            .as_params(),
+    ).await
+}
+
+pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
     let _span = tracy_client::span!("military_areas::render");
-
-    let zoom = ctx.zoom;
-
-    let rows = ctx.legend_features("military_areas", || {
-        let sql = "
-            SELECT
-                geometry
-            FROM
-                osm_landcovers
-            WHERE
-                type = 'military'
-                AND geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-                AND area / POWER(4, 19 - $6) > 10
-        ";
-
-        client.query(
-            sql,
-            &ctx.bbox_query_params(Some(10.0))
-                .push(zoom as i32)
-                .as_params(),
-        )
-    })?;
-
-    let context = ctx.context;
 
     context.push_group();
 
@@ -61,7 +57,7 @@ pub fn render(ctx: &Ctx, client: &mut Client) -> LayerRenderResult {
         context.set_dash(&[], 0.0);
         context.set_line_width(1.5);
 
-        hatch_geometry(context, unprojected, tile_projector, zoom, 10.0, -45.0)?;
+        hatch_geometry(context, unprojected, tile_projector, ctx.zoom, 10.0, -45.0)?;
 
         context.stroke()?;
 

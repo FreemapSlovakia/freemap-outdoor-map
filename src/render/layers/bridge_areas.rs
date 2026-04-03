@@ -1,30 +1,29 @@
 use crate::render::{
+    Feature,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::path_geom::path_geometry,
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
-use postgres::Client;
+use cairo::Context;
 
-pub fn render(ctx: &Ctx, client: &mut Client, mask: bool) -> LayerRenderResult {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+    let query = "
+        SELECT
+            geometry
+        FROM
+            osm_landcovers
+        WHERE
+            geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857) AND
+            type = 'bridge'
+    ";
+
+    client.query(query, &ctx.bbox_query_params(None).as_params()).await
+}
+
+pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>, mask: bool) -> LayerRenderResult {
     let _span = tracy_client::span!("bridge_areas::render");
-
-    let rows = ctx.legend_features("bridge_areas", || {
-        let query = "
-            SELECT
-                geometry
-            FROM
-                osm_landcovers
-            WHERE
-                geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857) AND
-                type = 'bridge'
-        ";
-
-        client.query(query, &ctx.bbox_query_params(None).as_params())
-    })?;
-
-    let context = ctx.context;
 
     context.save()?;
 

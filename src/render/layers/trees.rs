@@ -1,37 +1,42 @@
 use crate::render::{
-    ctx::Ctx, layer_render_error::LayerRenderResult, projectable::TileProjectable,
+    Feature, ctx::Ctx, layer_render_error::LayerRenderResult, projectable::TileProjectable,
     svg_repo::SvgRepo,
 };
-use postgres::Client;
+use cairo::Context;
 
-pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRenderResult {
-    let _span = tracy_client::span!("trees::render");
-
-    let rows = ctx.legend_features("trees", || {
-        let sql = "
-            SELECT
-                type,
-                geometry
-            FROM
-                osm_pois
-            WHERE
-                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+    let sql = "
+        SELECT
+            type,
+            geometry
+        FROM
+            osm_pois
+        WHERE
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+            (
                 (
-                    (
-                        type = 'tree' AND
-                        (NOT (tags ? 'protected') OR tags->'protected' = 'no') AND
-                        (NOT (tags ? 'denotation') OR tags->'denotation' <> 'natural_monument')
-                    )
-                    OR type = 'shrub'
+                    type = 'tree' AND
+                    (NOT (tags ? 'protected') OR tags->'protected' = 'no') AND
+                    (NOT (tags ? 'denotation') OR tags->'denotation' <> 'natural_monument')
                 )
-            ORDER BY
-                type,
-                st_x(geometry),
-                osm_id
-        ";
+                OR type = 'shrub'
+            )
+        ORDER BY
+            type,
+            st_x(geometry),
+            osm_id
+    ";
 
-        client.query(sql, &ctx.bbox_query_params(Some(32.0)).as_params())
-    })?;
+    client.query(sql, &ctx.bbox_query_params(Some(32.0)).as_params()).await
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    svg_repo: &mut SvgRepo,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("trees::render");
 
     for row in rows {
         let typ = row.get_string("type")?;
@@ -44,8 +49,6 @@ pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRe
         let surface = svg_repo.get("tree2")?;
 
         let rect = surface.extents().expect("surface extents");
-
-        let context = ctx.context;
 
         context.save()?;
 

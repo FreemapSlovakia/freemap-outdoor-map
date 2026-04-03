@@ -407,7 +407,6 @@ tables:
         type: id
       - name: geometry
         type: geometry
-        geometry_transform: point_on_surface
       - name: name
         type: string
         key: name
@@ -553,9 +552,9 @@ tables:
       millitary:
         - trench
       natural:
+        - bay # also in area/node
         - cliff
         - earth_bank
-        - fjord # also in area/node
         - gully
         - ridge
         - strait # also in area/node
@@ -601,6 +600,12 @@ tables:
           leisure:
             miniature_golf: leisure_miniature_golf
             horse_riding: leisure_horse_riding
+          disused:man_made:
+            adit: disused_adit
+            mineshaft: disused_mineshaft
+          abandoned:man_made:
+            adit: abandoned_adit
+            mineshaft: abandoned_mineshaft
       - name: tags
         type: hstore_tags
         args:
@@ -643,6 +648,16 @@ tables:
           - "yes"
       any:
         mappings:
+          disused:man_made:
+            mapping:
+              disused:man_made:
+                - adit
+                - mineshaft
+          abandoned:man_made:
+            mapping:
+              abandoned:man_made:
+                - adit
+                - mineshaft
           aerialway:
             mapping:
               aerialway:
@@ -985,11 +1000,10 @@ tables:
             mapping:
               natural:
                 - arch
-                - bay
+                - bay # also as way
                 - birds_nest
                 - cape
                 - cave_entrance
-                - fjord # also a way
                 - geyser
                 - hot_spring
                 - peak

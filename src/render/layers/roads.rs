@@ -1,7 +1,5 @@
-use std::borrow::Cow;
-
 use crate::render::{
-    FeatureError,
+    Feature, FeatureError,
     colors::{self, Color, ContextExt},
     ctx::Ctx,
     draw::{markers_on_path::draw_markers_on_path, path_geom::path_line_string},
@@ -9,71 +7,77 @@ use crate::render::{
     projectable::TileProjectable,
     svg_repo::SvgRepo,
 };
-use postgres::Client;
+use cairo::Context;
+use std::borrow::Cow;
 
-pub fn render(ctx: &Ctx, client: &mut Client, svg_repo: &mut SvgRepo) -> LayerRenderResult {
-    let _span = tracy_client::span!("roads::render");
-
-    let context = ctx.context;
-
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let zoom = ctx.zoom;
 
-    let rows = ctx.legend_features("roads", || {
-        let table = match zoom {
-            ..=9 => "osm_roads_gen0",
-            10..=11 => "osm_roads_gen1",
-            12.. => "osm_roads",
-        };
+    let table = match zoom {
+        ..=9 => "osm_roads_gen0",
+        10..=11 => "osm_roads_gen1",
+        12.. => "osm_roads",
+    };
 
-        // TODO for zoom < 12 we select too much
+    // TODO for zoom < 12 we select too much
 
-        let select_member = if zoom <= 12 {
-            ",osm_route_members.member IS NOT NULL AS is_in_route"
-        } else {
-            ""
-        };
+    let select_member = if zoom <= 12 {
+        ",osm_route_members.member IS NOT NULL AS is_in_route"
+    } else {
+        ""
+    };
 
-        #[cfg_attr(any(), rustfmt::skip)]
-        let join_members: Cow<_> = if zoom <= 12 {
-            format!("
-                LEFT JOIN
-                    osm_route_members
-                ON
-                    osm_route_members.type = 1 AND
-                    osm_route_members.member = -{table}.osm_id
-            ").into()
-        } else {
-            "".into()
-        };
+    #[cfg_attr(any(), rustfmt::skip)]
+    let join_members: Cow<_> = if zoom <= 12 {
+        format!("
+            LEFT JOIN
+                osm_route_members
+            ON
+                osm_route_members.type = 1 AND
+                osm_route_members.member = -{table}.osm_id
+        ").into()
+    } else {
+        "".into()
+    };
 
-        #[cfg_attr(any(), rustfmt::skip)]
-        let query = format!("
-            SELECT
-                {table}.geometry,
-                {table}.type,
-                tracktype,
-                class,
-                service,
-                bridge,
-                tunnel,
-                oneway,
-                bicycle,
-                foot,
-                trail_visibility
-                {select_member}
-            FROM
-                {table}
-                {join_members}
-            WHERE
-                {table}.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-            ORDER BY
-                z_order,
-                CASE WHEN {table}.type = 'rail' AND service IN ('', 'main') THEN 2 ELSE 1 END,
-                {table}.osm_id
-        ");
+    #[cfg_attr(any(), rustfmt::skip)]
+    let query = format!("
+        SELECT
+            {table}.geometry,
+            {table}.type,
+            tracktype,
+            class,
+            service,
+            bridge,
+            tunnel,
+            oneway,
+            bicycle,
+            foot,
+            trail_visibility
+            {select_member}
+        FROM
+            {table}
+            {join_members}
+        WHERE
+            {table}.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ORDER BY
+            z_order,
+            CASE WHEN {table}.type = 'rail' AND service IN ('', 'main') THEN 2 ELSE 1 END,
+            {table}.osm_id
+    ");
 
-        client.query(&query, &ctx.bbox_query_params(Some(128.0)).as_params())
-    })?;
+    client.query(&query, &ctx.bbox_query_params(Some(128.0)).as_params()).await
+}
+
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    svg_repo: &mut SvgRepo,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("roads::render");
+
+    let zoom = ctx.zoom;
 
     let apply_highway_defaults = |width: f64| {
         context.set_dash(&[], 0.0);
