@@ -13,14 +13,13 @@ use crate::render::{
     projectable::TileProjectable,
 };
 use cairo::Context;
-use postgres::{Client, Row};
 use std::borrow::Cow;
 
-pub fn query(
+pub async fn query(
     ctx: &Ctx,
-    client: &mut Client,
+    client: &tokio_postgres::Client,
     country: Option<&str>,
-) -> Result<Vec<Row>, postgres::Error> {
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let zoom = ctx.zoom;
 
     // TODO measure performance impact of simplification, if it makes something faster
@@ -86,7 +85,7 @@ pub fn query(
         &ctx.bbox_query_params(Some(8.0))
             .push(simplify_factor)
             .as_params(),
-    )
+    ).await
 }
 
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {

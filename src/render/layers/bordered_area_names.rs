@@ -16,12 +16,11 @@ use crate::render::{
 };
 use cairo::Context;
 use pangocairo::pango::Style;
-use postgres::Client;
 
-pub fn query_centroids(
+pub async fn query_centroids(
     ctx: &Ctx,
-    client: &mut Client,
-) -> Result<Vec<postgres::Row>, postgres::Error> {
+    client: &tokio_postgres::Client,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let sql = "
         SELECT
             name,
@@ -35,13 +34,13 @@ pub fn query_centroids(
             area DESC
     ";
 
-    client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
+    client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params()).await
 }
 
-pub fn query_borders(
+pub async fn query_borders(
     ctx: &Ctx,
-    client: &mut Client,
-) -> Result<Vec<postgres::Row>, postgres::Error> {
+    client: &tokio_postgres::Client,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let sql = "
         SELECT
             type,
@@ -57,7 +56,7 @@ pub fn query_borders(
             area DESC
     ";
 
-    client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
+    client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params()).await
 }
 
 pub fn render_centroids(

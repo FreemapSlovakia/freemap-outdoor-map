@@ -11,9 +11,8 @@ use crate::render::{
     projectable::TileProjectable,
 };
 use cairo::Context;
-use postgres::Client;
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let sql = "
         WITH merged AS (
             SELECT
@@ -41,7 +40,7 @@ pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postg
             osm_id
     ";
 
-    client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
+    client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params()).await
 }
 
 pub fn render(

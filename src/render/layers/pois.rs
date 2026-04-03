@@ -18,7 +18,6 @@ use cairo::Context;
 use core::f64;
 use geo::{Point, Rect};
 use pangocairo::pango::{AttrList, AttrSize, SCALE, Style, Weight};
-use postgres::Client;
 use std::borrow::Cow;
 use std::{
     collections::{HashMap, HashSet},
@@ -444,11 +443,11 @@ static OFFSETS: LazyLock<[(f64, f64); 33]> = LazyLock::new(|| {
     offsets
 });
 
-pub fn query(
+pub async fn query(
     ctx: &Ctx,
-    client: &mut Client,
+    client: &tokio_postgres::Client,
     kst_only: bool,
-) -> Result<Vec<postgres::Row>, postgres::Error> {
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let zoom = ctx.zoom;
 
     let mut selects = vec![];
@@ -723,9 +722,7 @@ pub fn query(
 
     drop(selects);
 
-    let _span = tracy_client::span!("features::query");
-
-    client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
+    client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params()).await
 }
 
 pub fn render(

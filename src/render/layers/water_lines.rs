@@ -8,9 +8,8 @@ use crate::render::{
     svg_repo::SvgRepo,
 };
 use cairo::Context;
-use postgres::{Client, Row};
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error> {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let geom_query = match ctx.zoom {
         12 => "ST_Segmentize(ST_Simplify(geometry, 24), 200) AS geometry",
         13 => "ST_Segmentize(ST_Simplify(geometry, 12), 200) AS geometry",
@@ -37,7 +36,7 @@ pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error
             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
     ");
 
-    client.query(&sql, &ctx.bbox_query_params(Some(8.0)).as_params())
+    client.query(&sql, &ctx.bbox_query_params(Some(8.0)).as_params()).await
 }
 
 pub fn render(

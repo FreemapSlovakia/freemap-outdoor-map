@@ -1,15 +1,19 @@
 use crate::render::{legend::LegendItemData, projectable::TileProjector, size::Size};
 use geo::Rect;
-use postgres::types::ToSql;
+use tokio_postgres::types::ToSql;
 
 pub struct SqlParams {
     params: Vec<Box<dyn ToSql + Sync>>,
 }
 
+// SAFETY: all values are inserted via `push` which requires `T: Send`,
+// so every stored value is guaranteed to be Send.
+unsafe impl Send for SqlParams {}
+
 impl SqlParams {
     pub fn push<T>(mut self, value: T) -> Self
     where
-        T: ToSql + Sync + 'static,
+        T: ToSql + Sync + Send + 'static,
     {
         self.params.push(Box::new(value));
 

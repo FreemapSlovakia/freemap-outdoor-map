@@ -14,7 +14,6 @@ use crate::render::{
 };
 use cairo::Context;
 use pangocairo::pango::Style;
-use postgres::Client;
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -25,7 +24,7 @@ static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
     ]
 });
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let w = if ctx.zoom < 14 {
         "AND type = 'river'"
     } else {
@@ -62,7 +61,7 @@ pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postg
     "
     );
 
-    client.query(&sql, &ctx.bbox_query_params(Some(2048.0)).as_params())
+    client.query(&sql, &ctx.bbox_query_params(Some(2048.0)).as_params()).await
 }
 
 pub fn render(

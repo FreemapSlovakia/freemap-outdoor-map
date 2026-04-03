@@ -3,7 +3,7 @@ use geo::{
 };
 use geo_postgis::FromPostgis;
 use postgis::ewkb::GeometryT as EwkbGeometry;
-use postgres::Row;
+use tokio_postgres::Row;
 use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
@@ -129,7 +129,7 @@ pub enum FeatureError {
         expected: &'static str,
     },
     #[error("Error getting value from database: {0}")]
-    PgError(#[from] postgres::Error),
+    PgError(#[from] tokio_postgres::Error),
 }
 
 #[derive(Debug)]
@@ -339,7 +339,7 @@ impl From<Row> for Feature {
 #[derive(thiserror::Error, Debug)]
 pub enum GeomError {
     #[error("Error getting geometry from database: {0}")]
-    PgError(#[from] postgres::Error),
+    PgError(#[from] tokio_postgres::Error),
     #[error("Empty or null geometry")]
     GeomIsEmpty,
     #[error("Unexpected geometry type: expected {expected}, got {got}")]

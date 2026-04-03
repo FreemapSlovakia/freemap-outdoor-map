@@ -16,7 +16,6 @@ use crate::render::{
 use cairo::Context;
 use geo::{Centroid, Geometry};
 use pangocairo::pango::Style;
-use postgres::Client;
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -34,7 +33,7 @@ static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
     ]
 });
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let z_order_case = build_landcover_z_order_case("type");
 
     // TODO include types (`type IN`), don't exclude (`type NOT IN`)
@@ -73,7 +72,7 @@ pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postg
         &ctx.bbox_query_params(Some(512.0))
             .push(2_400_000.0f32 / (2.0f32 * (ctx.zoom as f32 - 10.0)).exp2())
             .as_params(),
-    )
+    ).await
 }
 
 pub fn render(

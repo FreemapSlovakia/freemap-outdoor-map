@@ -15,7 +15,6 @@ use crate::render::{
 };
 use cairo::Context;
 use colorsys::{Rgb, RgbRatio};
-use postgres::Client;
 use std::collections::HashSet;
 
 const COLOR_SQL: &str = r#"
@@ -276,11 +275,11 @@ fn get_routes_query(
     ")
 }
 
-pub fn query_marking(
+pub async fn query_marking(
     ctx: &Ctx,
-    client: &mut Client,
+    client: &tokio_postgres::Client,
     render: &HashSet<RenderLayer>,
-) -> Result<Vec<postgres::Row>, postgres::Error> {
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let zoom = ctx.zoom;
 
     let z = zoom
@@ -302,7 +301,7 @@ pub fn query_marking(
         _ => return Ok(Vec::new()),
     };
 
-    client.query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params())
+    client.query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params()).await
 }
 
 pub fn render_marking(
@@ -477,14 +476,14 @@ pub fn render_marking(
     Ok(())
 }
 
-pub fn query_labels(
+pub async fn query_labels(
     ctx: &Ctx,
-    client: &mut Client,
+    client: &tokio_postgres::Client,
     render: &HashSet<RenderLayer>,
-) -> Result<Vec<postgres::Row>, postgres::Error> {
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let query = get_routes_query(render, None, "");
 
-    client.query(&query, &ctx.bbox_query_params(Some(2048.0)).as_params())
+    client.query(&query, &ctx.bbox_query_params(Some(2048.0)).as_params()).await
 }
 
 pub fn render_labels(

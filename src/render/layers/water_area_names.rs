@@ -13,14 +13,13 @@ use crate::render::{
 };
 use cairo::Context;
 use pangocairo::pango::Style;
-use postgres::Client;
 use regex::Regex;
 use std::sync::LazyLock;
 
 static REPLACEMENTS: LazyLock<Vec<Replacement>> =
     LazyLock::new(|| vec![(Regex::new("[Vv]odná [Nn]ádrž").expect("regex"), "v. n.")]);
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let sql = "
         SELECT
             name,
@@ -40,7 +39,7 @@ pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postg
         &ctx.bbox_query_params(Some(1024.0))
             .push(ctx.zoom as i32)
             .as_params(),
-    )
+    ).await
 }
 
 pub fn render(

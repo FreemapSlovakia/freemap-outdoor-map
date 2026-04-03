@@ -7,9 +7,8 @@ use crate::render::{
     projectable::TileProjectable,
 };
 use cairo::Context;
-use postgres::{Client, Row};
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error> {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let query = "
         SELECT
             geometry
@@ -20,7 +19,7 @@ pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error
             type = 'bridge'
     ";
 
-    client.query(query, &ctx.bbox_query_params(None).as_params())
+    client.query(query, &ctx.bbox_query_params(None).as_params()).await
 }
 
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>, mask: bool) -> LayerRenderResult {

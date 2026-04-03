@@ -7,9 +7,8 @@ use crate::render::{
     projectable::TileProjectable,
 };
 use cairo::Context;
-use postgres::{Client, Row};
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error> {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let table = match ctx.zoom {
         ..=7 => "land_z5_7",
         8..=10 => "land_z8_10",
@@ -35,7 +34,7 @@ pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error
         &ctx.bbox_query_params(Some(2.0))
             .push((20.0 - ctx.zoom as f64).exp2() / 25.0)
             .as_params(),
-    )
+    ).await
 }
 
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {

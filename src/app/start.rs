@@ -6,18 +6,16 @@ use crate::app::{
     tile_processor::{TileProcessingConfig, VariantConfig},
 };
 use crate::render::{RenderWorkerPool, set_mapping_path};
+use deadpool_postgres::Config;
 use dotenvy::dotenv;
 use geo::{Coord, Geometry, MapCoordsInPlace};
 use geojson::GeoJson;
-use postgres::{Config, NoTls};
 use proj::Proj;
-use r2d2_postgres::PostgresConnectionManager;
 use std::{
     cell::Cell,
     fs::File,
     io::BufReader,
     path::Path,
-    str::FromStr,
     sync::{Arc, Mutex},
 };
 use tokio::signal;
@@ -43,17 +41,31 @@ pub(crate) fn start() {
         Err(err) => panic!("invalid tile processing configuration: {err}"),
     };
 
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("tokio");
+
+    let handle = rt.handle().clone();
+
     let render_worker_pool = {
-        let connection_pool = r2d2::Pool::builder()
-            .max_size(cli.pool_max_size)
-            .build(PostgresConnectionManager::new(
-                Config::from_str(&cli.database_url).expect("parse database url"),
-                NoTls,
-            ))
-            .expect("build db pool");
+        let pool = {
+            let mut cfg = Config::new();
+            cfg.url = Some(cli.database_url.clone());
+            cfg.pool = Some(deadpool_postgres::PoolConfig {
+                max_size: cli.pool_max_size as usize,
+                ..Default::default()
+            });
+            cfg.create_pool(
+                Some(deadpool_postgres::Runtime::Tokio1),
+                tokio_postgres::NoTls,
+            )
+            .expect("build db pool")
+        };
 
         Arc::new(RenderWorkerPool::new(
-            connection_pool,
+            pool,
+            handle,
             cli.worker_count,
             Arc::from(cli.svg_base_path),
             Arc::from(cli.hillshading_base_path),
@@ -89,11 +101,6 @@ pub(crate) fn start() {
     } else if cli.expires_base_path.is_some() {
         eprintln!("imposm watcher disabled: missing --tile-cache-base-path");
     }
-
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .expect("tokio");
 
     let tile_processing_worker_for_server = tile_processing_worker.clone();
 

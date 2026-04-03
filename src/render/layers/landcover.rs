@@ -10,7 +10,6 @@ use crate::render::{
     xyz::to_absolute_pixel_coords,
 };
 use cairo::{Context, Extend, Matrix, SurfacePattern};
-use postgres::{Client, Row};
 use std::{collections::HashMap, sync::LazyLock};
 
 pub enum Paint {
@@ -78,7 +77,7 @@ pub static PAINTS: LazyLock<HashMap<&'static str, &'static [Paint]>> = LazyLock:
     paint_map
 });
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error> {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let a = "'pitch', 'playground', 'golf_course', 'track'";
 
     let excl_types = match ctx.zoom {
@@ -119,7 +118,7 @@ pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error
             osm_id
     ");
 
-    client.query(query, &ctx.bbox_query_params(Some(4.0)).as_params())
+    client.query(query, &ctx.bbox_query_params(Some(4.0)).as_params()).await
 }
 
 pub fn render(

@@ -6,11 +6,10 @@ use crate::render::{
     xyz::bbox_size_in_pixels,
 };
 use cairo::{Format, ImageSurface, PdfSurface, Surface, SvgSurface};
+use deadpool_postgres::Pool;
 use image::codecs::jpeg::JpegEncoder;
 use image::{ExtendedColorType, ImageEncoder};
-use postgres::NoTls;
-use r2d2::Pool;
-use r2d2_postgres::PostgresConnectionManager;
+use tokio::runtime::Handle;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RenderError {
@@ -26,7 +25,8 @@ pub enum RenderError {
 
 pub fn render(
     request: &RenderRequest,
-    pool: Pool<PostgresConnectionManager<NoTls>>,
+    pool: Pool,
+    handle: Handle,
     svg_repo: &mut SvgRepo,
     hillshading_datasets: Option<&mut HillshadingDatasets>,
 ) -> Result<Vec<u8>, RenderError> {
@@ -39,6 +39,7 @@ pub fn render(
             surface,
             request,
             pool,
+            handle,
             request.bbox,
             size,
             svg_repo,

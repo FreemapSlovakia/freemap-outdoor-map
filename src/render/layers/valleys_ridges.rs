@@ -14,7 +14,6 @@ use crate::render::{
 use cairo::Context;
 use geo::ChaikinSmoothing;
 use pangocairo::pango::Style;
-use postgres::Client;
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -26,10 +25,10 @@ static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
     ]
 });
 
-pub fn query_valleys(
+pub async fn query_valleys(
     ctx: &Ctx,
-    client: &mut Client,
-) -> Result<Vec<postgres::Row>, postgres::Error> {
+    client: &tokio_postgres::Client,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let dir = if ctx.zoom > 14 { "ASC" } else { "DESC" };
 
     #[cfg_attr(any(), rustfmt::skip)]
@@ -48,10 +47,10 @@ pub fn query_valleys(
             ST_Length(geometry) {dir}
     ");
 
-    client.query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params())
+    client.query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params()).await
 }
 
-pub fn query_ridges(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+pub async fn query_ridges(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let sql = "
         SELECT
             geometry, name, 0::double precision AS offset_factor
@@ -65,7 +64,7 @@ pub fn query_ridges(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>
             ST_Length(geometry) DESC
     ";
 
-    client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())
+    client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params()).await
 }
 
 fn render_rows(

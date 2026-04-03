@@ -14,15 +14,16 @@ use crate::render::{
 };
 use crate::render::{RenderLayer, colors};
 use cairo::{Context, Surface};
+use deadpool_postgres::Pool;
+use futures_util::FutureExt;
+use futures_util::future::BoxFuture;
 use geo::Rect;
-use postgres::{Client, NoTls, Row};
-use r2d2::Pool;
-use r2d2_postgres::PostgresConnectionManager;
 use std::collections::HashMap;
-use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, Mutex};
-use std::{mem, thread};
+use std::sync::Arc;
 use thiserror::Error;
+use tokio::runtime::Handle;
+use tokio::task::JoinHandle;
+use tokio_postgres::Row;
 
 #[derive(Error, Debug)]
 pub enum RenderError {
@@ -36,8 +37,11 @@ pub enum RenderError {
     #[error("Cairo error: {0}")]
     Cairo(#[from] cairo::Error),
 
-    #[error("Render thread panicked")]
-    ThreadPanic,
+    #[error("Render task panicked")]
+    TaskPanic,
+
+    #[error("DB pool error: {0}")]
+    Pool(#[from] deadpool_postgres::PoolError),
 }
 
 impl RenderError {
@@ -56,200 +60,112 @@ impl<T> WithLayer<T> for Result<T, LayerRenderError> {
     }
 }
 
-impl<T> WithLayer<T> for Result<T, postgres::Error> {
-    fn with_layer(self, layer: &'static str) -> Result<T, RenderError> {
-        self.map_err(|err| RenderError::new(layer, LayerRenderError::from(err)))
-    }
-}
-
-enum QueryState {
-    Pending(thread::JoinHandle<Result<Vec<Feature>, LayerRenderError>>),
-    Ready(Vec<Feature>),
-    Invalid,
-}
-
-#[derive(Clone)]
-struct QueryHandle {
-    name: &'static str,
-    state: Arc<Mutex<QueryState>>,
-}
-
-impl QueryHandle {
-    fn resolve(&self) -> Result<(), RenderError> {
-        let mut guard = self.state.lock().unwrap();
-
-        if let QueryState::Ready(_) = guard.deref() {
-            return Ok(());
-        }
-
-        let QueryState::Pending(jh) = std::mem::replace(guard.deref_mut(), QueryState::Invalid)
-        else {
-            unreachable!()
-        };
-
-        let features = jh
-            .join()
-            .map_err(|_| RenderError::ThreadPanic)?
-            .with_layer(self.name)?;
-
-        *guard = QueryState::Ready(features);
-
-        Ok(())
-    }
-
-    fn consume(self) -> Result<Vec<Feature>, RenderError> {
-        let state = Arc::into_inner(self.state)
-            .expect("sole owner of QueryHandle")
-            .into_inner()
-            .unwrap();
-
-        match state {
-            QueryState::Pending(jh) => jh
-                .join()
-                .map_err(|_| RenderError::ThreadPanic)?
-                .with_layer(self.name),
-            QueryState::Ready(features) => Ok(features),
-            QueryState::Invalid => unreachable!(),
-        }
-    }
-}
-
-type Pender<'a> = Box<dyn FnOnce(Params) -> Result<(), RenderError> + 'a>;
-
-struct Prefetcher<'a> {
-    pending: Vec<Pender<'a>>,
-    pool: Pool<PostgresConnectionManager<NoTls>>,
-    ctx: Arc<Ctx>,
-}
-
 struct Params<'p, 'ctx> {
     collision: &'p mut Collision<'ctx>,
     svg_repo: &'p mut SvgRepo,
     hsd: Option<&'p mut HillshadingDatasets>,
 }
 
-impl<'a> Prefetcher<'a> {
-    fn new(pool: Pool<PostgresConnectionManager<NoTls>>, ctx: Arc<Ctx>) -> Self {
-        Self {
-            pending: Vec::new(),
-            pool,
-            ctx,
-        }
-    }
+/// Key used to index batch results (contours + bridge).
+type BatchKey = Option<&'static str>;
 
-    fn prefetch(
-        &self,
+enum PendingLayer<'a> {
+    /// A DB query running as its own tokio task (own pool connection → true parallelism).
+    Query {
         name: &'static str,
-        query_fn: impl FnOnce(&Ctx, &mut Client) -> Result<Vec<Row>, LayerRenderError> + Send + 'static,
-    ) -> QueryHandle {
-        if let Some(ref legend) = self.ctx.legend {
-            let features = if let Some(legend) = legend.get(name) {
-                legend
-                    .iter()
-                    .map(|props| Feature::LegendData(props.clone()))
-                    .collect()
-            } else {
-                vec![]
-            };
+        jh: JoinHandle<Result<Vec<Feature>, LayerRenderError>>,
+        render_fn: Box<dyn FnOnce(Vec<Feature>, Params) -> LayerRenderResult + 'a>,
+    },
+    /// Multiple independent pre-spawned queries collected into one render call
+    /// (used for contours + bridge_areas_mask running in parallel).
+    Batch {
+        handles: Vec<(BatchKey, JoinHandle<Result<Vec<Feature>, LayerRenderError>>)>,
+        render_fn: Box<dyn FnOnce(HashMap<BatchKey, Vec<Feature>>, Params) -> LayerRenderResult + 'a>,
+    },
+    /// Render-only step (push_group, pop_group, blur_edges, custom, …)
+    Push(Box<dyn FnOnce(Params) -> Result<(), RenderError> + 'a>),
+    /// Legend path: features pre-built, render directly.
+    Legend {
+        name: &'static str,
+        features: Vec<Feature>,
+        render_fn: Box<dyn FnOnce(Vec<Feature>, Params) -> LayerRenderResult + 'a>,
+    },
+}
 
-            return QueryHandle {
-                name,
-                state: Arc::new(Mutex::new(QueryState::Ready(features))),
-            };
-        }
+struct Prefetcher<'a> {
+    pool: Pool,
+    handle: Handle,
+    ctx: Arc<Ctx>,
+    layers: Vec<PendingLayer<'a>>,
+}
 
-        let pool = self.pool.clone();
-        let ctx = self.ctx.clone();
-
-        let jh = thread::spawn::<_, Result<Vec<Feature>, LayerRenderError>>(move || {
-            let mut conn = {
-                let _span = tracy_client::span!("pool::get");
-
-                pool.get()?
-            };
-
-            Ok(query_fn(&ctx, &mut conn)?
-                .into_iter()
-                .map(|row| row.into())
-                .collect())
-        });
-
-        QueryHandle {
-            name,
-            state: Arc::new(Mutex::new(QueryState::Pending(jh))),
+impl<'a> Prefetcher<'a> {
+    fn new(pool: Pool, handle: Handle, ctx: Arc<Ctx>) -> Self {
+        Self {
+            pool,
+            handle,
+            ctx,
+            layers: Vec::new(),
         }
     }
 
+    /// Add a layer with a DB query.
+    /// Each query spawns its own tokio task with its own pool connection,
+    /// so all queries run in parallel on the DB.
     fn add(
         &mut self,
         name: &'static str,
         legend_name: Option<&'static str>,
-        query_fn: impl FnOnce(&Ctx, &mut Client) -> Result<Vec<Row>, LayerRenderError> + Send + 'static,
-        render_fn: impl for<'p, 'ctx> FnOnce(Vec<Feature>, Params<'p, 'ctx>) -> LayerRenderResult + 'a,
+        query_fn: impl FnOnce(Arc<Ctx>, deadpool_postgres::Object) -> BoxFuture<'static, Result<Vec<Row>, tokio_postgres::Error>> + Send + 'static,
+        render_fn: impl FnOnce(Vec<Feature>, Params) -> LayerRenderResult + 'a,
     ) {
         if let Some(ref legend) = self.ctx.legend {
-            if let Some(legend) = legend.get(legend_name.unwrap_or(name)) {
+            let key = legend_name.unwrap_or(name);
+            if let Some(legend) = legend.get(key) {
                 let features = legend
                     .iter()
                     .map(|props| Feature::LegendData(props.clone()))
                     .collect();
-
-                self.pending.push(Box::new(move |params| {
-                    render_fn(features, params).with_layer(name)
-                }));
+                self.layers.push(PendingLayer::Legend {
+                    name,
+                    features,
+                    render_fn: Box::new(render_fn),
+                });
             }
-
             return;
         }
 
         let pool = self.pool.clone();
         let ctx = self.ctx.clone();
 
-        let jh = thread::spawn::<_, Result<Vec<Feature>, LayerRenderError>>(move || {
-            let mut conn = {
-                let _span = tracy_client::span!("pool::get");
-
-                pool.get()?
-            };
-
-            Ok(query_fn(&ctx, &mut conn)?
-                .into_iter()
-                .map(|row| row.into())
-                .collect())
+        let jh = self.handle.spawn(async move {
+            let conn = pool.get().await.map_err(LayerRenderError::from)?;
+            let rows = query_fn(ctx, conn).await.map_err(LayerRenderError::from)?;
+            Ok::<Vec<Feature>, LayerRenderError>(rows.into_iter().map(Feature::from).collect())
         });
 
-        self.pending.push(Box::new(move |params| {
-            let rows = jh
-                .join()
-                .map_err(|_| RenderError::ThreadPanic)?
-                .with_layer(name)?;
-
-            render_fn(rows, params).with_layer(name)
-        }));
+        self.layers.push(PendingLayer::Query {
+            name,
+            jh,
+            render_fn: Box::new(render_fn),
+        });
     }
 
-    fn add_with(
-        &mut self,
-        handle: QueryHandle,
-        render_fn: impl FnOnce(Vec<Feature>, Params) -> LayerRenderResult + 'a,
-    ) {
-        self.pending.push(Box::new(move |params| {
-            handle.resolve()?;
-
-            let mut guard = handle.state.lock().unwrap();
-
-            let d = mem::replace(&mut *guard, QueryState::Ready(vec![]));
-
-            if let QueryState::Ready(features) = d {
-                render_fn(features, params).with_layer(handle.name)
-            } else {
-                unreachable!()
-            }
-        }));
+    /// Spawn an independent background task for a batch (contours/bridge).
+    fn prefetch(
+        &self,
+        query_fn: impl FnOnce(Arc<Ctx>, deadpool_postgres::Object) -> BoxFuture<'static, Result<Vec<Feature>, LayerRenderError>> + Send + 'static,
+    ) -> JoinHandle<Result<Vec<Feature>, LayerRenderError>> {
+        let pool = self.pool.clone();
+        let ctx = self.ctx.clone();
+        self.handle.spawn(async move {
+            let conn = pool.get().await.map_err(LayerRenderError::from)?;
+            query_fn(ctx, conn).await
+        })
     }
 
     fn push(&mut self, render_fn: impl FnOnce(Params) -> Result<(), RenderError> + 'a) {
-        self.pending.push(Box::new(render_fn));
+        self.layers.push(PendingLayer::Push(Box::new(render_fn)));
     }
 
     fn run(
@@ -258,21 +174,54 @@ impl<'a> Prefetcher<'a> {
         mut hsd: Option<&mut HillshadingDatasets>,
         collision: &mut Collision,
     ) -> Result<(), RenderError> {
-        for layer in self.pending {
-            layer(Params {
-                svg_repo,
-                hsd: hsd.as_deref_mut(),
-                collision,
-            })?;
-        }
-        Ok(())
+        self.handle.block_on(async move {
+            for layer in self.layers {
+                let params = Params {
+                    svg_repo,
+                    hsd: hsd.as_deref_mut(),
+                    collision,
+                };
+
+                match layer {
+                    PendingLayer::Query { name, jh, render_fn } => {
+                        // Awaiting in order: while we wait for this result, all other tasks
+                        // are running in parallel on the tokio executor.
+                        let features = jh
+                            .await
+                            .map_err(|_| RenderError::TaskPanic)?
+                            .with_layer(name)?;
+                        render_fn(features, params).with_layer(name)?;
+                    }
+                    PendingLayer::Batch { handles, render_fn } => {
+                        let mut results = HashMap::with_capacity(handles.len());
+                        for (key, jh) in handles {
+                            let features = jh
+                                .await
+                                .map_err(|_| RenderError::TaskPanic)?
+                                .with_layer("batch")?;
+                            results.insert(key, features);
+                        }
+                        render_fn(results, params).with_layer("batch")?;
+                    }
+                    PendingLayer::Legend { name, features, render_fn } => {
+                        render_fn(features, params).with_layer(name)?;
+                    }
+                    PendingLayer::Push(f) => {
+                        f(params)?;
+                    }
+                }
+            }
+
+            Ok(())
+        })
     }
 }
 
 pub fn render(
     surface: &Surface,
     request: &RenderRequest,
-    pool: Pool<PostgresConnectionManager<NoTls>>,
+    pool: Pool,
+    handle: Handle,
     bbox: Rect<f64>,
     size: Size<u32>,
     svg_repo: &mut SvgRepo,
@@ -322,128 +271,128 @@ pub fn render(
         None
     };
 
-    let mut prefetcher = Prefetcher::new(pool.clone(), ctx.clone());
+    let mut prefetcher = Prefetcher::new(pool.clone(), handle.clone(), ctx.clone());
 
     if request.legend.is_none() {
         prefetcher.add(
             "sea",
             None,
-            |ctx, conn| layers::sea::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::sea::query(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::sea::render(&ctx, context, rows),
         );
     }
 
-    // osm_landcovers (landcovers)
     prefetcher.add(
         "landcovers",
         None,
-        |ctx, conn| layers::landcover::query(ctx, conn).map_err(Into::into),
+        |ctx, conn| async move { layers::landcover::query(&ctx, &conn).await }.boxed(),
         |rows, params| layers::landcover::render(&ctx, context, rows, params.svg_repo),
     );
 
-    let feature_lines = (zoom >= 11).then(|| {
-        prefetcher.prefetch("feature_lines", |ctx, conn| {
-            layers::feature_lines::query(ctx, conn).map_err(Into::into)
-        })
-    });
-
-    if zoom >= 13
-        && let Some(handle) = feature_lines.clone()
-    {
-        prefetcher.add_with(handle, |rows, params| {
-            layers::feature_lines::render(&ctx, context, 1, &rows, params.svg_repo, None)
-        });
+    // feature_lines is queried per render stage (up to 4×). All tasks run in parallel
+    // so the cost is a pool connection rather than a round-trip per query.
+    if zoom >= 13 {
+        prefetcher.add(
+            "feature_lines_1",
+            Some("feature_lines"),
+            |ctx, conn| async move { layers::feature_lines::query(&ctx, &conn).await }.boxed(),
+            |rows, params| {
+                layers::feature_lines::render(&ctx, context, 1, &rows, params.svg_repo, None)
+            },
+        );
     }
 
-    // waterways
     prefetcher.add(
         "water_lines",
         None,
-        |ctx, conn| layers::water_lines::query(ctx, conn).map_err(Into::into),
+        |ctx, conn| async move { layers::water_lines::query(&ctx, &conn).await }.boxed(),
         |rows, params| layers::water_lines::render(&ctx, context, rows, params.svg_repo),
     );
 
-    // waterareas
     prefetcher.add(
         "water_areas",
         None,
-        |ctx, conn| layers::water_areas::query(ctx, conn).map_err(Into::into),
+        |ctx, conn| async move { layers::water_areas::query(&ctx, &conn).await }.boxed(),
         |rows, _params| layers::water_areas::render(&ctx, context, rows),
     );
 
     if zoom >= 15 {
-        // osm_landcovers (bridge_areas)
         prefetcher.add(
             "bridge_areas",
             None,
-            |ctx, conn| layers::bridge_areas::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::bridge_areas::query(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::bridge_areas::render(&ctx, context, rows, false),
         );
     }
 
     if zoom >= 16 {
-        // pois
         prefetcher.add(
             "trees",
             None,
-            |ctx, conn| layers::trees::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::trees::query(&ctx, &conn).await }.boxed(),
             |rows, params| layers::trees::render(&ctx, context, rows, params.svg_repo),
         );
     }
 
-    if zoom >= 12
-        && let Some(handle) = feature_lines.clone()
-    {
-        prefetcher.add_with(handle, |rows, params| {
-            layers::feature_lines::render(
-                &ctx,
-                context,
-                2,
-                &rows,
-                params.svg_repo,
-                do_shading.then_some(params.hsd).flatten(),
-            )
-        });
+    if zoom >= 12 {
+        prefetcher.add(
+            "feature_lines_2",
+            Some("feature_lines"),
+            |ctx, conn| async move { layers::feature_lines::query(&ctx, &conn).await }.boxed(),
+            |rows, params| {
+                layers::feature_lines::render(
+                    &ctx,
+                    context,
+                    2,
+                    &rows,
+                    params.svg_repo,
+                    do_shading.then_some(params.hsd).flatten(),
+                )
+            },
+        );
     }
 
     if zoom >= 16 {
-        // roads
         prefetcher.add(
             "embankments",
             None,
-            |ctx, conn| layers::embankments::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::embankments::query(&ctx, &conn).await }.boxed(),
             |rows, params| layers::embankments::render(&ctx, context, rows, params.svg_repo),
         );
     }
 
     if zoom >= 8 {
-        // roads
         prefetcher.add(
             "roads",
             None,
-            |ctx, conn| layers::roads::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::roads::query(&ctx, &conn).await }.boxed(),
             |rows, params| layers::roads::render(&ctx, context, rows, params.svg_repo),
         );
     }
 
     if zoom >= 14 {
-        // roads
         prefetcher.add(
             "road_access_restrictions",
             None,
-            |ctx, conn| layers::road_access_restrictions::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move {
+                layers::road_access_restrictions::query(&ctx, &conn).await
+            }
+            .boxed(),
             |rows, params| {
                 layers::road_access_restrictions::render(&ctx, context, rows, params.svg_repo)
             },
         );
     }
 
-    if zoom >= 11
-        && let Some(handle) = feature_lines.clone()
-    {
-        prefetcher.add_with(handle, |rows, params| {
-            layers::feature_lines::render(&ctx, context, 3, &rows, params.svg_repo, None)
-        });
+    if zoom >= 11 {
+        prefetcher.add(
+            "feature_lines_3",
+            Some("feature_lines"),
+            |ctx, conn| async move { layers::feature_lines::query(&ctx, &conn).await }.boxed(),
+            |rows, params| {
+                layers::feature_lines::render(&ctx, context, 3, &rows, params.svg_repo, None)
+            },
+        );
     }
 
     const CONTOUR_COUNTRIES: [Option<&'static str>; 10] = [
@@ -460,78 +409,102 @@ pub fn render(
     ];
 
     if do_shading || do_contours {
-        let bridge = prefetcher.prefetch("bridge_areas_mask", |ctx, conn| {
-            layers::bridge_areas::query(ctx, conn).map_err(Into::into)
+        let bridge_handle = prefetcher.prefetch(|ctx, conn| {
+            async move {
+                Ok(layers::bridge_areas::query(&ctx, &conn)
+                    .await?
+                    .into_iter()
+                    .map(Feature::from)
+                    .collect())
+            }
+            .boxed()
         });
 
-        let contours = CONTOUR_COUNTRIES.map(|country| {
+        let contour_handles: [(BatchKey, JoinHandle<_>); 10] = CONTOUR_COUNTRIES.map(|country| {
             (
                 country,
-                prefetcher.prefetch("contours", move |ctx, conn| {
-                    layers::contours::query(ctx, conn, country).map_err(Into::into)
+                prefetcher.prefetch(move |ctx, conn| {
+                    async move {
+                        Ok(layers::contours::query(&ctx, &conn, country)
+                            .await?
+                            .into_iter()
+                            .map(Feature::from)
+                            .collect())
+                    }
+                    .boxed()
                 }),
             )
         });
 
         let ctx_arc = ctx.clone();
 
-        prefetcher.push(move |params| {
-            let Some(hsd) = params.hsd else { return Ok(()) };
+        let mut handles: Vec<(BatchKey, JoinHandle<_>)> = Vec::with_capacity(11);
+        handles.push((Some("__bridge__"), bridge_handle));
+        for (key, jh) in contour_handles {
+            handles.push((key, jh));
+        }
 
-            let bridge_rows = bridge.consume()?;
+        prefetcher.layers.push(PendingLayer::Batch {
+            handles,
+            render_fn: Box::new(move |mut results, params| {
+                let Some(hsd) = params.hsd else { return Ok(()) };
 
-            let mut contour_rows: HashMap<Option<&'static str>, Vec<Feature>> = HashMap::new();
+                let bridge_rows = results.remove(&Some("__bridge__")).unwrap_or_default();
 
-            for (country, handle) in contours {
-                contour_rows.insert(country, handle.consume()?);
-            }
+                let mut contour_rows: HashMap<Option<&'static str>, Vec<Feature>> =
+                    HashMap::new();
 
-            layers::shading_and_contours::render(
-                &ctx_arc,
-                context,
-                bridge_rows,
-                contour_rows,
-                hsd,
-                do_shading,
-                do_contours,
-            )
-            .with_layer("shading_and_contours")
+                for country in CONTOUR_COUNTRIES {
+                    contour_rows.insert(country, results.remove(&country).unwrap_or_default());
+                }
+
+                layers::shading_and_contours::render(
+                    &ctx_arc,
+                    context,
+                    bridge_rows,
+                    contour_rows,
+                    hsd,
+                    do_shading,
+                    do_contours,
+                )
+            }),
         });
     }
 
     if zoom >= 12 {
-        // osm_power_generators (solar_power_plants)
         prefetcher.add(
             "solar_power_plants",
             None,
-            |ctx, conn| layers::solar_power_plants::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::solar_power_plants::query(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::solar_power_plants::render(&ctx, context, rows),
         );
     }
 
     if zoom >= 13 {
-        // osm_buildings (buildings)
         prefetcher.add(
             "buildings",
             None,
-            |ctx, conn| layers::buildings::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::buildings::query(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::buildings::render(&ctx, context, rows),
         );
     }
 
-    if zoom >= 12
-        && let Some(handle) = feature_lines.clone()
-    {
-        prefetcher.add_with(handle, |rows, params| {
-            layers::feature_lines::render(&ctx, context, 4, &rows, params.svg_repo, None)
-        });
+    if zoom >= 12 {
+        prefetcher.add(
+            "feature_lines_4",
+            Some("feature_lines"),
+            |ctx, conn| async move { layers::feature_lines::query(&ctx, &conn).await }.boxed(),
+            |rows, params| {
+                layers::feature_lines::render(&ctx, context, 4, &rows, params.svg_repo, None)
+            },
+        );
     }
 
     if zoom >= 14 {
         prefetcher.add(
             "power_towers_poles",
             None,
-            |ctx, conn| layers::power_towers_poles::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::power_towers_poles::query(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::power_towers_poles::render(&ctx, context, rows),
         );
     }
@@ -540,13 +513,13 @@ pub fn render(
         prefetcher.add(
             "protected_areas_areas",
             Some("protected_areas"),
-            |ctx, conn| layers::protected_areas::query_areas(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::protected_areas::query_areas(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::protected_areas::render_areas(&ctx, context, rows),
         );
         prefetcher.add(
             "protected_areas_borders",
             Some("protected_areas"),
-            |ctx, conn| layers::protected_areas::query_borders(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::protected_areas::query_borders(&ctx, &conn).await }.boxed(),
             |rows, params| {
                 layers::protected_areas::render_borders(&ctx, context, rows, params.svg_repo)
             },
@@ -557,7 +530,7 @@ pub fn render(
         prefetcher.add(
             "special_parks",
             None,
-            |ctx, conn| layers::special_parks::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::special_parks::query(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::special_parks::render(&ctx, context, rows),
         );
     }
@@ -566,7 +539,7 @@ pub fn render(
         prefetcher.add(
             "military_areas",
             None,
-            |ctx, conn| layers::military_areas::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::military_areas::query(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::military_areas::render(&ctx, context, rows),
         );
     }
@@ -575,7 +548,7 @@ pub fn render(
         prefetcher.add(
             "borders",
             None,
-            |ctx, conn| layers::borders::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::borders::query(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::borders::render(&ctx, context, rows),
         );
     }
@@ -595,7 +568,10 @@ pub fn render(
                 "routes_marking",
                 Some("routes"),
                 move |ctx, conn| {
-                    layers::routes::query_marking(ctx, conn, &to_render).map_err(Into::into)
+                    async move {
+                        layers::routes::query_marking(&ctx, &conn, &to_render).await
+                    }
+                    .boxed()
                 },
                 |rows, params| {
                     layers::routes::render_marking(&ctx, context, rows, to_render1, params.svg_repo)
@@ -608,7 +584,7 @@ pub fn render(
         prefetcher.add(
             "geonames",
             None,
-            |ctx, conn| layers::geonames::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::geonames::query(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::geonames::render(&ctx, context, rows),
         );
     }
@@ -617,13 +593,13 @@ pub fn render(
         prefetcher.add(
             "fixmes_points",
             Some("fixmes"),
-            |ctx, conn| layers::fixmes::query_points(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::fixmes::query_points(&ctx, &conn).await }.boxed(),
             |rows, params| layers::fixmes::render_points(&ctx, context, rows, params.svg_repo),
         );
         prefetcher.add(
             "fixmes_line",
             None,
-            |ctx, conn| layers::fixmes::query_lines(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::fixmes::query_lines(&ctx, &conn).await }.boxed(),
             |rows, params| layers::fixmes::render_lines(&ctx, context, rows, params.svg_repo),
         );
     }
@@ -639,14 +615,14 @@ pub fn render(
         prefetcher.add(
             "valleys",
             Some("valleys_ridges"),
-            |ctx, conn| layers::valleys_ridges::query_valleys(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::valleys_ridges::query_valleys(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::valleys_ridges::render_valleys(&ctx, context, rows),
         );
 
         prefetcher.add(
             "ridges",
             Some("valleys_ridges"),
-            |ctx, conn| layers::valleys_ridges::query_ridges(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::valleys_ridges::query_ridges(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::valleys_ridges::render_ridges(&ctx, context, rows),
         );
 
@@ -661,7 +637,7 @@ pub fn render(
         prefetcher.add(
             "place_names",
             None,
-            |ctx, conn| layers::place_names::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::place_names::query(&ctx, &conn).await }.boxed(),
             |rows, params| {
                 layers::place_names::render(&ctx, context, rows, &mut Some(params.collision))
             },
@@ -672,7 +648,7 @@ pub fn render(
         prefetcher.add(
             "national_park_names",
             None,
-            |ctx, conn| layers::national_park_names::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::national_park_names::query(&ctx, &conn).await }.boxed(),
             |rows, params| {
                 layers::national_park_names::render(&ctx, context, rows, params.collision)
             },
@@ -683,7 +659,7 @@ pub fn render(
         prefetcher.add(
             "special_park_names",
             None,
-            |ctx, conn| layers::special_park_names::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::special_park_names::query(&ctx, &conn).await }.boxed(),
             |rows, params| {
                 layers::special_park_names::render(&ctx, context, rows, params.collision)
             },
@@ -695,7 +671,7 @@ pub fn render(
         prefetcher.add(
             "pois",
             None,
-            move |ctx, conn| layers::pois::query(ctx, conn, kst).map_err(Into::into),
+            move |ctx, conn| async move { layers::pois::query(&ctx, &conn, kst).await }.boxed(),
             |rows, params| {
                 layers::pois::render(&ctx, context, rows, params.collision, params.svg_repo)
             },
@@ -706,7 +682,7 @@ pub fn render(
         prefetcher.add(
             "water_area_names",
             Some("water_areas"),
-            |ctx, conn| layers::water_area_names::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::water_area_names::query(&ctx, &conn).await }.boxed(),
             |rows, params| layers::water_area_names::render(&ctx, context, rows, params.collision),
         );
     }
@@ -715,7 +691,7 @@ pub fn render(
         prefetcher.add(
             "building_names",
             None,
-            |ctx, conn| layers::building_names::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::building_names::query(&ctx, &conn).await }.boxed(),
             |rows, params| layers::building_names::render(&ctx, context, rows, params.collision),
         );
     }
@@ -724,7 +700,10 @@ pub fn render(
         prefetcher.add(
             "bordered_area_names_centroids",
             Some("protected_areas"),
-            |ctx, conn| layers::bordered_area_names::query_centroids(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move {
+                layers::bordered_area_names::query_centroids(&ctx, &conn).await
+            }
+            .boxed(),
             |rows, params| {
                 layers::bordered_area_names::render_centroids(&ctx, context, rows, params.collision)
             },
@@ -732,7 +711,10 @@ pub fn render(
         prefetcher.add(
             "bordered_area_names_borders",
             Some("protected_areas"),
-            |ctx, conn| layers::bordered_area_names::query_borders(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move {
+                layers::bordered_area_names::query_borders(&ctx, &conn).await
+            }
+            .boxed(),
             |rows, params| {
                 layers::bordered_area_names::render_borders(&ctx, context, rows, params.collision)
             },
@@ -740,7 +722,7 @@ pub fn render(
         prefetcher.add(
             "landcover_names",
             Some("landcovers"),
-            |ctx, conn| layers::landcover_names::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::landcover_names::query(&ctx, &conn).await }.boxed(),
             |rows, params| layers::landcover_names::render(&ctx, context, rows, params.collision),
         );
     }
@@ -749,7 +731,7 @@ pub fn render(
         prefetcher.add(
             "locality_names",
             None,
-            |ctx, conn| layers::locality_names::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::locality_names::query(&ctx, &conn).await }.boxed(),
             |rows, params| layers::locality_names::render(&ctx, context, rows, params.collision),
         );
     }
@@ -758,7 +740,7 @@ pub fn render(
         prefetcher.add(
             "housenumbers",
             None,
-            |ctx, conn| layers::housenumbers::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::housenumbers::query(&ctx, &conn).await }.boxed(),
             |rows, params| layers::housenumbers::render(&ctx, context, rows, params.collision),
         );
     }
@@ -767,7 +749,7 @@ pub fn render(
         prefetcher.add(
             "highway_names",
             Some("roads"),
-            |ctx, conn| layers::highway_names::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::highway_names::query(&ctx, &conn).await }.boxed(),
             |rows, params| layers::highway_names::render(&ctx, context, rows, params.collision),
         );
     }
@@ -778,7 +760,10 @@ pub fn render(
             "routes_labels",
             Some("routes"),
             move |ctx, conn| {
-                layers::routes::query_labels(ctx, conn, &render_clone).map_err(Into::into)
+                async move {
+                    layers::routes::query_labels(&ctx, &conn, &render_clone).await
+                }
+                .boxed()
             },
             |rows, params| layers::routes::render_labels(&ctx, context, rows, params.collision),
         );
@@ -788,7 +773,7 @@ pub fn render(
         prefetcher.add(
             "aerialway_names",
             Some("feature_lines"),
-            |ctx, conn| layers::aerialway_names::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::aerialway_names::query(&ctx, &conn).await }.boxed(),
             |rows, params| layers::aerialway_names::render(&ctx, context, rows, params.collision),
         );
     }
@@ -797,7 +782,7 @@ pub fn render(
         prefetcher.add(
             "water_line_names",
             Some("water_lines"),
-            |ctx, conn| layers::water_line_names::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::water_line_names::query(&ctx, &conn).await }.boxed(),
             |rows, params| layers::water_line_names::render(&ctx, context, rows, params.collision),
         );
     }
@@ -806,7 +791,7 @@ pub fn render(
         prefetcher.add(
             "place_names_highzoom",
             Some("place_names"),
-            |ctx, conn| layers::place_names::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::place_names::query(&ctx, &conn).await }.boxed(),
             |rows, params| {
                 layers::place_names::render(&ctx, context, rows, &mut Some(params.collision))
             },
@@ -829,14 +814,14 @@ pub fn render(
         prefetcher.add(
             "country_borders",
             None,
-            |ctx, conn| layers::borders::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::borders::query(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::borders::render(&ctx, context, rows),
         );
 
         prefetcher.add(
             "country_names",
             None,
-            |ctx, conn| layers::country_names::query(ctx, conn).map_err(Into::into),
+            |ctx, conn| async move { layers::country_names::query(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::country_names::render(&ctx, context, rows),
         );
     }

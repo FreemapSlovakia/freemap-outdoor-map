@@ -3,9 +3,8 @@ use crate::render::{
     svg_repo::SvgRepo,
 };
 use cairo::Context;
-use postgres::{Client, Row};
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error> {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let sql = "
         SELECT
             type,
@@ -28,7 +27,7 @@ pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error
             osm_id
     ";
 
-    client.query(sql, &ctx.bbox_query_params(Some(32.0)).as_params())
+    client.query(sql, &ctx.bbox_query_params(Some(32.0)).as_params()).await
 }
 
 pub fn render(

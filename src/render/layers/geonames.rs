@@ -11,9 +11,8 @@ use crate::render::{
 };
 use cairo::Context;
 use pangocairo::pango::Style;
-use postgres::Client;
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postgres::Error> {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let sql = "
         SELECT
             name,
@@ -26,7 +25,7 @@ pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<postgres::Row>, postg
             ogc_fid
     ";
 
-    client.query(sql, &ctx.bbox_query_params(Some(20.0)).as_params())
+    client.query(sql, &ctx.bbox_query_params(Some(20.0)).as_params()).await
 }
 
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {

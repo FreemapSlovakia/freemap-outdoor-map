@@ -3,9 +3,8 @@ use crate::render::{
     layer_render_error::LayerRenderResult, projectable::TileProjectable, svg_repo::SvgRepo,
 };
 use cairo::Context;
-use postgres::{Client, Row};
 
-pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error> {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let sql = "
         SELECT
             geometry
@@ -16,7 +15,7 @@ pub fn query(ctx: &Ctx, client: &mut Client) -> Result<Vec<Row>, postgres::Error
             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
     ";
 
-    client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params())
+    client.query(sql, &ctx.bbox_query_params(Some(8.0)).as_params()).await
 }
 
 pub fn render(

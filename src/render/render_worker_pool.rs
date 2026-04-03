@@ -1,13 +1,13 @@
 use crate::render::{
     self, RenderRequest, layers::load_hillshading_datasets, render::RenderError, svg_repo::SvgRepo,
 };
-use postgres::NoTls;
-use r2d2_postgres::PostgresConnectionManager;
+use deadpool_postgres::Pool;
 use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     thread::JoinHandle,
 };
+use tokio::runtime::Handle;
 use tokio::sync::{mpsc, oneshot};
 
 struct RenderTask {
@@ -26,7 +26,7 @@ pub(crate) enum ReError {
     RenderError(#[from] RenderError),
 
     #[error(transparent)]
-    ConnectionPoolError(#[from] r2d2::Error),
+    PoolError(#[from] deadpool_postgres::PoolError),
 
     #[error("worker response dropped: {0}")]
     RecvError(#[from] oneshot::error::RecvError),
@@ -37,7 +37,8 @@ pub(crate) enum ReError {
 
 impl RenderWorkerPool {
     pub(crate) fn new(
-        pool: r2d2::Pool<PostgresConnectionManager<NoTls>>,
+        pool: Pool,
+        handle: Handle,
         worker_count: usize,
         svg_base_path: Arc<Path>,
         hillshading_base_path: Arc<Option<PathBuf>>,
@@ -50,10 +51,11 @@ impl RenderWorkerPool {
         for worker_id in 0..worker_count {
             let rx = rx.clone();
             let pool = pool.clone();
+            let handle = handle.clone();
             let svg_base_path = svg_base_path.clone();
             let hillshading_base_path = hillshading_base_path.clone();
 
-            let handle = std::thread::Builder::new()
+            let jh = std::thread::Builder::new()
                 .name(format!("render-worker-{worker_id}"))
                 .spawn(move || {
                     let mut svg_repo = SvgRepo::new(svg_base_path.as_ref().to_path_buf());
@@ -79,6 +81,7 @@ impl RenderWorkerPool {
                         let result = render::render::render(
                             &request,
                             pool.clone(),
+                            handle.clone(),
                             &mut svg_repo,
                             hillshading_datasets.as_mut(),
                         )
@@ -89,7 +92,7 @@ impl RenderWorkerPool {
                     }
                 });
 
-            workers.push(handle.expect("render worker spawn"));
+            workers.push(jh.expect("render worker spawn"));
         }
 
         Self {
