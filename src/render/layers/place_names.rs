@@ -13,7 +13,10 @@ use crate::render::{
 use cairo::Context;
 use pangocairo::pango::Weight;
 
-pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+pub async fn query(
+    ctx: &Ctx,
+    client: &tokio_postgres::Client,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let zoom = ctx.zoom;
 
     let by_zoom = match zoom {
@@ -44,7 +47,9 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
             a.osm_id
     ");
 
-    client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params()).await
+    client
+        .query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
+        .await
 }
 
 pub fn render(
@@ -135,7 +140,7 @@ pub fn render(
                         pango::Style::Normal
                     },
                 },
-                halo_width: halo_width * scale / 30.0,
+                halo_width: halo_width,
                 halo_opacity: 0.9,
                 placements: &placements,
                 color,
