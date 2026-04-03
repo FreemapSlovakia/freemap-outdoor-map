@@ -117,17 +117,20 @@ impl<'a> Prefetcher<'a> {
     ) {
         if let Some(ref legend) = self.ctx.legend {
             let key = legend_name.unwrap_or(name);
+
             if let Some(legend) = legend.get(key) {
                 let features = legend
                     .iter()
                     .map(|props| Feature::LegendData(props.clone()))
                     .collect();
+
                 self.layers.push(PendingLayer::Legend {
                     name,
                     features,
                     render_fn: Box::new(render_fn),
                 });
             }
+
             return;
         }
 
