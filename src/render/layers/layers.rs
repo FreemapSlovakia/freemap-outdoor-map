@@ -911,9 +911,23 @@ pub fn render(
     }) = &request.custom_layer
     {
         prefetcher.push(|_params| {
-            layers::custom::render(&ctx, context, features).with_layer("custom")?;
+            layers::custom::render_lines_polygons(&ctx, context, features)
+                .with_layer("custom_lines_polygons")
+        });
 
-            Ok(())
+        prefetcher.push(|params| {
+            layers::custom::render_points(&ctx, context, features, params.collision)
+                .with_layer("custom_points")
+        });
+
+        prefetcher.push(|params| {
+            layers::custom::render_line_polygon_labels(&ctx, context, features, params.collision)
+                .with_layer("custom_line_polygon_labels")
+        });
+
+        prefetcher.push(|params| {
+            layers::custom::render_point_labels(&ctx, context, features, params.collision)
+                .with_layer("custom_point_labels")
         });
     }
 

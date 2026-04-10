@@ -27,12 +27,15 @@ static GRAY_TILE_JPEG: LazyLock<Vec<u8>> = LazyLock::new(|| {
     const BLUE: u8 = 199;
 
     let mut pixels = vec![0; TILE_SIZE * TILE_SIZE * 3];
+
     for px in pixels.chunks_exact_mut(3) {
         px[0] = RED;
         px[1] = GREEN;
         px[2] = BLUE;
     }
+
     let mut encoded = Vec::new();
+
     JpegEncoder::new(&mut encoded)
         .encode(
             &pixels,
@@ -41,6 +44,7 @@ static GRAY_TILE_JPEG: LazyLock<Vec<u8>> = LazyLock::new(|| {
             ColorType::Rgb8.into(),
         )
         .expect("encode gray tile jpeg");
+
     encoded
 });
 
