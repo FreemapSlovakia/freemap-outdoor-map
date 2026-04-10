@@ -1,5 +1,7 @@
 use crate::render::colors::ContextExt;
 use crate::render::projectable::TileProjectable;
+use crate::render::render_request::CustomLayer;
+use crate::render::{CustomLayerOrder, RenderLayer, colors};
 use crate::render::{
     Feature, ImageFormat,
     collision::Collision,
@@ -12,13 +14,14 @@ use crate::render::{
     size::Size,
     svg_repo::SvgRepo,
 };
-use crate::render::{RenderLayer, colors};
 use cairo::{Context, Surface};
 use deadpool_postgres::Pool;
 use futures_util::FutureExt;
 use futures_util::future::BoxFuture;
 use geo::Rect;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::runtime::Handle;
@@ -582,6 +585,17 @@ pub fn render(
         }
     }
 
+    if let Some(CustomLayer {
+        features,
+        order: CustomLayerOrder::Natural,
+    }) = &request.custom_layer
+    {
+        prefetcher.push(|_params| {
+            layers::custom::render_lines_polygons(&ctx, context, features)
+                .with_layer("custom_lines_polygons")
+        });
+    }
+
     if (9..=11).contains(&zoom) && to_render.contains(&RenderLayer::Geonames) {
         prefetcher.add(
             "geonames",
@@ -639,6 +653,27 @@ pub fn render(
         });
     }
 
+    if let Some(CustomLayer {
+        features,
+        order: CustomLayerOrder::Natural,
+    }) = &request.custom_layer
+    {
+        prefetcher.push(|params| {
+            layers::custom::render_points(&ctx, context, features, params.collision)
+                .with_layer("custom_points")
+        });
+
+        prefetcher.push(|params| {
+            layers::custom::render_line_polygon_labels(&ctx, context, features, params.collision)
+                .with_layer("custom_line_polygon_labels")
+        });
+
+        prefetcher.push(|params| {
+            layers::custom::render_point_labels(&ctx, context, features, params.collision)
+                .with_layer("custom_point_labels")
+        });
+    }
+
     if (8..=14).contains(&zoom) {
         prefetcher.add(
             "place_names",
@@ -674,16 +709,43 @@ pub fn render(
         );
     }
 
+    let pois_to_label_slot: Rc<RefCell<Option<layers::pois::ToLabel>>> =
+        Rc::new(RefCell::new(None));
+
     if zoom >= 10 {
         let kst = to_render.contains(&RenderLayer::RoutesHikingKst);
+        let slot_icons = pois_to_label_slot.clone();
+        let ctx = ctx.clone();
+
         prefetcher.add(
-            "pois",
-            None,
+            "poi_icons",
+            Some("pois"),
             move |ctx, conn| async move { layers::pois::query(&ctx, &conn, kst).await }.boxed(),
-            |rows, params| {
-                layers::pois::render(&ctx, context, rows, params.collision, params.svg_repo)
+            move |rows, params| {
+                let to_label = layers::pois::render_icons(
+                    &ctx,
+                    context,
+                    rows,
+                    params.collision,
+                    params.svg_repo,
+                )?;
+
+                *slot_icons.borrow_mut() = Some(to_label);
+
+                Ok(())
             },
         );
+    }
+
+    if zoom >= 10 {
+        let slot_labels = pois_to_label_slot.clone();
+        let ctx = ctx.clone();
+
+        prefetcher.push(move |params| {
+            let to_label = slot_labels.borrow_mut().take().unwrap_or_default();
+            layers::pois::render_labels(&ctx, context, to_label, params.collision)
+                .with_layer("poi_labels")
+        });
     }
 
     if zoom >= 10 {
@@ -843,7 +905,11 @@ pub fn render(
         });
     }
 
-    if let Some(ref features) = request.featues {
+    if let Some(CustomLayer {
+        features,
+        order: CustomLayerOrder::Topmost,
+    }) = &request.custom_layer
+    {
         prefetcher.push(|_params| {
             layers::custom::render(&ctx, context, features).with_layer("custom")?;
 

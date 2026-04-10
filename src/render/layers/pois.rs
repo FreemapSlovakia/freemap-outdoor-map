@@ -9,7 +9,7 @@ use crate::render::{
         create_pango_layout::FontAndLayoutOptions,
         text::{TextOptions, draw_text, draw_text_with_attrs},
     },
-    layer_render_error::LayerRenderResult,
+    layer_render_error::{LayerRenderError, LayerRenderResult},
     projectable::TileProjectable,
     regex_replacer::{Replacement, build_replacements, replace},
     svg_repo::{Options, SvgRepo},
@@ -725,231 +725,245 @@ pub async fn query(
     client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params()).await
 }
 
-pub fn render(
+pub(super) struct PendingLabel {
+    point: Point,
+    icon_half_height: f64,
+    name: String,
+    ele: Option<String>,
+    bbox_idx: usize,
+    def: &'static Def,
+}
+
+pub(super) type ToLabel = Vec<PendingLabel>;
+
+pub fn render_icons(
     ctx: &Ctx,
     context: &Context,
     rows: Vec<Feature>,
     collision: &mut Collision,
     svg_repo: &mut SvgRepo,
-) -> LayerRenderResult {
-    let _span = tracy_client::span!("pois::render");
+) -> Result<ToLabel, LayerRenderError> {
+    let _span = tracy_client::span!("pois::render_icons");
 
     let zoom = ctx.zoom;
 
-    let mut to_label = Vec::<(Point, f64, String, Option<String>, usize, &Def)>::new();
+    let mut to_label = ToLabel::new();
 
-    {
-        let _span = tracy_client::span!("features::paint_svgs");
+    for row in rows {
+        let typ = row.get_string("type")?;
 
-        for row in rows {
-            let typ = row.get_string("type")?;
+        let extra = row.get_hstore("extra")?;
 
-            let extra = row.get_hstore("extra")?;
+        let Some(def) = POIS.get(typ).and_then(|defs| {
+            defs.iter()
+                .find(|def| def.min_zoom <= zoom && def.extra.max_zoom >= zoom)
+        }) else {
+            continue;
+        };
 
-            let Some(def) = POIS.get(typ).and_then(|defs| {
-                defs.iter()
-                    .find(|def| def.min_zoom <= zoom && def.extra.max_zoom >= zoom)
-            }) else {
-                continue;
-            };
+        let point = row.get_point()?.project_to_tile(&ctx.tile_projector);
 
-            let point = row.get_point()?.project_to_tile(&ctx.tile_projector);
+        let key = def.extra.icon.unwrap_or(typ);
 
-            let key = def.extra.icon.unwrap_or(typ);
+        let (key, names, stylesheet) = match key {
+            "spring" => {
+                let mut stylesheet = String::new();
 
-            let (key, names, stylesheet) = match key {
-                "spring" => {
-                    let mut stylesheet = String::new();
+                let is_mineral = extra
+                    .get("water_characteristic")
+                    .is_some_and(|v| v.is_some() && v.as_deref() != Some(""));
 
-                    let is_mineral = extra
-                        .get("water_characteristic")
-                        .is_some_and(|v| v.is_some() && v.as_deref() != Some(""));
+                let mut key = (if is_mineral {
+                    "mineral-spring"
+                } else {
+                    "spring"
+                })
+                .to_string();
 
-                    let mut key = (if is_mineral {
-                        "mineral-spring"
-                    } else {
-                        "spring"
-                    })
-                    .to_string();
+                let mut names = vec![key.clone()];
 
-                    let mut names = vec![key.clone()];
-
-                    if !is_mineral
-                        && extra
-                            .get("refitted")
-                            .is_some_and(|r| r.as_deref() == Some("yes"))
-                    {
-                        key.push_str("|refitted");
-                        names.push("refitted_spring".into());
-                    }
-
-                    let fill = if extra
-                        .get("hot")
-                        .is_some_and(|r| r.as_deref() == Some("true"))
-                    {
-                        key.push_str("|hot");
-
-                        "#e11919"
-                    } else {
-                        "#0064ff"
-                    };
-
-                    if extra
-                        .get("intermittent")
+                if !is_mineral
+                    && extra
+                        .get("refitted")
                         .is_some_and(|r| r.as_deref() == Some("yes"))
-                    {
-                        key.push_str("|tmp");
-                        names.push("intermittent".into());
-                    }
-
-                    stylesheet.push_str(&format!("#spring {{ fill: {fill} }}"));
-
-                    match extra.get("drinkable").and_then(Option::as_deref) {
-                        Some("yes" | "treated") => {
-                            key.push_str("|drinkable");
-                            names.push("drinkable_spring".into());
-                            stylesheet.push_str(r#"#drinkable { fill: #00ff00 } "#);
-                        }
-                        Some("no") => {
-                            key.push_str("|not_drinkable");
-                            names.push("drinkable_spring".into());
-                            stylesheet.push_str(r#"#drinkable { fill: #ff0000 } "#);
-                        }
-                        _ => {}
-                    }
-
-                    (Cow::Owned(key), names, Some(stylesheet))
+                {
+                    key.push_str("|refitted");
+                    names.push("refitted_spring".into());
                 }
-                _ => (
-                    Cow::Borrowed(key),
-                    vec![key.to_string()],
-                    def.extra.stylesheet.map(str::to_string),
-                ),
-            };
 
-            let surface = svg_repo.get_extra(
-                &key,
-                Some({
-                    || Options {
-                        names,
-                        stylesheet,
-                        halo: def.extra.halo,
-                        use_extents: false,
+                let fill = if extra
+                    .get("hot")
+                    .is_some_and(|r| r.as_deref() == Some("true"))
+                {
+                    key.push_str("|hot");
+
+                    "#e11919"
+                } else {
+                    "#0064ff"
+                };
+
+                if extra
+                    .get("intermittent")
+                    .is_some_and(|r| r.as_deref() == Some("yes"))
+                {
+                    key.push_str("|tmp");
+                    names.push("intermittent".into());
+                }
+
+                stylesheet.push_str(&format!("#spring {{ fill: {fill} }}"));
+
+                match extra.get("drinkable").and_then(Option::as_deref) {
+                    Some("yes" | "treated") => {
+                        key.push_str("|drinkable");
+                        names.push("drinkable_spring".into());
+                        stylesheet.push_str(r#"#drinkable { fill: #00ff00 } "#);
                     }
-                }),
+                    Some("no") => {
+                        key.push_str("|not_drinkable");
+                        names.push("drinkable_spring".into());
+                        stylesheet.push_str(r#"#drinkable { fill: #ff0000 } "#);
+                    }
+                    _ => {}
+                }
+
+                (Cow::Owned(key), names, Some(stylesheet))
+            }
+            _ => (
+                Cow::Borrowed(key),
+                vec![key.to_string()],
+                def.extra.stylesheet.map(str::to_string),
+            ),
+        };
+
+        let surface = svg_repo.get_extra(
+            &key,
+            Some({
+                || Options {
+                    names,
+                    stylesheet,
+                    halo: def.extra.halo,
+                    use_extents: false,
+                }
+            }),
+        )?;
+
+        let (x, y, w, he) = surface.ink_extents();
+
+        let corner_x = point.x() - w / 2.0;
+
+        let corner_y = point.y() - he / 2.0;
+
+        'outer: for &(dx, dy) in OFFSETS.iter() {
+            let corner_x = ctx.hint(corner_x + dx - 0.5) + 0.5;
+            let corner_y = ctx.hint(corner_y + dy - 0.5) + 0.5;
+
+            let bbox = Rect::new((corner_x, corner_y), (corner_x + w, corner_y + he));
+
+            if collision.collides(&bbox) {
+                continue;
+            }
+
+            let bbox_idx = collision.add(bbox);
+
+            if def.min_text_zoom <= zoom {
+                let name = row.get_string("name")?;
+
+                if !name.is_empty() {
+                    let name = replace(name, &def.extra.replacements);
+
+                    to_label.push(PendingLabel {
+                        point: Point::new(point.x() + dx, point.y() + dy),
+                        icon_half_height: he / 2.0,
+                        name: name.into_owned(),
+                        ele: extra.get("ele").and_then(Option::clone),
+                        bbox_idx,
+                        def,
+                    });
+                }
+            }
+
+            let _span = tracy_client::span!("features::paint_svg");
+
+            context.set_source_surface(surface, corner_x - x, corner_y - y)?;
+
+            context.paint_with_alpha(
+                if typ != "cave_entrance"
+                    && extra.get("access").is_some_and(|access| {
+                        matches!(access.as_deref(), Some("private" | "no"))
+                    })
+                {
+                    0.33
+                } else {
+                    1.0
+                },
             )?;
 
-            let (x, y, w, he) = surface.ink_extents();
-
-            let corner_x = point.x() - w / 2.0;
-
-            let corner_y = point.y() - he / 2.0;
-
-            'outer: for &(dx, dy) in OFFSETS.iter() {
-                let corner_x = ctx.hint(corner_x + dx - 0.5) + 0.5;
-                let corner_y = ctx.hint(corner_y + dy - 0.5) + 0.5;
-
-                let bbox = Rect::new((corner_x, corner_y), (corner_x + w, corner_y + he));
-
-                if collision.collides(&bbox) {
-                    continue;
-                }
-
-                let bbox_idx = collision.add(bbox);
-
-                if def.min_text_zoom <= zoom {
-                    let name = row.get_string("name")?;
-
-                    if !name.is_empty() {
-                        let name = replace(name, &def.extra.replacements);
-
-                        to_label.push((
-                            Point::new(point.x() + dx, point.y() + dy),
-                            he / 2.0,
-                            name.into_owned(),
-                            extra.get("ele").and_then(Option::clone),
-                            bbox_idx,
-                            def,
-                        ));
-                    }
-                }
-
-                let _span = tracy_client::span!("features::paint_svg");
-
-                context.set_source_surface(surface, corner_x - x, corner_y - y)?;
-
-                context.paint_with_alpha(
-                    if typ != "cave_entrance"
-                        && extra.get("access").is_some_and(|access| {
-                            matches!(access.as_deref(), Some("private" | "no"))
-                        })
-                    {
-                        0.33
-                    } else {
-                        1.0
-                    },
-                )?;
-
-                break 'outer;
-            }
+            break 'outer;
         }
     }
 
-    {
-        let _span = tracy_client::span!("features::labels");
+    Ok(to_label)
+}
 
-        for (point, d, name, ele, bbox_idx, def) in to_label.into_iter() {
-            let text_options = TextOptions {
-                flo: FontAndLayoutOptions {
-                    style: if def.natural {
-                        Style::Italic
-                    } else {
-                        Style::Normal
-                    },
-                    size: def.extra.font_size,
-                    weight: def.extra.weight,
-                    ..Default::default()
+pub fn render_labels(
+    _ctx: &Ctx,
+    context: &Context,
+    to_label: ToLabel,
+    collision: &mut Collision,
+) -> LayerRenderResult {
+    let _span = tracy_client::span!("pois::render_labels");
+
+    for PendingLabel { point, icon_half_height: d, name, ele, bbox_idx, def } in to_label {
+        let text_options = TextOptions {
+            flo: FontAndLayoutOptions {
+                style: if def.natural {
+                    Style::Italic
+                } else {
+                    Style::Normal
                 },
-                color: def.extra.text_color,
-                valign_by_placement: true,
-                placements: &[
-                    (0.0, -d - 3.0),
-                    (0.0, d - 3.0),
-                    (0.0, -d - 5.0),
-                    (0.0, d - 1.0),
-                    (0.0, -d - 7.0),
-                    (0.0, d + 1.0),
-                ],
-                omit_bbox: Some(bbox_idx),
+                size: def.extra.font_size,
+                weight: def.extra.weight,
                 ..Default::default()
-            };
+            },
+            color: def.extra.text_color,
+            valign_by_placement: true,
+            placements: &[
+                (0.0, -d - 3.0),
+                (0.0, d - 3.0),
+                (0.0, -d - 5.0),
+                (0.0, d - 1.0),
+                (0.0, -d - 7.0),
+                (0.0, d + 1.0),
+            ],
+            omit_bbox: Some(bbox_idx),
+            ..Default::default()
+        };
 
-            let drawn = if def.with_ele
-                && let Some(ele) = ele
-            {
-                let attr_list = AttrList::new();
+        let drawn = if def.with_ele
+            && let Some(ele) = ele
+        {
+            let attr_list = AttrList::new();
 
-                let mut scale_attr =
-                    AttrSize::new((text_options.flo.size * 0.8 * SCALE as f64) as i32);
-                scale_attr.set_start_index(name.len() as u32 + 1);
+            let mut scale_attr =
+                AttrSize::new((text_options.flo.size * 0.8 * SCALE as f64) as i32);
+            scale_attr.set_start_index(name.len() as u32 + 1);
 
-                attr_list.insert(scale_attr);
+            attr_list.insert(scale_attr);
 
-                draw_text_with_attrs(
-                    context,
-                    Some(collision),
-                    &point,
-                    format!("{}\n{}", name, ele).trim(),
-                    Some(attr_list),
-                    &text_options,
-                )?
-            } else {
-                draw_text(context, Some(collision), &point, &name, &text_options)?
-            };
+            draw_text_with_attrs(
+                context,
+                Some(collision),
+                &point,
+                format!("{}\n{}", name, ele).trim(),
+                Some(attr_list),
+                &text_options,
+            )?
+        } else {
+            draw_text(context, Some(collision), &point, &name, &text_options)?
+        };
 
-            if drawn.is_none() {
-                continue;
-            }
+        if drawn.is_none() {
+            continue;
         }
     }
 

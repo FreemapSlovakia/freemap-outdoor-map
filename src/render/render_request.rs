@@ -4,6 +4,7 @@ use enumset::EnumSetType;
 use geo::Geometry;
 use geo::Rect;
 use geojson::Feature;
+use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -22,6 +23,19 @@ pub enum RenderLayer {
     RoutesSki,
 }
 
+#[derive(Deserialize, Debug, Clone, Copy)]
+#[serde(rename_all = "kebab-case")]
+pub enum CustomLayerOrder {
+    Natural,
+    Topmost,
+}
+
+#[derive(Debug, Clone)]
+pub struct CustomLayer {
+    pub features: Vec<Feature>,
+    pub order: CustomLayerOrder,
+}
+
 #[derive(Debug, Clone)]
 pub struct RenderRequest {
     pub bbox: Rect<f64>,
@@ -30,7 +44,7 @@ pub struct RenderRequest {
     pub format: ImageFormat,
     pub to_render: HashSet<RenderLayer>,
     pub coverage_geometry: Option<Arc<Geometry>>,
-    pub featues: Option<Vec<Feature>>,
+    pub custom_layer: Option<CustomLayer>,
     pub legend: Option<LegendItemData>,
 }
 
@@ -50,7 +64,7 @@ impl RenderRequest {
             format,
             to_render,
             coverage_geometry,
-            featues: None,
+            custom_layer: None,
             legend: None,
         }
     }

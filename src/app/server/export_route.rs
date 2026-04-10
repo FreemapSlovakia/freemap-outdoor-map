@@ -1,6 +1,8 @@
 use crate::{
     app::server::app_state::AppState,
-    render::{ImageFormat, RenderLayer, RenderRequest, RenderWorkerPool},
+    render::{
+        CustomLayer, CustomLayerOrder, ImageFormat, RenderLayer, RenderRequest, RenderWorkerPool,
+    },
 };
 use axum::{
     body::Body,
@@ -46,7 +48,7 @@ enum ExportStatus {
     Done(Result<(), String>),
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub(crate) struct ExportRequest {
     zoom: u8,
     bbox: [f64; 4],
@@ -55,7 +57,7 @@ pub(crate) struct ExportRequest {
     features: Option<ExportFeatures>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ExportFeatures {
     shading: Option<bool>,
@@ -65,6 +67,7 @@ pub(crate) struct ExportFeatures {
     hiking_trails: Option<bool>,
     ski_trails: Option<bool>,
     feature_collection: Option<serde_json::Value>,
+    feature_collection_order: Option<CustomLayerOrder>,
 }
 
 #[derive(Deserialize)]
@@ -151,14 +154,19 @@ pub(crate) async fn post(
 
     let mut render_request = RenderRequest::new(rect, request.zoom, scale, format, render, None);
 
-    render_request.featues = if let Some(features) = &request.features
-        && let Some(feature_collection) = &features.feature_collection
+    render_request.custom_layer = if let Some(export_features) = &request.features
+        && let Some(feature_collection) = &export_features.feature_collection
     {
         match serde_json::from_value::<GeoJson>(feature_collection.clone())
             .map_err(|_err| "error parsing geojson")
             .and_then(geojson_to_features)
         {
-            Ok(geojson) => Some(geojson),
+            Ok(features) => Some(CustomLayer {
+                features,
+                order: export_features
+                    .feature_collection_order
+                    .unwrap_or(CustomLayerOrder::Topmost),
+            }),
             Err(_) => return bad_request(),
         }
     } else {
