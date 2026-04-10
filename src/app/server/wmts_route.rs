@@ -59,6 +59,7 @@ pub(crate) async fn service_handler(
                 TileCoord { zoom, x, y },
                 scale,
                 Some(ext),
+                false,
                 headers,
             )
             .await

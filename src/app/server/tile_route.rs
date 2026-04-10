@@ -8,7 +8,7 @@ use crate::{
 };
 use axum::{
     body::{Body, Bytes},
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, Response, StatusCode, header},
 };
 use geo::Rect;
@@ -44,9 +44,15 @@ static GRAY_TILE_JPEG: LazyLock<Vec<u8>> = LazyLock::new(|| {
     encoded
 });
 
+#[derive(serde::Deserialize)]
+pub(crate) struct QueryParams {
+    rerender: Option<bool>,
+}
+
 pub(crate) async fn get(
     State(tile_route_state): State<TileRouteState>,
     Path((zoom, x, y_with_suffix)): Path<(u8, u32, String)>,
+    Query(QueryParams { rerender }): Query<QueryParams>,
     headers: HeaderMap,
 ) -> Response<Body> {
     let state = tile_route_state.app_state;
@@ -65,6 +71,7 @@ pub(crate) async fn get(
         TileCoord { zoom, x, y },
         scale,
         ext,
+        rerender.unwrap_or_default(),
         headers,
     )
     .await
@@ -76,6 +83,7 @@ pub(crate) async fn serve_tile(
     coord: TileCoord,
     scale: f64,
     ext: Option<&str>,
+    rerender: bool,
     headers: HeaderMap,
 ) -> Response<Body> {
     let Some(variant) = state.tile_variants.get(variant_index) else {
@@ -135,7 +143,9 @@ pub(crate) async fn serve_tile(
             Fresh(SystemTime),
         }
 
-        if state.serve_cached {
+        if rerender {
+            // nothing
+        } else if state.serve_cached {
             let result: Result<_, io::Error> = async {
                 let mut f = fs::OpenOptions::new().read(true).open(&file_path).await?;
 
