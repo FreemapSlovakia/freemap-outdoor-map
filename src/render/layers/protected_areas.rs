@@ -109,7 +109,7 @@ pub fn render_areas(ctx: &Ctx, context: &Context, areas: Vec<Feature>) -> LayerR
             let protect_class = row.get_string("protect_class")?;
 
             if typ == "national_park" || typ == "protected_area" && protect_class == "2" {
-                context.push_group();
+                context.save()?;
 
                 path_geometry(context, projected);
 
@@ -123,8 +123,7 @@ pub fn render_areas(ctx: &Ctx, context: &Context, areas: Vec<Feature>) -> LayerR
 
                 context.stroke()?;
 
-                context.pop_group_to_source()?;
-                context.paint()?;
+                context.restore()?;
             }
         }
 
@@ -208,7 +207,6 @@ pub fn render_borders(
     }
 
     context.pop_group_to_source()?;
-
     context.paint_with_alpha(0.66)?;
 
     Ok(())

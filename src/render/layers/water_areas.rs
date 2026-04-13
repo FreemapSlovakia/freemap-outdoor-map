@@ -46,7 +46,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
         let tmp: bool = row.get_bool("tmp")?;
 
         if tmp {
-            context.push_group();
+            context.save()?;
 
             path_geometry(context, &projected);
 
@@ -63,8 +63,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
 
             context.stroke()?;
 
-            context.pop_group_to_source()?;
-            context.paint()?;
+            context.restore()?;
         } else {
             context.set_source_color(colors::WATER);
 

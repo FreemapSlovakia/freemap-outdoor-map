@@ -149,10 +149,6 @@ pub fn draw_line_pattern_scaled(
 
     let is_closed = vertices.first() == vertices.last();
 
-    context.push_group();
-
-    // context.set_operator(cairo::Operator::Source);
-
     for i in 0..len - 1 {
         let p1 = vertices[i];
         let p2 = vertices[i + 1];
@@ -356,10 +352,6 @@ pub fn draw_line_pattern_scaled(
 
         dist += length;
     }
-
-    context.pop_group_to_source()?;
-
-    context.paint()?;
 
     Ok(())
 }

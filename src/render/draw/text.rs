@@ -210,13 +210,13 @@ pub fn draw_text_with_attrs(
         None => return Ok(None),
     };
 
-    context.push_group();
-
     context.move_to(x, y);
 
     layout_path(context, &layout);
 
     context.status()?;
+
+    context.push_group();
 
     context.set_source_color_a(*halo_color, *halo_opacity);
     context.set_dash(&[], 0.0);
