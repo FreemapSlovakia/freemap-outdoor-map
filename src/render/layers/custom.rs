@@ -25,14 +25,20 @@ struct FeatureProps {
     b: f64,
     width: f64,
     name: Option<String>,
+    line_join: Option<LineJoin>,
+    line_cap: Option<LineCap>,
+    dash_array: Option<Vec<f64>>,
 }
 
 fn parse_props(feature: &Feature) -> FeatureProps {
-    let mut width = 1f64;
+    let mut width = 3f64;
     let mut r = 1f64;
     let mut g = 0f64;
     let mut b = 1f64;
     let mut name: Option<String> = None;
+    let mut line_join: Option<LineJoin> = None;
+    let mut line_cap: Option<LineCap> = None;
+    let mut dash_array: Option<Vec<f64>> = None;
 
     if let Some(ref properties) = feature.properties {
         if let Some(Value::String(color)) = properties.get("color")
@@ -54,6 +60,28 @@ fn parse_props(feature: &Feature) -> FeatureProps {
         {
             width = w;
         }
+
+        if let Some(Value::String(s)) = properties.get("lineJoin") {
+            line_join = match s.as_str() {
+                "round" => Some(LineJoin::Round),
+                "miter" => Some(LineJoin::Miter),
+                "bevel" => Some(LineJoin::Bevel),
+                _ => None,
+            };
+        }
+
+        if let Some(Value::String(s)) = properties.get("lineCap") {
+            line_cap = match s.as_str() {
+                "butt" => Some(LineCap::Butt),
+                "round" => Some(LineCap::Round),
+                "square" => Some(LineCap::Square),
+                _ => None,
+            };
+        }
+
+        if let Some(Value::Array(arr)) = properties.get("dashArray") {
+            dash_array = Some(arr.iter().filter_map(|v| v.as_f64()).collect());
+        }
     }
 
     FeatureProps {
@@ -62,6 +90,9 @@ fn parse_props(feature: &Feature) -> FeatureProps {
         b,
         width,
         name,
+        line_join,
+        line_cap,
+        dash_array,
     }
 }
 
@@ -87,8 +118,6 @@ pub fn render_lines_polygons(
         .collect::<Result<Vec<_>, LayerRenderError>>()?;
 
     context.save()?;
-    context.set_line_join(LineJoin::Round);
-    context.set_line_cap(LineCap::Round);
 
     // Pass 1: polygon fills (must come before strokes so borders render on top).
     for (geom, props) in &items {
@@ -102,6 +131,9 @@ pub fn render_lines_polygons(
         path_geometry(context, geom);
         context.set_line_width(props.width);
         context.set_source_rgb(props.r, props.g, props.b);
+        context.set_line_join(props.line_join.unwrap_or(LineJoin::Round));
+        context.set_line_cap(props.line_cap.unwrap_or(LineCap::Round));
+        context.set_dash(props.dash_array.as_deref().unwrap_or(&[]), 0.0);
         context.stroke()?;
     }
 
