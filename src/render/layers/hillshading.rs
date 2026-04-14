@@ -319,7 +319,7 @@ pub fn paint_surface(
     Ok(())
 }
 
-pub fn mask_covers_tile(surfaces: &mut [ImageSurface]) -> Result<bool, LayerRenderError> {
+pub fn mask_covers_tile(surfaces: &mut [&mut ImageSurface]) -> Result<bool, LayerRenderError> {
     if surfaces.is_empty() {
         return Ok(false);
     }
@@ -371,19 +371,3 @@ pub fn mask_covers_tile(surfaces: &mut [ImageSurface]) -> Result<bool, LayerRend
     Ok(false)
 }
 
-pub fn load_and_paint(
-    ctx: &Ctx,
-    context: &Context,
-    country: &str,
-    alpha: f64,
-    shading_data: &mut HillshadingDatasets,
-    mode: Mode,
-) -> Result<bool, LayerRenderError> {
-    let surface = load_surface(ctx, country, shading_data, mode)?;
-
-    if let Some(surface) = surface.as_ref() {
-        paint_surface(ctx, context, surface, alpha)?;
-    }
-
-    Ok(surface.is_some())
-}

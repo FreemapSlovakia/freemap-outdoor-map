@@ -322,7 +322,7 @@ pub fn render(
             draw(true)?;
 
             return Ok(());
-        } else if hillshading::mask_covers_tile(&mut mask_surfaces)? {
+        } else if hillshading::mask_covers_tile(&mut mask_surfaces.iter_mut().collect::<Vec<_>>())? {
             return Ok(());
         }
 

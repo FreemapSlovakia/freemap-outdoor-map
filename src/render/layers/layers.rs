@@ -454,6 +454,7 @@ pub fn render(
                 .expect("mutex not poisoned");
 
             let bridge_rows = results.remove(&Some("__bridge__")).unwrap_or_default();
+
             let contour_rows = CONTOUR_COUNTRIES
                 .into_iter()
                 .map(|c| (c, results.remove(&c).unwrap_or_default()))
