@@ -1,7 +1,9 @@
 use crate::render::{
     collision::Collision,
     colors::{self, Color, ContextExt},
-    draw::create_pango_layout::{FontAndLayoutOptions, create_pango_layout_with_attrs},
+    draw::create_pango_layout::{
+        FontAndLayoutOptions, create_pango_layout_with_attrs, probe_font_tofu,
+    },
 };
 use cairo::Context;
 use geo::{Point, Rect};
@@ -82,6 +84,8 @@ pub fn draw_text_with_attrs(
     } = options;
 
     let layout = create_pango_layout_with_attrs(context, text, attrs, flo);
+
+    probe_font_tofu(flo)?;
 
     let mut m: Option<(f64, f64)> = None;
 

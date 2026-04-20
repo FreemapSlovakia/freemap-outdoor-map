@@ -9,10 +9,14 @@ use pangocairo::{
     },
 };
 use std::borrow::Cow;
+use std::sync::LazyLock;
 
 thread_local! {
     static PANGO_FONT_MAP: pango::FontMap = FontMap::new();
 }
+
+static CANARY: LazyLock<String> =
+    LazyLock::new(|| std::env::var("MAPRENDER_TOFU_CANARY").unwrap_or_else(|_| "A".to_string()));
 
 #[derive(Copy, Clone, Debug)]
 pub struct FontAndLayoutOptions {
@@ -138,4 +142,138 @@ fn create_pango_layout_with_attrs_on_font_map(
     update_layout(context, &layout);
 
     layout
+}
+
+/// Detect tofu/notdef rendering for the given font configuration by laying a canary
+/// glyph ("A") onto a recording surface and inspecting the resulting cairo path.
+///
+/// The .notdef glyph in sans-serif fonts is two nested rectangles: 0 curves, few line
+/// segments, exactly 2 subpaths. The letter "A" in any standard font has either curves
+/// or >> 8 line segments spread across 2 subpaths. If the probe path has 0 curves and
+/// very few line segments, the font is rendering notdef — log it so we can correlate
+/// with tile output.
+#[derive(Debug, Clone, Copy)]
+pub struct TofuProbeResult {
+    pub move_tos: usize,
+    pub line_tos: usize,
+    pub curve_tos: usize,
+    pub close_paths: usize,
+}
+
+impl TofuProbeResult {
+    // Tofu signature: no curves at all, few line segments (one per rectangle side),
+    // and at least one closed subpath. Any real sans-serif "A" has curves or many
+    // more line segments; this threshold won't match it.
+    pub fn looks_like_tofu(&self) -> bool {
+        self.curve_tos == 0 && self.line_tos <= 10 && self.close_paths >= 1
+    }
+}
+
+/// Lay the given canary text onto a recording surface with `options` and summarise
+/// the resulting cairo path. Returns `None` if cairo refuses to create the surface
+/// or copy the path.
+pub fn probe_font_path(canary: &str, options: &FontAndLayoutOptions) -> Option<TofuProbeResult> {
+    let surface = cairo::RecordingSurface::create(cairo::Content::Alpha, None).ok()?;
+    let cr = cairo::Context::new(&surface).ok()?;
+    let layout = create_pango_layout_with_attrs(&cr, canary, None, options);
+    cr.move_to(0.0, 0.0);
+    pangocairo::functions::layout_path(&cr, &layout);
+    let path = cr.copy_path().ok()?;
+
+    let mut result = TofuProbeResult {
+        move_tos: 0,
+        line_tos: 0,
+        curve_tos: 0,
+        close_paths: 0,
+    };
+
+    for segment in path.iter() {
+        match segment {
+            cairo::PathSegment::MoveTo(_) => result.move_tos += 1,
+            cairo::PathSegment::LineTo(_) => result.line_tos += 1,
+            cairo::PathSegment::CurveTo(_, _, _) => result.curve_tos += 1,
+            cairo::PathSegment::ClosePath => result.close_paths += 1,
+        }
+    }
+
+    Some(result)
+}
+
+/// Detect tofu/notdef rendering for the given font configuration by laying the
+/// canary glyph "A" on a recording surface. Returns `FreetypeError` when the
+/// path signature matches two nested rectangles so the tile fails to render and
+/// is not cached — rather caching a bad tile for everyone, fail this request and
+/// let the next retry see fresh font state.
+pub fn probe_font_tofu(options: &FontAndLayoutOptions) -> cairo::Result<()> {
+    // Normally "A". Overridable at runtime for field-testing the detector —
+    // e.g. MAPRENDER_TOFU_CANARY=□ forces the probe to look at a character
+    // that renders as a rectangle outline, triggering the detector.
+    let canary: &str = &CANARY;
+    let Some(probe) = probe_font_path(canary, options) else {
+        return Ok(());
+    };
+
+    if !probe.looks_like_tofu() {
+        return Ok(());
+    }
+
+    let family = if options.narrow {
+        "MapRender Sans Narrow"
+    } else {
+        "MapRender Sans"
+    };
+
+    eprintln!(
+        "Tofu detected on canary {canary:?}: family={family} size={} weight={:?} style={:?} \
+         path={{move={} line={} curve={} close={}}}",
+        options.size,
+        options.weight,
+        options.style,
+        probe.move_tos,
+        probe.line_tos,
+        probe.curve_tos,
+        probe.close_paths,
+    );
+
+    Err(cairo::Error::FreetypeError)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn does_not_flag_letter_a() {
+        let opts = FontAndLayoutOptions::default();
+        let probe = probe_font_path("A", &opts).expect("probe path");
+        assert!(
+            !probe.looks_like_tofu(),
+            "letter A should not look like tofu, got {probe:?}",
+        );
+    }
+
+    #[test]
+    fn predicate_flags_tofu_signature() {
+        // What a .notdef glyph (two nested rectangles) typically produces:
+        // 2 MoveTos, 8 LineTos, 0 CurveTos, 2 ClosePaths.
+        let tofu = TofuProbeResult {
+            move_tos: 2,
+            line_tos: 8,
+            curve_tos: 0,
+            close_paths: 2,
+        };
+
+        assert!(tofu.looks_like_tofu());
+    }
+
+    #[test]
+    fn predicate_ignores_curved_glyph() {
+        let real = TofuProbeResult {
+            move_tos: 2,
+            line_tos: 4,
+            curve_tos: 6,
+            close_paths: 2,
+        };
+        assert!(!real.looks_like_tofu());
+    }
 }
