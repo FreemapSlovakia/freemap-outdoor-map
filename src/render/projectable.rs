@@ -101,9 +101,9 @@ impl TileProjectable for Rect {
 impl TileProjectable for Triangle {
     fn project_to_tile(&self, tp: &TileProjector) -> Self {
         Self::new(
-            tp.project_coord(&self.0),
-            tp.project_coord(&self.1),
-            tp.project_coord(&self.2),
+            tp.project_coord(&self.v1()),
+            tp.project_coord(&self.v2()),
+            tp.project_coord(&self.v3()),
         )
     }
 }
