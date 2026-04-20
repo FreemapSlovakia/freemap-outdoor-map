@@ -1,7 +1,7 @@
 use crate::render::{
     collision::Collision,
     colors::{self, Color, ContextExt},
-    draw::create_pango_layout::{FontAndLayoutOptions, create_layout_checked},
+    draw::create_pango_layout::{FontAndLayoutOptions, create_pango_layout_with_attrs},
 };
 use cairo::Context;
 use geo::{Point, Rect};
@@ -81,14 +81,7 @@ pub fn draw_text_with_attrs(
         omit_bbox,
     } = options;
 
-    let layout = create_layout_checked(
-        context,
-        "text",
-        text,
-        attrs,
-        flo,
-        Some((point.x(), point.y())),
-    )?;
+    let layout = create_pango_layout_with_attrs(context, text, attrs, flo);
 
     let mut m: Option<(f64, f64)> = None;
 

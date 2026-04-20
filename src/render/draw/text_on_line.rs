@@ -2,7 +2,7 @@ use crate::render::{
     collision::Collision,
     colors::{self, Color, ContextExt},
     draw::{
-        create_pango_layout::{FontAndLayoutOptions, create_layout_checked},
+        create_pango_layout::{FontAndLayoutOptions, create_pango_layout_with_attrs},
         offset_line::offset_line_string,
     },
 };
@@ -693,7 +693,7 @@ pub fn draw_text_on_line(
         *flo
     };
 
-    let layout = create_layout_checked(context, "text-on-line", text, None, &flo_use, None)?;
+    let layout = create_pango_layout_with_attrs(context, text, None, &flo_use);
 
     layout.set_width(-1); // no width constraint, so no wrapping happens at all
     let (ink, _) = layout.extents();

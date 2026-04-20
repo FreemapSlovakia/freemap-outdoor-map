@@ -9,11 +9,9 @@ use pangocairo::{
     },
 };
 use std::borrow::Cow;
-use std::cell::RefCell;
-use std::collections::HashSet;
 
 thread_local! {
-    static PANGO_FONT_MAP: RefCell<pango::FontMap> = RefCell::new(FontMap::new());
+    static PANGO_FONT_MAP: pango::FontMap = FontMap::new();
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -48,32 +46,8 @@ pub fn create_pango_layout_with_attrs(
     options: &FontAndLayoutOptions,
 ) -> Layout {
     PANGO_FONT_MAP.with(|font_map| {
-        create_pango_layout_with_attrs_on_font_map(
-            context,
-            text,
-            attrs,
-            options,
-            &font_map.borrow(),
-        )
+        create_pango_layout_with_attrs_on_font_map(context, text, attrs, options, font_map)
     })
-}
-
-pub fn create_pango_layout_with_attrs_fresh_map(
-    context: &Context,
-    text: &str,
-    attrs: Option<AttrList>,
-    options: &FontAndLayoutOptions,
-) -> (Layout, pango::FontMap) {
-    let font_map = FontMap::new();
-    let layout =
-        create_pango_layout_with_attrs_on_font_map(context, text, attrs, options, &font_map);
-    (layout, font_map)
-}
-
-pub fn replace_thread_font_map(font_map: pango::FontMap) {
-    PANGO_FONT_MAP.with(|current| {
-        *current.borrow_mut() = font_map;
-    });
 }
 
 fn create_pango_layout_with_attrs_on_font_map(
@@ -145,8 +119,6 @@ fn create_pango_layout_with_attrs_on_font_map(
 
     layout.set_text(&text);
 
-    // layout.set_markup(r#"<span font_features="liga=1">fi</span>"#);
-
     let mut attr_list = attrs;
 
     if *letter_spacing > 0.0 {
@@ -166,127 +138,4 @@ fn create_pango_layout_with_attrs_on_font_map(
     update_layout(context, &layout);
 
     layout
-}
-
-pub struct UniformGlyphsSummary {
-    pub glyph: pango::Glyph,
-    pub total: usize,
-}
-
-pub fn create_layout_checked(
-    context: &Context,
-    kind: &str,
-    text: &str,
-    attrs: Option<AttrList>,
-    options: &FontAndLayoutOptions,
-    point: Option<(f64, f64)>,
-) -> Result<Layout, cairo::Error> {
-    let attrs_for_retry = attrs.as_ref().and_then(|list| list.copy());
-
-    let mut layout = create_pango_layout_with_attrs(context, text, attrs, options);
-
-    let uniform = layout_uniform_glyphs_summary(&layout);
-    let suspicious_uniform = uniform
-        .as_ref()
-        .map(|summary| summary.total >= 2)
-        .unwrap_or(false)
-        && text_has_multiple_distinct_ascii_alnum(text);
-
-    if suspicious_uniform {
-        log_uniform_glyphs_layout(kind, text, &layout, point, uniform.as_ref().unwrap());
-    }
-
-    if suspicious_uniform {
-        let (fresh_layout, fresh_map) =
-            create_pango_layout_with_attrs_fresh_map(context, text, attrs_for_retry, options);
-
-        let fresh_uniform = layout_uniform_glyphs_summary(&fresh_layout);
-        let fresh_suspicious_uniform = fresh_uniform
-            .as_ref()
-            .map(|summary| summary.total >= 2)
-            .unwrap_or(false)
-            && text_has_multiple_distinct_ascii_alnum(text);
-
-        if !fresh_suspicious_uniform {
-            replace_thread_font_map(fresh_map);
-            layout = fresh_layout;
-            eprintln!("Recovered missing glyphs with fresh font map: text={text:?}");
-        }
-    }
-
-    Ok(layout)
-}
-
-fn layout_uniform_glyphs_summary(layout: &Layout) -> Option<UniformGlyphsSummary> {
-    let mut iter = layout.iter();
-    let mut total_count = 0_usize;
-    let mut distinct = HashSet::new();
-
-    loop {
-        if let Some(run) = iter.run_readonly() {
-            let glyphs = run.glyph_string();
-
-            for info in glyphs.glyph_info() {
-                let glyph = info.glyph();
-                total_count += 1;
-                distinct.insert(glyph);
-            }
-        }
-
-        if !iter.next_run() {
-            break;
-        }
-    }
-
-    if total_count >= 2 && distinct.len() == 1 {
-        let glyph = *distinct.iter().next().unwrap();
-        Some(UniformGlyphsSummary {
-            glyph,
-            total: total_count,
-        })
-    } else {
-        None
-    }
-}
-
-fn text_has_multiple_distinct_ascii_alnum(text: &str) -> bool {
-    let mut distinct = HashSet::new();
-
-    for ch in text.chars() {
-        if ch.is_ascii_alphanumeric() {
-            distinct.insert(ch.to_ascii_lowercase());
-            if distinct.len() >= 2 {
-                return true;
-            }
-        }
-    }
-
-    false
-}
-
-fn log_uniform_glyphs_layout(
-    kind: &str,
-    text: &str,
-    layout: &Layout,
-    point: Option<(f64, f64)>,
-    uniform: &UniformGlyphsSummary,
-) {
-    let desc = layout
-        .font_description()
-        .map(|d| d.to_str().to_string())
-        .unwrap_or_else(|| "<none>".to_string());
-    match point {
-        Some((x, y)) => {
-            eprintln!(
-                "Suspicious glyphs (uniform) in {kind} layout: text={text:?} point=({x:.2},{y:.2}) font={desc} glyph={} total={}",
-                uniform.glyph, uniform.total
-            );
-        }
-        None => {
-            eprintln!(
-                "Suspicious glyphs (uniform) in {kind} layout: text={text:?} font={desc} glyph={} total={}",
-                uniform.glyph, uniform.total
-            );
-        }
-    }
 }
