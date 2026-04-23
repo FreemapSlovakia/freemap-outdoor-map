@@ -43,6 +43,39 @@ impl Default for FontAndLayoutOptions {
     }
 }
 
+impl FontAndLayoutOptions {
+    /// Numeric CSS-style weight (100–1000) corresponding to `self.weight`.
+    /// Used to drive cosmic-text / fontdb font matching without pulling pango
+    /// types into downstream modules.
+    pub fn ct_weight_u16(&self) -> u16 {
+        match self.weight {
+            Weight::Thin => 100,
+            Weight::Ultralight => 200,
+            Weight::Light => 300,
+            Weight::Semilight => 350,
+            Weight::Book => 380,
+            Weight::Normal => 400,
+            Weight::Medium => 500,
+            Weight::Semibold => 600,
+            Weight::Bold => 700,
+            Weight::Ultrabold => 800,
+            Weight::Heavy => 900,
+            Weight::Ultraheavy => 1000,
+            _ => 400,
+        }
+    }
+
+    /// Style as a fontdb/cosmic-text enum, so downstream modules don't need
+    /// to import pango to inspect it.
+    pub fn ct_style(&self) -> cosmic_text::Style {
+        match self.style {
+            Style::Italic => cosmic_text::Style::Italic,
+            Style::Oblique => cosmic_text::Style::Oblique,
+            _ => cosmic_text::Style::Normal,
+        }
+    }
+}
+
 pub fn create_pango_layout_with_attrs(
     context: &Context,
     text: &str,

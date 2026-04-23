@@ -29,3 +29,7 @@ mod xyz;
 pub(crate) fn set_mapping_path(path: PathBuf) {
     legend::set_mapping_path(path);
 }
+
+pub(crate) fn set_fonts_path(path: PathBuf) {
+    draw::font_system::set_fonts_path(path);
+}

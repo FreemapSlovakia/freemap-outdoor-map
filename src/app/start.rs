@@ -5,7 +5,7 @@ use crate::app::{
     tile_processing_worker::TileProcessingWorker,
     tile_processor::{TileProcessingConfig, VariantConfig},
 };
-use crate::render::{RenderWorkerPool, set_mapping_path};
+use crate::render::{RenderWorkerPool, set_fonts_path, set_mapping_path};
 use deadpool_postgres::Config;
 use dotenvy::dotenv;
 use geo::{Coord, Geometry, MapCoordsInPlace};
@@ -29,6 +29,7 @@ pub(crate) fn start() {
 
     let cli = Cli::parse_checked();
     set_mapping_path(cli.mapping_path.clone());
+    set_fonts_path(cli.fonts_path.clone());
 
     let tile_variants = match build_tile_variants(&cli) {
         Ok(config) => config,
