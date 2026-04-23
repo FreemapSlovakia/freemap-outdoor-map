@@ -85,6 +85,11 @@ pub struct Cli {
     #[arg(long, env = "MAPRENDER_SVG_BASE_PATH")]
     pub svg_base_path: PathBuf,
 
+    /// Path to the directory with font files (.ttf/.otf). Loaded at startup;
+    /// system fonts are not consulted.
+    #[arg(long, env = "MAPRENDER_FONTS_PATH")]
+    pub fonts_path: PathBuf,
+
     /// Path to hillshading datasets.
     #[arg(long, env = "MAPRENDER_HILLSHADING_BASE_PATH")]
     pub hillshading_base_path: Option<PathBuf>,

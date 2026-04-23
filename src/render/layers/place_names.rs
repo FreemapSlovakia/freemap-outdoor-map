@@ -4,14 +4,14 @@ use crate::render::{
     colors,
     ctx::Ctx,
     draw::{
-        create_pango_layout::FontAndLayoutOptions,
+        font_options::FontAndLayoutOptions,
         text::{TextOptions, draw_text},
     },
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
 use cairo::Context;
-use pangocairo::pango::Weight;
+use cosmic_text::{Style, Weight};
 
 pub async fn query(
     ctx: &Ctx,
@@ -132,12 +132,12 @@ pub fn render(
                     max_width: 8.0 * size * scale,
                     uppercase,
                     narrow: true,
-                    weight: Weight::Bold,
+                    weight: Weight::BOLD,
                     letter_spacing,
                     style: if italic {
-                        pango::Style::Italic
+                        Style::Italic
                     } else {
-                        pango::Style::Normal
+                        Style::Normal
                     },
                 },
                 halo_width: halo_width,

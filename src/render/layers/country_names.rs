@@ -2,7 +2,7 @@ use crate::render::{
     Feature, colors,
     ctx::Ctx,
     draw::{
-        create_pango_layout::FontAndLayoutOptions,
+        font_options::FontAndLayoutOptions,
         offset_line::offset_line_string,
         text_on_line::{Distribution, TextOnLineOptions, draw_text_on_line},
     },

@@ -4,7 +4,7 @@ use crate::render::{
     colors,
     ctx::Ctx,
     draw::{
-        create_pango_layout::FontAndLayoutOptions,
+        font_options::FontAndLayoutOptions,
         text::{TextOptions, draw_text},
     },
     layer_render_error::LayerRenderResult,
@@ -12,7 +12,7 @@ use crate::render::{
     regex_replacer::{Replacement, replace},
 };
 use cairo::Context;
-use pangocairo::pango::Style;
+use cosmic_text::Style;
 use regex::Regex;
 use std::sync::LazyLock;
 

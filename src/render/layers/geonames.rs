@@ -3,14 +3,14 @@ use crate::render::{
     colors::{self},
     ctx::Ctx,
     draw::{
-        create_pango_layout::FontAndLayoutOptions,
+        font_options::FontAndLayoutOptions,
         text_on_line::{Distribution, TextOnLineOptions, draw_text_on_line},
     },
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
 use cairo::Context;
-use pangocairo::pango::Style;
+use cosmic_text::Style;
 
 pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let sql = "

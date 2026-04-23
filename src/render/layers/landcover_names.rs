@@ -5,7 +5,7 @@ use crate::render::{
     colors,
     ctx::Ctx,
     draw::{
-        create_pango_layout::FontAndLayoutOptions,
+        font_options::FontAndLayoutOptions,
         text::{TextOptions, draw_text},
     },
     feature::{GEOMETRY_COLUMN, WrongTypeError},
@@ -15,7 +15,7 @@ use crate::render::{
 };
 use cairo::Context;
 use geo::{Centroid, Geometry};
-use pangocairo::pango::Style;
+use cosmic_text::Style;
 use regex::Regex;
 use std::sync::LazyLock;
 

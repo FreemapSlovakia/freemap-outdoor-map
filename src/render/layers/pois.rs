@@ -6,8 +6,8 @@ use crate::render::{
     colors::{self, Color},
     ctx::Ctx,
     draw::{
-        create_pango_layout::FontAndLayoutOptions,
-        text::{TextOptions, draw_text, draw_text_with_attrs},
+        font_options::FontAndLayoutOptions,
+        text::{TextOptions, draw_text},
     },
     layer_render_error::{LayerRenderError, LayerRenderResult},
     projectable::TileProjectable,
@@ -17,7 +17,7 @@ use crate::render::{
 use cairo::Context;
 use core::f64;
 use geo::{Point, Rect};
-use pangocairo::pango::{AttrList, AttrSize, SCALE, Style, Weight};
+use cosmic_text::{Style, Weight};
 use std::borrow::Cow;
 use std::{
     collections::{HashMap, HashSet},
@@ -41,7 +41,7 @@ impl Default for Extra<'_> {
             replacements: vec![],
             icon: None,
             font_size: 12.0,
-            weight: Weight::Normal,
+            weight: Weight::NORMAL,
             text_color: colors::BLACK,
             max_zoom: u8::MAX,
             stylesheet: None,
@@ -115,9 +115,9 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
             replacements: build_replacements(&[(r"^[Ll]etisko\b *", "")]),
             ..Extra::default()
         }),
-        // (12, 12, Y, N, "guidepost", Extra { icon: Some("guidepost_x"), weight: Weight::Bold, max_zoom: 12, ..Extra::default() }),
-        (13, 13, Y, N, Poi, "guidepost", Extra { icon: Some("guidepost_xx"), weight: Weight::Bold, max_zoom: 13, ..Extra::default() }),
-        (14, 14, Y, N, Poi, "guidepost", Extra { icon: Some("guidepost_xx"), weight: Weight::Bold, ..Extra::default() }),
+        // (12, 12, Y, N, "guidepost", Extra { icon: Some("guidepost_x"), weight: Weight::BOLD, max_zoom: 12, ..Extra::default() }),
+        (13, 13, Y, N, Poi, "guidepost", Extra { icon: Some("guidepost_xx"), weight: Weight::BOLD, max_zoom: 13, ..Extra::default() }),
+        (14, 14, Y, N, Poi, "guidepost", Extra { icon: Some("guidepost_xx"), weight: Weight::BOLD, ..Extra::default() }),
         (10, 10, Y, Y, NaturalPoi, "peak1", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
         (11, 11, Y, Y, NaturalPoi, "peak2", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
         (12, 12, Y, Y, NaturalPoi, "peak3", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
@@ -936,26 +936,18 @@ pub fn render_labels(
                 (0.0, d + 1.0),
             ],
             omit_bbox: Some(bbox_idx),
+            sub_size_scale: Some(0.8),
             ..Default::default()
         };
 
         let drawn = if def.with_ele
             && let Some(ele) = ele
         {
-            let attr_list = AttrList::new();
-
-            let mut scale_attr =
-                AttrSize::new((text_options.flo.size * 0.8 * SCALE as f64) as i32);
-            scale_attr.set_start_index(name.len() as u32 + 1);
-
-            attr_list.insert(scale_attr);
-
-            draw_text_with_attrs(
+            draw_text(
                 context,
                 Some(collision),
                 &point,
                 format!("{}\n{}", name, ele).trim(),
-                Some(attr_list),
                 &text_options,
             )?
         } else {

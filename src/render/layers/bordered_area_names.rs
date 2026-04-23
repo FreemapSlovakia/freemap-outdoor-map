@@ -4,7 +4,7 @@ use crate::render::{
     colors,
     ctx::Ctx,
     draw::{
-        create_pango_layout::FontAndLayoutOptions,
+        font_options::FontAndLayoutOptions,
         path_geom::walk_geometry_line_strings,
         text::{TextOptions, draw_text},
         text_on_line::{Align, Distribution, Repeat, TextOnLineOptions, draw_text_on_line},
@@ -15,7 +15,7 @@ use crate::render::{
     regex_replacer::replace,
 };
 use cairo::Context;
-use pangocairo::pango::Style;
+use cosmic_text::Style;
 
 pub async fn query_centroids(
     ctx: &Ctx,
