@@ -3,7 +3,7 @@ use crate::render::{
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{
-        create_pango_layout::FontAndLayoutOptions,
+        font_options::FontAndLayoutOptions,
         smooth_line::path_smooth_bezier_spline,
         text_on_line::{
             Align, Distribution, Repeat, TextOnLineOptions, Upright, draw_text_on_line,

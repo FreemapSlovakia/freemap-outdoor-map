@@ -3,7 +3,7 @@ use crate::render::{
     colors::parse_hex_rgb,
     ctx::Ctx,
     draw::{
-        create_pango_layout::FontAndLayoutOptions,
+        font_options::FontAndLayoutOptions,
         path_geom::{
             path_geometry, path_polygons, walk_geometry_line_strings, walk_geometry_points,
         },

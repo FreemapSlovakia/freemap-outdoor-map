@@ -978,8 +978,6 @@ dependencies = [
  "indexmap",
  "librsvg",
  "notify",
- "pango",
- "pangocairo",
  "postgis",
  "proj",
  "rand 0.10.1",

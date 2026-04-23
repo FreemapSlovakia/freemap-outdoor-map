@@ -3,7 +3,7 @@ use crate::render::{
     collision::Collision,
     ctx::Ctx,
     draw::{
-        create_pango_layout::FontAndLayoutOptions,
+        font_options::FontAndLayoutOptions,
         line_pattern::draw_line_pattern_scaled,
         offset_line::offset_line_string,
         path_geom::{path_line_string_with_offset, walk_geometry_line_strings},

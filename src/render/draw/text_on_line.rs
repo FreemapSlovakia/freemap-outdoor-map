@@ -2,19 +2,18 @@ use crate::render::{
     collision::Collision,
     colors::{self, Color, ContextExt},
     draw::{
-        create_pango_layout::{
-            FontAndLayoutOptions, create_pango_layout_with_attrs, probe_font_tofu,
-        },
+        font_options::FontAndLayoutOptions,
+        font_system::{scale_outline, stamp_outline, with_font_system, with_scale_context},
         offset_line::offset_line_string,
     },
 };
 use cairo::Context;
+use cosmic_text::{
+    Attrs, Buffer, Family, Metrics, Shaping, Wrap,
+    fontdb::{ID as FontId, Weight as FdbWeight},
+};
 use geo::Vector2DOps;
 use geo::{Coord, Distance, Euclidean, InterpolatePoint, LineString, Rect};
-use pangocairo::{
-    functions::glyph_string_path,
-    pango::{Font, GlyphItem, GlyphString, Layout, SCALE},
-};
 use std::f64::consts::{PI, TAU};
 
 #[derive(Copy, Clone, Debug)]
@@ -385,107 +384,203 @@ fn prepare_label_span(
     })
 }
 
-fn make_cluster_glyph_string(
-    glyph_item: &GlyphItem,
-    start_glyph: i32,
-    end_glyph: i32,
-) -> GlyphString {
-    let src = glyph_item.glyph_string();
-    let count = (end_glyph - start_glyph) as usize;
-    let mut dst = GlyphString::new();
-    dst.set_size(count as i32);
-
-    for i in 0..count {
-        let src_info = &src.glyph_info()[start_glyph as usize + i];
-        let dst_info = &mut dst.glyph_info_mut()[i];
-
-        dst_info.set_glyph(src_info.glyph());
-
-        let src_geom = src_info.geometry();
-        let dst_geom = dst_info.geometry_mut();
-
-        dst_geom.set_width(src_geom.width());
-        dst_geom.set_x_offset(src_geom.x_offset());
-        dst_geom.set_y_offset(src_geom.y_offset());
-
-        dst.log_clusters_mut()[i] = i as i32;
-    }
-
-    dst
+/// One glyph within a cluster, with its offset from the cluster origin
+/// (at the baseline, advance-aligned).
+#[derive(Clone)]
+struct GlyphSpec {
+    font_id: FontId,
+    font_weight: FdbWeight,
+    font_size: f32,
+    glyph_id: u16,
+    /// Offset of this glyph's pen position from the cluster origin.
+    dx: f32,
+    /// Same for vertical (usually 0 except for stacking diacritics).
+    dy: f32,
 }
 
-fn collect_clusters(layout: &Layout) -> Vec<(f64, GlyphString, Font)> {
-    let mut result = Vec::new();
-    let ps = 1.0 / SCALE as f64;
+/// A pango-style "cluster" = a run of glyphs that render together (e.g. a
+/// base letter plus combining marks). Positioned as a unit.
+#[derive(Clone)]
+struct ClusterInfo {
+    /// Total horizontal advance (width the next cluster's origin sits at).
+    advance: f64,
+    /// Ink extents relative to the cluster origin; `y` axis is layout Y-down,
+    /// so `ink_top` is negative (above baseline) and `ink_bottom` may be
+    /// positive (below baseline).
+    ink_left: f64,
+    ink_right: f64,
+    ink_top: f64,
+    ink_bottom: f64,
+    /// Logical (metric-ascent+descent) extents, used to size the collision
+    /// bbox after rotation. Origin-relative, same Y convention as ink.
+    logical_left: f64,
+    logical_right: f64,
+    logical_top: f64,
+    logical_bottom: f64,
+    glyphs: Vec<GlyphSpec>,
+}
 
-    for line_idx in 0..layout.line_count() {
-        let Some(line) = layout.line(line_idx) else {
-            continue;
-        };
+/// Shape `text` with `flo` into a single unwrapped line and walk its glyphs,
+/// grouping consecutive glyphs sharing `glyph.start` into one cluster.
+/// Cluster positions, ink extents, and logical extents are all relative to
+/// the cluster's pen origin (at the baseline).
+fn collect_clusters(text: &str, flo: &FontAndLayoutOptions) -> Vec<ClusterInfo> {
+    let family = Family::Name(if flo.narrow {
+        "PT Sans Narrow"
+    } else {
+        "PT Sans"
+    });
+    let attrs = Attrs::new()
+        .family(family)
+        .weight(flo.weight)
+        .style(flo.style)
+        .letter_spacing((flo.letter_spacing / flo.size.max(0.0001)) as f32);
 
-        for run in line.runs() {
-            let font = run.item().analysis().font();
-            let glyphs = run.glyph_string();
-            let infos = glyphs.glyph_info();
-            let clusters = glyphs.log_clusters();
+    let text_owned = if flo.uppercase {
+        text.to_uppercase()
+    } else {
+        text.to_string()
+    };
 
-            if infos.is_empty() || clusters.is_empty() || infos.len() != clusters.len() {
-                continue;
-            }
+    let size = flo.size as f32;
+    let metrics = Metrics::new(size, size);
 
-            let mut start = 0usize;
-            while start < infos.len() {
-                let cluster_id = clusters[start];
-                let mut end = start + 1;
-                while end < infos.len() && clusters[end] == cluster_id {
-                    end += 1;
-                }
-
-                let glyph_string = make_cluster_glyph_string(&run, start as i32, end as i32);
-                let advance = glyph_string.glyph_info()[..]
-                    .iter()
-                    .map(|g| g.geometry().width() as f64 * ps)
-                    .sum();
-
-                result.push((advance, glyph_string, font.clone()));
-
-                start = end;
-            }
+    with_font_system(|fs| {
+        let mut buffer = Buffer::new(fs, metrics);
+        buffer.set_wrap(Wrap::None);
+        {
+            let mut buf = buffer.borrow_with(fs);
+            buf.set_size(None, None);
+            buf.set_text(&text_owned, &attrs, Shaping::Advanced, None);
+            buf.shape_until_scroll(true);
         }
-    }
 
-    result
+        with_scale_context(|sc| {
+            let mut out: Vec<ClusterInfo> = Vec::new();
+            // Track, for the currently-open cluster, the byte-range `start`
+            // and the pen x at which the cluster began. Combining glyphs
+            // share a `start` and get merged; otherwise we open a new one.
+            let mut open: Option<(usize, f64)> = None;
+
+            for run in buffer.layout_runs() {
+                for glyph in run.glyphs.iter() {
+                    let Some(font) = fs.get_font(glyph.font_id, glyph.font_weight) else {
+                        continue;
+                    };
+                    let font_ref = font.as_swash();
+
+                    let fm = font_ref.metrics(&[]);
+                    let s = glyph.font_size / fm.units_per_em as f32;
+                    let g_asc = (fm.ascent * s) as f64;
+                    let g_desc = (fm.descent.abs() * s) as f64;
+
+                    // Per-glyph ink box in the glyph's own pen coords (Y-up → Y-down flip).
+                    let (g_ink_l, g_ink_r, g_ink_t, g_ink_b) =
+                        match scale_outline(sc, font_ref, glyph.font_size, glyph.glyph_id) {
+                            Some(o) => {
+                                let b = o.bounds();
+                                (
+                                    b.min.x as f64,
+                                    b.max.x as f64,
+                                    -(b.max.y as f64),
+                                    -(b.min.y as f64),
+                                )
+                            }
+                            None => (0.0, 0.0, 0.0, 0.0),
+                        };
+
+                    let gx = glyph.x as f64;
+                    let same_cluster = matches!(open, Some((s, _)) if s == glyph.start);
+
+                    let spec = GlyphSpec {
+                        font_id: glyph.font_id,
+                        font_weight: glyph.font_weight,
+                        font_size: glyph.font_size,
+                        glyph_id: glyph.glyph_id,
+                        dx: 0.0,
+                        dy: glyph.y,
+                    };
+
+                    if same_cluster {
+                        let origin_x = open.unwrap().1;
+                        let cluster = out.last_mut().unwrap();
+                        let rel_x = gx - origin_x;
+                        // Glyph box in cluster-origin coords.
+                        let l = rel_x + g_ink_l;
+                        let r = rel_x + g_ink_r;
+                        cluster.advance += glyph.w as f64;
+                        cluster.ink_left = cluster.ink_left.min(l);
+                        cluster.ink_right = cluster.ink_right.max(r);
+                        cluster.ink_top = cluster.ink_top.min(g_ink_t);
+                        cluster.ink_bottom = cluster.ink_bottom.max(g_ink_b);
+                        cluster.logical_right = cluster.logical_right.max(rel_x + glyph.w as f64);
+                        cluster.logical_top = cluster.logical_top.min(-g_asc);
+                        cluster.logical_bottom = cluster.logical_bottom.max(g_desc);
+                        let mut s = spec;
+                        s.dx = rel_x as f32;
+                        cluster.glyphs.push(s);
+                    } else {
+                        open = Some((glyph.start, gx));
+                        out.push(ClusterInfo {
+                            advance: glyph.w as f64,
+                            ink_left: g_ink_l,
+                            ink_right: g_ink_r,
+                            ink_top: g_ink_t,
+                            ink_bottom: g_ink_b,
+                            logical_left: 0.0,
+                            logical_right: glyph.w as f64,
+                            logical_top: -g_asc,
+                            logical_bottom: g_desc,
+                            glyphs: vec![spec],
+                        });
+                    }
+                }
+            }
+
+            out
+        })
+    })
 }
 
 fn draw_label(
     cr: &cairo::Context,
-    glyphs: &[(GlyphString, Font, Coord, f64)],
+    placements: &[(ClusterInfo, Coord, f64)],
     opts: &TextOnLineOptions,
 ) -> cairo::Result<()> {
-    if glyphs.is_empty() {
+    if placements.is_empty() {
         return Ok(());
     }
 
-    let ps = 1.0 / SCALE as f64;
-
     cr.push_group();
 
-    for (glyph_string, font, pos, angle) in glyphs {
-        // Rotate around the glyph's centroid (center of logical bbox).
-        let mut gs = glyph_string.clone();
-        let (_, logical) = gs.extents(font);
-        let cx = (logical.x() as f64 + logical.width() as f64 / 2.0) * ps;
-        let cy = (logical.y() as f64 + logical.height() as f64 / 2.0) * ps;
+    with_font_system(|fs| {
+        with_scale_context(|sc| {
+            for (cluster, pos, angle) in placements {
+                // Rotate around the cluster's logical bbox center.
+                let cx = (cluster.logical_left + cluster.logical_right) / 2.0;
+                let cy = (cluster.logical_top + cluster.logical_bottom) / 2.0;
 
-        cr.save()?;
-        cr.translate(pos.x, pos.y);
-        cr.rotate(*angle);
-        cr.translate(-cx, -cy);
+                cr.save().ok();
+                cr.translate(pos.x, pos.y);
+                cr.rotate(*angle);
+                cr.translate(-cx, -cy);
 
-        glyph_string_path(cr, font, &mut gs);
+                for g in &cluster.glyphs {
+                    let Some(font) = fs.get_font(g.font_id, g.font_weight) else {
+                        continue;
+                    };
+                    let Some(outline) =
+                        scale_outline(sc, font.as_swash(), g.font_size, g.glyph_id)
+                    else {
+                        continue;
+                    };
+                    stamp_outline(cr, &outline, g.dx as f64, g.dy as f64);
+                }
 
-        cr.restore()?;
-    }
+                cr.restore().ok();
+            }
+        });
+    });
 
     cr.set_source_color_a(opts.halo_color, opts.halo_opacity);
     cr.set_dash(&[], 0.0);
@@ -545,7 +640,7 @@ fn justify_spacing(
     min_spacing: Option<f64>,
     total_length: f64,
     base_total_advance: f64,
-    clusters: &[(f64, GlyphString, Font)],
+    clusters: &[ClusterInfo],
 ) -> Option<(f64, f64)> {
     let gaps = clusters.len().saturating_sub(1) as f64;
     if gaps == 0.0 {
@@ -555,7 +650,7 @@ fn justify_spacing(
     let raw_extra = (total_length - base_total_advance) / gaps;
     let min_adv = clusters
         .iter()
-        .map(|c| c.0)
+        .map(|c| c.advance)
         .fold(f64::INFINITY, f64::min)
         .max(0.0);
 
@@ -638,7 +733,6 @@ pub fn draw_text_on_line(
 ) -> cairo::Result<bool> {
     let _span = tracy_client::span!("text_on_line::draw_text_on_line");
 
-    let ps = 1.0 / SCALE as f64;
     let mut pts: Vec<Coord> = line_string.into_iter().copied().collect();
 
     pts.dedup_by(|a, b| a == b);
@@ -695,23 +789,29 @@ pub fn draw_text_on_line(
         *flo
     };
 
-    let layout = create_pango_layout_with_attrs(context, text, None, &flo_use);
-
-    probe_font_tofu(&flo_use)?;
-
-    layout.set_width(-1); // no width constraint, so no wrapping happens at all
-    let (ink, _) = layout.extents();
-    let ink_span = (ink.width() as f64 / SCALE as f64).max(0.0);
-
-    let clusters = collect_clusters(&layout);
+    let clusters = collect_clusters(text, &flo_use);
     if clusters.is_empty() {
         return Ok(true);
     }
 
-    let base_total_advance: f64 = clusters.iter().map(|c| c.0).sum();
+    let base_total_advance: f64 = clusters.iter().map(|c| c.advance).sum();
     if base_total_advance == 0.0 {
         return Ok(true);
     }
+
+    // Full-label ink span: distance from the first cluster's ink_left (at
+    // pen x=0) to the last cluster's ink_right (at pen x=cumulative_advance).
+    let ink_span = {
+        let mut cum = 0.0_f64;
+        let mut min_l = f64::INFINITY;
+        let mut max_r = f64::NEG_INFINITY;
+        for c in &clusters {
+            min_l = min_l.min(cum + c.ink_left);
+            max_r = max_r.max(cum + c.ink_right);
+            cum += c.advance;
+        }
+        (max_r - min_l).max(0.0)
+    };
 
     // If justify spacing falls below the configured minimum, abort drawing.
     let (advance_scale, extra_spacing_between_glyphs) = match min_spacing {
@@ -739,7 +839,7 @@ pub fn draw_text_on_line(
         return Ok(false);
     }
 
-    let mut placements: Vec<Vec<(GlyphString, Font, Coord, f64)>> = Vec::new();
+    let mut placements: Vec<Vec<(ClusterInfo, Coord, f64)>> = Vec::new();
     let mut rendered = false;
 
     // For each label repeat, walk glyphs along the line while keeping edge-alignment and curvature limits.
@@ -793,9 +893,9 @@ pub fn draw_text_on_line(
             let label_advance_scale = advance_scale;
             let label_extra_spacing_between_glyphs = extra_spacing_between_glyphs;
 
-            for (idx, (advance, glyph_string, font)) in clusters.iter().enumerate() {
+            for (idx, cluster) in clusters.iter().enumerate() {
                 // Effective advance for this glyph (spacing between glyphs handled separately).
-                let eff_advance = *advance * label_advance_scale;
+                let eff_advance = cluster.advance * label_advance_scale;
                 let span_start = cursor;
                 let span_end = cursor + eff_advance;
                 if span_end > prepared.total_length && !is_justify {
@@ -869,15 +969,12 @@ pub fn draw_text_on_line(
                 let shifted_start = span_start;
                 let shifted_end = shifted_start + eff_advance;
 
-                let mut gs_bbox = glyph_string.clone();
-                let (ink, logical) = gs_bbox.extents(font);
-                let logical_w = logical.width() as f64 * ps;
-                let logical_h = logical.height() as f64 * ps;
-                let ink_left = ink.x() as f64 * ps;
-                let ink_right = (ink.x() as f64 + ink.width() as f64) * ps;
-                let logical_cx = (logical.x() as f64 + logical.width() as f64 / 2.0) * ps;
-                let ink_left_rel = ink_left - logical_cx;
-                let ink_right_rel = ink_right - logical_cx;
+                // Cluster extents are pen-origin-relative; convert to
+                // logical-center-relative to match the pango-era semantics
+                // of center_offset_for_glyph.
+                let logical_cx = (cluster.logical_left + cluster.logical_right) / 2.0;
+                let ink_left_rel = cluster.ink_left - logical_cx;
+                let ink_right_rel = cluster.ink_right - logical_cx;
 
                 let center_offset = center_offset_for_glyph(
                     idx,
@@ -911,22 +1008,43 @@ pub fn draw_text_on_line(
                 let angle =
                     normalize_angle(weighted_tangent.y.atan2(weighted_tangent.x) + flip_offset);
 
-                // Track an axis-aligned bbox for the rotated glyph.
-                let hw = logical_w / 2.0;
-                let hh = logical_h / 2.0;
-                let cos = angle.cos().abs();
-                let sin = angle.sin().abs();
-                let rx = hw.mul_add(cos, hh * sin);
-                let ry = hw.mul_add(sin, hh * cos);
-
+                // Axis-aligned bbox of the rotated ink rectangle, inflated
+                // by `halo_width` on every side before rotation so the halo
+                // rotates with the glyph. `pos` is where the cluster's
+                // logical center lands on screen; corners are in
+                // cluster-origin coords and shifted to be relative to that
+                // pivot.
+                let cx = logical_cx;
+                let cy = (cluster.logical_top + cluster.logical_bottom) / 2.0;
+                let hw = options.halo_width;
+                let corners = [
+                    (cluster.ink_left - hw - cx, cluster.ink_top - hw - cy),
+                    (cluster.ink_right + hw - cx, cluster.ink_top - hw - cy),
+                    (cluster.ink_right + hw - cx, cluster.ink_bottom + hw - cy),
+                    (cluster.ink_left - hw - cx, cluster.ink_bottom + hw - cy),
+                ];
+                let c = angle.cos();
+                let s = angle.sin();
+                let mut minx = f64::INFINITY;
+                let mut miny = f64::INFINITY;
+                let mut maxx = f64::NEG_INFINITY;
+                let mut maxy = f64::NEG_INFINITY;
+                for (dx, dy) in corners {
+                    let rx = dx * c - dy * s;
+                    let ry = dx * s + dy * c;
+                    minx = minx.min(rx);
+                    miny = miny.min(ry);
+                    maxx = maxx.max(rx);
+                    maxy = maxy.max(ry);
+                }
                 glyph_bboxes.push(Rect::new(
-                    (pos.x - rx, pos.y - ry),
-                    (pos.x + rx, pos.y + ry),
+                    (pos.x + minx, pos.y + miny),
+                    (pos.x + maxx, pos.y + maxy),
                 ));
                 glyph_span_ends.push(span_end);
 
                 if should_draw {
-                    label_placements.push((glyph_string.clone(), font.clone(), pos, angle));
+                    label_placements.push((cluster.clone(), pos, angle));
                 }
 
                 cursor += eff_advance;

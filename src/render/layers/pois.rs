@@ -6,7 +6,7 @@ use crate::render::{
     colors::{self, Color},
     ctx::Ctx,
     draw::{
-        create_pango_layout::FontAndLayoutOptions,
+        font_options::FontAndLayoutOptions,
         text::{TextOptions, draw_text},
     },
     layer_render_error::{LayerRenderError, LayerRenderResult},
@@ -17,7 +17,7 @@ use crate::render::{
 use cairo::Context;
 use core::f64;
 use geo::{Point, Rect};
-use pangocairo::pango::{Style, Weight};
+use cosmic_text::{Style, Weight};
 use std::borrow::Cow;
 use std::{
     collections::{HashMap, HashSet},
@@ -41,7 +41,7 @@ impl Default for Extra<'_> {
             replacements: vec![],
             icon: None,
             font_size: 12.0,
-            weight: Weight::Normal,
+            weight: Weight::NORMAL,
             text_color: colors::BLACK,
             max_zoom: u8::MAX,
             stylesheet: None,
@@ -115,9 +115,9 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
             replacements: build_replacements(&[(r"^[Ll]etisko\b *", "")]),
             ..Extra::default()
         }),
-        // (12, 12, Y, N, "guidepost", Extra { icon: Some("guidepost_x"), weight: Weight::Bold, max_zoom: 12, ..Extra::default() }),
-        (13, 13, Y, N, Poi, "guidepost", Extra { icon: Some("guidepost_xx"), weight: Weight::Bold, max_zoom: 13, ..Extra::default() }),
-        (14, 14, Y, N, Poi, "guidepost", Extra { icon: Some("guidepost_xx"), weight: Weight::Bold, ..Extra::default() }),
+        // (12, 12, Y, N, "guidepost", Extra { icon: Some("guidepost_x"), weight: Weight::BOLD, max_zoom: 12, ..Extra::default() }),
+        (13, 13, Y, N, Poi, "guidepost", Extra { icon: Some("guidepost_xx"), weight: Weight::BOLD, max_zoom: 13, ..Extra::default() }),
+        (14, 14, Y, N, Poi, "guidepost", Extra { icon: Some("guidepost_xx"), weight: Weight::BOLD, ..Extra::default() }),
         (10, 10, Y, Y, NaturalPoi, "peak1", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
         (11, 11, Y, Y, NaturalPoi, "peak2", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
         (12, 12, Y, Y, NaturalPoi, "peak3", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),

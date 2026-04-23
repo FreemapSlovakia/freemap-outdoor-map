@@ -4,7 +4,7 @@ use crate::render::{
     colors,
     ctx::Ctx,
     draw::{
-        create_pango_layout::FontAndLayoutOptions,
+        font_options::FontAndLayoutOptions,
         text::{TextOptions, draw_text},
     },
     layer_render_error::LayerRenderResult,
