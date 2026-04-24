@@ -149,7 +149,7 @@ server {
                 return 404;
         }
 
-        location ~ ^/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[123])x)?(?:\.(?:jpe?g|png))?$ {
+        location ~ ^/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[1234])x)?(?:\.(?:jpe?g|png))?$ {
                 add_header Cache-Control no-cache;
                 add_header Access-Control-Allow-Origin $http_origin always;
                 add_header Alt-Svc 'h3=":$server_port"; ma=86400';
