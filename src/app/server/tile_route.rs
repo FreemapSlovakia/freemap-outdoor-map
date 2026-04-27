@@ -1,6 +1,9 @@
 use crate::{
     app::{
-        server::app_state::{AppState, TileRouteState},
+        server::{
+            app_state::{AppState, TileRouteState},
+            diagnostics_route::WaitingGuard,
+        },
         tile_coord::TileCoord,
         tile_processor::cached_tile_path,
     },
@@ -221,7 +224,12 @@ pub(crate) async fn serve_tile(
 
     // println!("{coord}");
 
-    let rendered = match state.render_worker_pool.render(render_request).await {
+    let rendered = {
+        let _waiting_guard = WaitingGuard::new();
+        state.render_worker_pool.render(render_request).await
+    };
+
+    let rendered = match rendered {
         Ok(rendered) => rendered,
         Err(err) => {
             eprintln!("Render tile {coord}@{scale} failed: {err}");

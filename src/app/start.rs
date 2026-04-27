@@ -48,29 +48,27 @@ pub(crate) fn start() {
 
     let handle = rt.handle().clone();
 
-    let render_worker_pool = {
-        let pool = {
-            let mut cfg = Config::new();
-            cfg.url = Some(cli.database_url.clone());
-            cfg.pool = Some(deadpool_postgres::PoolConfig {
-                max_size: cli.pool_max_size as usize,
-                ..Default::default()
-            });
-            cfg.create_pool(
-                Some(deadpool_postgres::Runtime::Tokio1),
-                tokio_postgres::NoTls,
-            )
-            .expect("build db pool")
-        };
-
-        Arc::new(RenderWorkerPool::new(
-            pool,
-            handle,
-            cli.worker_count,
-            Arc::from(cli.svg_base_path),
-            Arc::from(cli.hillshading_base_path),
-        ))
+    let db_pool = {
+        let mut cfg = Config::new();
+        cfg.url = Some(cli.database_url.clone());
+        cfg.pool = Some(deadpool_postgres::PoolConfig {
+            max_size: cli.pool_max_size as usize,
+            ..Default::default()
+        });
+        cfg.create_pool(
+            Some(deadpool_postgres::Runtime::Tokio1),
+            tokio_postgres::NoTls,
+        )
+        .expect("build db pool")
     };
+
+    let render_worker_pool = Arc::new(RenderWorkerPool::new(
+        db_pool.clone(),
+        handle,
+        cli.worker_count,
+        Arc::from(cli.svg_base_path),
+        Arc::from(cli.hillshading_base_path),
+    ));
 
     let mut tile_processing_worker = None;
     let mut tile_invalidation_watcher = None;
@@ -130,6 +128,7 @@ pub(crate) fn start() {
 
     if let Err(err) = rt.block_on(start_server(
         render_worker_pool.clone(),
+        db_pool,
         tile_processing_worker_for_server,
         shutdown_tx.subscribe(),
         ServerOptions {

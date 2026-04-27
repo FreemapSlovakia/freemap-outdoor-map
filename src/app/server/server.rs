@@ -2,6 +2,7 @@ use crate::{
     app::{
         server::{
             app_state::{AppState, TileRouteState, TileVariantState},
+            diagnostics_route::{self, DiagnosticsState},
             export_route::{self, ExportState},
             legend_route, tile_route, wmts_route,
         },
@@ -11,9 +12,11 @@ use crate::{
 };
 use axum::{
     Router,
+    middleware,
     routing::{get, post},
     serve,
 };
+use deadpool_postgres::Pool;
 use geo::Geometry;
 use std::{
     io,
@@ -45,6 +48,7 @@ pub struct TileVariantOptions {
 
 pub async fn start_server(
     render_worker_pool: Arc<RenderWorkerPool>,
+    db_pool: Pool,
     tile_worker: Option<TileProcessingWorker>,
     mut shutdown_rx: Receiver<()>,
     options: ServerOptions,
@@ -73,6 +77,8 @@ pub async fn start_server(
         serve_cached: options.serve_cached,
         max_zoom: options.max_zoom,
         allowed_scales: options.allowed_scales.clone(),
+        diagnostics: Arc::new(DiagnosticsState::new()),
+        db_pool,
     };
 
     let mut router = Router::new()
@@ -85,7 +91,8 @@ pub async fn start_server(
                 .delete(export_route::delete),
         )
         .route("/legend", get(legend_route::get_metadata))
-        .route("/legend/{id}", get(legend_route::get));
+        .route("/legend/{id}", get(legend_route::get))
+        .route("/diagnostics", get(diagnostics_route::get));
 
     for (variant_index, variant) in options.tile_variants.iter().enumerate() {
         let route_path = format!(
@@ -106,7 +113,12 @@ pub async fn start_server(
         );
     }
 
-    let mut router = router.with_state(app_state);
+    let mut router = router
+        .layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            diagnostics_route::track_request,
+        ))
+        .with_state(app_state);
 
     if options.cors {
         router = router.layer(

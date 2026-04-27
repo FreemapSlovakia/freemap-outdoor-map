@@ -1,5 +1,5 @@
 use crate::{
-    app::server::app_state::AppState,
+    app::server::{app_state::AppState, diagnostics_route::WaitingGuard},
     render::{LegendMeta, LegendMode, legend_metadata, legend_render_request},
 };
 use axum::{
@@ -35,7 +35,12 @@ pub(crate) async fn get(
             .expect("body should be built");
     };
 
-    let rendered = match state.render_worker_pool.render(render_request).await {
+    let rendered = {
+        let _waiting_guard = WaitingGuard::new();
+        state.render_worker_pool.render(render_request).await
+    };
+
+    let rendered = match rendered {
         Ok(rendered) => rendered,
         Err(err) => {
             eprintln!("render failed: {err}");

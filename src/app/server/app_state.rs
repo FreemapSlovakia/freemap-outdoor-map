@@ -1,7 +1,11 @@
 use crate::{
-    app::{server::export_route::ExportState, tile_processing_worker::TileProcessingWorker},
+    app::{
+        server::{diagnostics_route::DiagnosticsState, export_route::ExportState},
+        tile_processing_worker::TileProcessingWorker,
+    },
     render::{RenderLayer, RenderWorkerPool},
 };
+use deadpool_postgres::Pool;
 use geo::Geometry;
 use std::{collections::HashSet, path::PathBuf, sync::Arc};
 
@@ -22,6 +26,8 @@ pub(crate) struct AppState {
     pub(crate) serve_cached: bool,
     pub(crate) max_zoom: u8,
     pub(crate) allowed_scales: Vec<f64>,
+    pub(crate) diagnostics: Arc<DiagnosticsState>,
+    pub(crate) db_pool: Pool,
 }
 
 #[derive(Clone)]
