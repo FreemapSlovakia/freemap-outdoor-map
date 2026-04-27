@@ -42,12 +42,15 @@ tower = { version = "0.5.1", features = ["limit", "timeout"] }
 tower-http = { version = "0.6.1", features = ["cors"] }
 rand = "0.10.1"
 serde = { version = "1.0.217", features = ["derive"] }
-serde-saphyr = "0.0.24"
+serde-saphyr = "0.0.25"
 indexmap = { version = "2.13.1", features = ["serde"] }
 notify = "8.2.0"
 tokio-util = { version = "0.7.12", features = ["io"] }
 sled = "0.34.7"
 httpdate = "1.0.3"
 enumset = "1.1.10"
-cosmic-text = { version = "0.19.0", features = ["fontconfig", "swash"], default-features = false }
+cosmic-text = { version = "0.19.0", features = [
+  "fontconfig",
+  "swash",
+], default-features = false }
 swash = "0.2.7"
