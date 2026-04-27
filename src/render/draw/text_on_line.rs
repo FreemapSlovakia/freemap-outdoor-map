@@ -569,8 +569,7 @@ fn draw_label(
                     let Some(font) = fs.get_font(g.font_id, g.font_weight) else {
                         continue;
                     };
-                    let Some(outline) =
-                        scale_outline(sc, font.as_swash(), g.font_size, g.glyph_id)
+                    let Some(outline) = scale_outline(sc, font.as_swash(), g.font_size, g.glyph_id)
                     else {
                         continue;
                     };
@@ -639,7 +638,7 @@ fn label_offsets(
 fn justify_spacing(
     min_spacing: Option<f64>,
     total_length: f64,
-    base_total_advance: f64,
+    ink_span: f64,
     clusters: &[ClusterInfo],
 ) -> Option<(f64, f64)> {
     let gaps = clusters.len().saturating_sub(1) as f64;
@@ -647,7 +646,7 @@ fn justify_spacing(
         return Some((1.0, 0.0));
     }
 
-    let raw_extra = (total_length - base_total_advance) / gaps;
+    let raw_extra = (total_length - ink_span) / gaps;
     let min_adv = clusters
         .iter()
         .map(|c| c.advance)
@@ -669,25 +668,6 @@ fn justify_spacing(
     }
 
     Some((1.0, spacing))
-}
-
-fn center_offset_for_glyph(
-    idx: usize,
-    glyph_count: usize,
-    eff_advance: f64,
-    ink_left_rel: f64,
-    ink_right_rel: f64,
-) -> f64 {
-    if glyph_count == 1 || idx == 0 {
-        // Anchor the first glyph's ink left edge to the start of the span.
-        -ink_left_rel
-    } else if idx + 1 == glyph_count {
-        // Pull the last glyph so its ink right edge sits on the span end.
-        eff_advance - ink_right_rel
-    } else {
-        // Middle glyphs stay centered in their advance plus uniform gap.
-        eff_advance / 2.0
-    }
 }
 
 struct RepeatParams {
@@ -794,14 +774,10 @@ pub fn draw_text_on_line(
         return Ok(true);
     }
 
-    let base_total_advance: f64 = clusters.iter().map(|c| c.advance).sum();
-    if base_total_advance == 0.0 {
-        return Ok(true);
-    }
-
-    // Full-label ink span: distance from the first cluster's ink_left (at
-    // pen x=0) to the last cluster's ink_right (at pen x=cumulative_advance).
-    let ink_span = {
+    // Full-label ink extents along pen-x. `ink_lead` is the leftmost ink
+    // position (used to bias the cursor so the leftmost ink lands at the
+    // span start); `ink_span` is the distance from leftmost to rightmost ink.
+    let (ink_lead, ink_span) = {
         let mut cum = 0.0_f64;
         let mut min_l = f64::INFINITY;
         let mut max_r = f64::NEG_INFINITY;
@@ -810,24 +786,28 @@ pub fn draw_text_on_line(
             max_r = max_r.max(cum + c.ink_right);
             cum += c.advance;
         }
-        (max_r - min_l).max(0.0)
+        (min_l, (max_r - min_l).max(0.0))
     };
+
+    if ink_span == 0.0 {
+        return Ok(true);
+    }
 
     // If justify spacing falls below the configured minimum, abort drawing.
     let (advance_scale, extra_spacing_between_glyphs) = match min_spacing {
-        Some(ms) => match justify_spacing(Some(ms), total_length, base_total_advance, &clusters) {
+        Some(ms) => match justify_spacing(Some(ms), total_length, ink_span, &clusters) {
             Some(v) => v,
             None => return Ok(false),
         },
         None => (1.0, 0.0),
     };
 
-    let total_advance = base_total_advance.mul_add(
+    let label_visual_span = ink_span.mul_add(
         advance_scale,
         extra_spacing_between_glyphs * clusters.len().saturating_sub(1) as f64,
     );
 
-    let repeat = repeat_params(spacing_use, total_advance, ink_span, options.halo_width);
+    let repeat = repeat_params(spacing_use, label_visual_span, ink_span, options.halo_width);
     let offsets = if min_spacing.is_some() {
         vec![0.0]
     } else {
@@ -885,7 +865,11 @@ pub fn draw_text_on_line(
 
             let should_draw = prepared.intersects_clip;
 
-            let mut cursor = prepared.cursor_start;
+            // Shift the whole label so its leftmost ink lands at the span
+            // start. This keeps every inter-glyph gap uniform (just the
+            // natural side-bearings), instead of pulling the first/last
+            // glyphs inward to anchor their ink edges.
+            let mut cursor = prepared.cursor_start - ink_lead;
             let mut label_placements = Vec::new();
             let mut glyph_bboxes: Vec<Rect<f64>> = Vec::new();
             let mut glyph_span_ends: Vec<f64> = Vec::new();
@@ -969,22 +953,8 @@ pub fn draw_text_on_line(
                 let shifted_start = span_start;
                 let shifted_end = shifted_start + eff_advance;
 
-                // Cluster extents are pen-origin-relative; convert to
-                // logical-center-relative to match the pango-era semantics
-                // of center_offset_for_glyph.
                 let logical_cx = (cluster.logical_left + cluster.logical_right) / 2.0;
-                let ink_left_rel = cluster.ink_left - logical_cx;
-                let ink_right_rel = cluster.ink_right - logical_cx;
-
-                let center_offset = center_offset_for_glyph(
-                    idx,
-                    clusters.len(),
-                    eff_advance,
-                    ink_left_rel,
-                    ink_right_rel,
-                );
-
-                let shifted_center = shifted_start + center_offset;
+                let shifted_center = shifted_start + eff_advance / 2.0;
 
                 if shifted_end > prepared.total_length && !is_justify {
                     continue 'outer;
