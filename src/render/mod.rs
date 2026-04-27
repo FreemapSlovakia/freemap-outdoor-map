@@ -4,6 +4,7 @@ pub(super) use image_format::ImageFormat;
 pub(crate) use legend::{LegendMeta, LegendMode, legend_metadata, legend_render_request};
 pub(super) use render_request::{CustomLayer, CustomLayerOrder, RenderLayer, RenderRequest};
 pub(super) use render_worker_pool::RenderWorkerPool;
+pub(super) use xyz::bbox_size_in_pixels;
 use std::path::PathBuf;
 
 mod categories;

@@ -194,6 +194,32 @@ pub struct Cli {
     )]
     /// Render layers per tile URL path group (items delimited by ',', groups by ';').
     pub render: Vec<RenderGroup>,
+
+    /// Maximum total pixel area allowed for a single export request. The
+    /// estimated pixel count is `bbox_width_px * bbox_height_px` at the
+    /// requested zoom (scale is ignored — it does not significantly affect
+    /// rendering cost); requests exceeding this are rejected upfront.
+    #[arg(
+        long,
+        env = "MAPRENDER_MAX_EXPORT_PIXELS",
+        default_value_t = 10_000_000
+    )]
+    pub max_export_pixels: u64,
+
+    /// Maximum number of export render jobs allowed to run in parallel.
+    /// Additional exports wait in a queue.
+    #[arg(long, env = "MAPRENDER_MAX_PARALLEL_EXPORTS", default_value_t = 1)]
+    pub max_parallel_exports: usize,
+
+    /// Abandon a queued export if no client (HEAD/GET) has been
+    /// actively polling it for this many seconds. Also covers the gap
+    /// between POST and the first poll.
+    #[arg(
+        long,
+        env = "MAPRENDER_EXPORT_ABANDON_GRACE_SECS",
+        default_value_t = 30
+    )]
+    pub export_abandon_grace_secs: u64,
 }
 
 impl Cli {

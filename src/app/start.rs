@@ -141,6 +141,9 @@ pub(crate) fn start() {
             port: cli.port,
             cors: cli.cors,
             tile_variants,
+            max_export_pixels: cli.max_export_pixels,
+            max_parallel_exports: cli.max_parallel_exports,
+            export_abandon_grace: std::time::Duration::from_secs(cli.export_abandon_grace_secs),
         },
     )) {
         eprintln!("Server stopped with error: {err}");

@@ -34,6 +34,9 @@ pub struct ServerOptions {
     pub port: u16,
     pub cors: bool,
     pub tile_variants: Vec<TileVariantOptions>,
+    pub max_export_pixels: u64,
+    pub max_parallel_exports: usize,
+    pub export_abandon_grace: std::time::Duration,
 }
 
 pub struct TileVariantOptions {
@@ -66,7 +69,11 @@ pub async fn start_server(
 
     let app_state = AppState {
         render_worker_pool,
-        export_state: Arc::new(ExportState::new()),
+        export_state: Arc::new(ExportState::new(
+            options.max_parallel_exports,
+            options.max_export_pixels,
+            options.export_abandon_grace,
+        )),
         tile_variants: Arc::new(tile_variants),
         default_render,
         tile_worker,
