@@ -133,8 +133,6 @@ pub(crate) async fn post(
         (size.width as u64) * (size.height as u64)
     };
 
-    println!("{estimated} {max_pixels}");
-
     if estimated > max_pixels {
         return Response::builder()
             .status(StatusCode::PAYLOAD_TOO_LARGE)
