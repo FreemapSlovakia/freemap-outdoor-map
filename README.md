@@ -60,9 +60,47 @@ Legacy manual: https://github.com/FreemapSlovakia/freemap-mapnik/blob/develop/do
 
 ## Contours and shaded relief
 
-TBD
+~~Legacy manual: https://github.com/FreemapSlovakia/freemap-mapnik/blob/develop/doc/SHADING_AND_CONTOURS.md~~
 
-Legacy manual: https://github.com/FreemapSlovakia/freemap-mapnik/blob/develop/doc/SHADING_AND_CONTOURS.md
+Nushell commands to created smooth DTM for hillshading follow. Adjust parameters in whitebox_tools command.
+
+```nu
+glob sweden_dtm/**/*.tif |save -f dtm_index
+gdalbuildvrt -input_file_list dtm_index all.vrt
+
+mkdir retiled
+gdal_retile.py all.vrt -ps 1500 1500 -overlap 12 -targetDir retiled -co COMPRESS=DEFLATE -co PREDICTOR=1
+
+mkdir smooth
+(
+  glob retiled/*.tif
+    | where {|f| not ($"smooth/(($f | path basename))" | path exists)}
+    | par-each -t 4 {|f|
+      let a = $f | path basename
+      print $a
+      nice whitebox_tools -r=FeaturePreservingSmoothing -v --wd="." --dem=retiled/($a) -o=smooth/($a) --filter=11 --norm_diff=16.0 --num_iter=6
+    }
+)
+
+mkdir cropped
+(
+  glob smooth/*.tif
+    | where {|f| not ($"cropped/($f | path basename)" | path exists)}
+    | par-each -t 4 {|src|
+      let a = $f | path basename
+      print $a
+      let dst = ("cropped/" + $a)
+      let size = (gdalinfo -json $src | from json | get size)
+      let w = $size.0
+      let h = $size.1
+      gdal_translate -co COMPRESS=DEFLATE -co PREDICTOR=2 -srcwin 6 6 ($w - 12) ($h - 12) $src $dst
+    }
+)
+
+gdalbuildvrt -input_file_list cropped_index dtm.vrt
+```
+
+To generate final hillshading file use [Makefile](./Makefile) with parameters `INPUT` (default `dtm.vrt`) and `ZOOM` (default 16).
 
 ## Country labels
 
