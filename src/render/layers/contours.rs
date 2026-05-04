@@ -13,7 +13,6 @@ use crate::render::{
     projectable::TileProjectable,
 };
 use cairo::Context;
-use std::borrow::Cow;
 
 pub async fn query(
     ctx: &Ctx,
