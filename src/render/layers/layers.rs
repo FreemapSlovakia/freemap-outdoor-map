@@ -1,7 +1,9 @@
 use crate::render::colors::ContextExt;
 use crate::render::projectable::TileProjectable;
 use crate::render::render_request::CustomLayer;
-use crate::render::{CustomLayerOrder, RenderLayer, colors};
+use crate::render::{
+    ContourCountries, CustomLayerOrder, HillshadingHierarchy, RenderLayer, colors,
+};
 use crate::render::{
     Feature, ImageFormat,
     collision::Collision,
@@ -207,6 +209,8 @@ impl<'a> Prefetcher<'a> {
 pub fn render(
     surface: &Surface,
     request: &RenderRequest,
+    hillshading_hierarchy: Option<&HillshadingHierarchy>,
+    contour_countries: Option<&ContourCountries>,
     pool: Pool,
     handle: Handle,
     bbox: Rect<f64>,
@@ -230,8 +234,11 @@ pub fn render(
 
     let to_render = &request.to_render;
 
-    let do_shading = to_render.contains(&RenderLayer::Shading);
-    let do_contours = to_render.contains(&RenderLayer::Contours);
+    let do_shading = to_render.contains(&RenderLayer::Shading) && hillshading_hierarchy.is_some();
+
+    let do_contours = to_render.contains(&RenderLayer::Contours)
+        && hillshading_hierarchy.is_some()
+        && contour_countries.is_some();
 
     let legend = request.legend.clone();
 
@@ -381,19 +388,6 @@ pub fn render(
         );
     }
 
-    const CONTOUR_COUNTRIES: [Option<&'static str>; 10] = [
-        Some("at"),
-        Some("it"),
-        Some("ch"),
-        Some("si"),
-        Some("cz"),
-        Some("pl"),
-        Some("sk"),
-        Some("fr"),
-        Some("no"),
-        None,
-    ];
-
     if do_shading || do_contours {
         use std::sync::Mutex;
 
@@ -414,39 +408,64 @@ pub fn render(
             );
         }
 
-        if do_contours && zoom >= 12 {
-            const CONTOUR_LAYER_NAMES: [&str; 10] = [
-                "contours_at",
-                "contours_it",
-                "contours_ch",
-                "contours_si",
-                "contours_cz",
-                "contours_pl",
-                "contours_sk",
-                "contours_fr",
-                "contours_no",
-                "contours_fallback",
-            ];
+        if do_contours
+            && zoom >= 12
+            && let Some(contour_countries) = contour_countries
+        {
+            for entry in contour_countries.entries() {
+                let acc = results.clone();
 
-            for (country, layer_name) in CONTOUR_COUNTRIES.into_iter().zip(CONTOUR_LAYER_NAMES) {
+                let country = entry.country;
+
+                prefetcher.add(
+                    entry.layer_name,
+                    Some("contours"),
+                    move |ctx, conn| {
+                        async move { layers::contours::query(&ctx, &conn, Some(country)).await }
+                            .boxed()
+                    },
+                    move |features, _params| {
+                        acc.lock().unwrap().insert(Some(country), features);
+                        Ok(())
+                    },
+                );
+            }
+
+            if contour_countries.has_fallback() {
                 let acc = results.clone();
 
                 prefetcher.add(
-                    layer_name,
+                    "contours_fallback",
                     Some("contours"),
-                    move |ctx, conn| {
-                        async move { layers::contours::query(&ctx, &conn, country).await }.boxed()
+                    |ctx, conn| {
+                        async move { layers::contours::query(&ctx, &conn, None).await }.boxed()
                     },
                     move |features, _params| {
-                        acc.lock().unwrap().insert(country, features);
+                        acc.lock().unwrap().insert(None, features);
                         Ok(())
                     },
                 );
             }
         }
 
-        prefetcher.push(|params| {
+        // do_shading || do_contours implies hillshading_hierarchy.is_some() (caller gating).
+        let hierarchy = hillshading_hierarchy
+            .cloned()
+            .expect("do_shading || do_contours implies hierarchy");
+
+        // Only pass contour-countries when the caller actually requested contours.
+        let contour_countries_for_render = if do_contours {
+            contour_countries.cloned()
+        } else {
+            None
+        };
+
+        let ctx_for_closure = ctx.clone();
+
+        prefetcher.push(move |params| {
             let Some(hsd) = params.hsd else { return Ok(()) };
+
+            let ctx = &ctx_for_closure;
 
             let mut results = Arc::try_unwrap(results)
                 .expect("all accumulator render_fns already dropped")
@@ -455,19 +474,37 @@ pub fn render(
 
             let bridge_rows = results.remove(&Some("__bridge__")).unwrap_or_default();
 
-            let contour_rows = CONTOUR_COUNTRIES
-                .into_iter()
-                .map(|c| (c, results.remove(&c).unwrap_or_default()))
-                .collect();
+            let contour_rows: HashMap<Option<&'static str>, Vec<Feature>> =
+                if let Some(cc) = contour_countries_for_render.as_ref() {
+                    let mut rows: HashMap<Option<&'static str>, Vec<Feature>> = cc
+                        .entries()
+                        .iter()
+                        .map(|e| {
+                            (
+                                Some(e.country),
+                                results.remove(&Some(e.country)).unwrap_or_default(),
+                            )
+                        })
+                        .collect();
+
+                    if cc.has_fallback() {
+                        rows.insert(None, results.remove(&None).unwrap_or_default());
+                    }
+
+                    rows
+                } else {
+                    HashMap::new()
+                };
 
             layers::shading_and_contours::render(
-                &ctx,
+                ctx,
                 context,
                 bridge_rows,
                 contour_rows,
                 hsd,
+                &hierarchy,
+                contour_countries_for_render.as_ref(),
                 do_shading,
-                do_contours,
             )
             .with_layer("shading_and_contours")?;
 

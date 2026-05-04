@@ -1,6 +1,6 @@
 pub(super) use start::start;
 
-mod cli;
+pub(crate) mod cli;
 mod server;
 mod start;
 mod tile_coord;

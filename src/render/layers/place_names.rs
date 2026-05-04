@@ -140,7 +140,7 @@ pub fn render(
                         Style::Normal
                     },
                 },
-                halo_width: halo_width,
+                halo_width,
                 halo_opacity: 0.9,
                 placements: &placements,
                 color,

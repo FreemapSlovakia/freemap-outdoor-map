@@ -1,9 +1,9 @@
 use crate::render::{
-    self, RenderRequest, layers::load_hillshading_datasets, render::RenderError, svg_repo::SvgRepo,
+    self, RenderConfig, RenderRequest, layers::load_hillshading_datasets, render::RenderError,
+    svg_repo::SvgRepo,
 };
 use deadpool_postgres::Pool;
 use std::{
-    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     thread::JoinHandle,
 };
@@ -40,8 +40,7 @@ impl RenderWorkerPool {
         pool: Pool,
         handle: Handle,
         worker_count: usize,
-        svg_base_path: Arc<Path>,
-        hillshading_base_path: Arc<Option<PathBuf>>,
+        config: Arc<RenderConfig>,
     ) -> Self {
         let queue_size = worker_count.max(1) * 2;
         let (tx, rx) = mpsc::channel(queue_size);
@@ -52,21 +51,20 @@ impl RenderWorkerPool {
             let rx = rx.clone();
             let pool = pool.clone();
             let handle = handle.clone();
-            let svg_base_path = svg_base_path.clone();
-            let hillshading_base_path = hillshading_base_path.clone();
+            let config = config.clone();
 
             let jh = std::thread::Builder::new()
                 .name(format!("render-worker-{worker_id}"))
                 .spawn(move || {
-                    let mut svg_repo = SvgRepo::new(svg_base_path.as_ref().to_path_buf());
+                    let mut svg_repo =
+                        SvgRepo::new(config.svg_base_path.as_ref().to_path_buf());
 
-                    let mut hillshading_datasets =
-                        hillshading_base_path
-                            .as_ref()
-                            .as_ref()
-                            .map(|hillshading_base_path| {
-                                load_hillshading_datasets(hillshading_base_path)
-                            });
+                    let mut hillshading_datasets = config
+                        .hillshading_base_path
+                        .as_ref()
+                        .map(|hillshading_base_path| {
+                            load_hillshading_datasets(hillshading_base_path)
+                        });
 
                     loop {
                         let task = {
@@ -80,6 +78,8 @@ impl RenderWorkerPool {
 
                         let result = render::render::render(
                             &request,
+                            config.hillshading_hierarchy.as_ref(),
+                            config.contour_countries.as_ref(),
                             pool.clone(),
                             handle.clone(),
                             &mut svg_repo,

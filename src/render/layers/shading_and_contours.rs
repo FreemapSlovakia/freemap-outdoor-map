@@ -1,23 +1,11 @@
 use crate::render::{
-    Feature,
+    ContourCountries, Feature, HillshadingHierarchy,
     ctx::Ctx,
     layer_render_error::LayerRenderResult,
     layers::{bridge_areas, contours, hillshading, hillshading_datasets::HillshadingDatasets},
 };
 use cairo::{Context, Format, ImageSurface, SurfacePattern};
-use std::collections::HashMap;
-
-const HILLSHADING_HIERARCHY: [(&str, &[&str]); 9] = [
-    ("at", &["sk", "si", "cz"]),
-    ("it", &["at", "ch", "si", "fr"]),
-    ("ch", &["at", "fr"]),
-    ("si", &[]),
-    ("cz", &["sk", "pl"]),
-    ("pl", &["sk"]),
-    ("sk", &[]),
-    ("fr", &[]),
-    ("no", &[]),
-];
+use std::collections::{HashMap, HashSet};
 
 pub fn render(
     ctx: &Ctx,
@@ -25,22 +13,24 @@ pub fn render(
     bridge_rows: Vec<Feature>,
     mut contour_rows: HashMap<Option<&'static str>, Vec<Feature>>,
     hillshading_datasets: &mut HillshadingDatasets,
+    hierarchy: &HillshadingHierarchy,
+    contour_countries: Option<&ContourCountries>,
     do_shading: bool,
-    do_contours: bool,
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("shading_and_contours::render");
 
     let fade_alpha = 1.0f64.min(1.0 - (ctx.zoom as f64 - 7.0).ln() / 5.0);
 
     // Load all country mask surfaces once; reused by hillshading and contours.
-    let mut country_masks: Vec<(&'static str, Option<ImageSurface>)> = HILLSHADING_HIERARCHY
+    let mut country_masks: Vec<(&'static str, Option<ImageSurface>)> = hierarchy
+        .entries()
         .iter()
-        .map(|&(country, _)| {
+        .map(|entry| {
             Ok((
-                country,
+                entry.country,
                 hillshading::load_surface(
                     ctx,
-                    country,
+                    entry.country,
                     hillshading_datasets,
                     hillshading::Mode::Mask,
                 )?,
@@ -66,7 +56,9 @@ pub fn render(
     // (CC, CC, CC, (mask-$cc, mask-$cc, mask-$cc, (fallback_contours, fallback_final):src-out):src-over)
 
     if do_shading {
-        for (country, better_countries) in HILLSHADING_HIERARCHY {
+        for entry in hierarchy.entries() {
+            let country = entry.country;
+
             let Some((_, Some(mask_surface))) = country_masks.iter().find(|(c, _)| *c == country)
             else {
                 continue;
@@ -89,9 +81,9 @@ pub fn render(
             context.set_operator(cairo::Operator::In);
             hillshading::paint_surface(ctx, context, &shading_surface, fade_alpha)?;
 
-            for better_country in better_countries {
+            for &better_country in &entry.better {
                 if let Some((_, Some(bc_mask))) =
-                    country_masks.iter().find(|(c, _)| *c == *better_country)
+                    country_masks.iter().find(|(c, _)| *c == better_country)
                 {
                     context.set_operator(cairo::Operator::DestOut);
                     hillshading::paint_surface(ctx, context, bc_mask, 1.0)?;
@@ -128,14 +120,28 @@ pub fn render(
         }
     }
 
-    if do_contours && ctx.zoom >= 12 {
+    if ctx.zoom >= 12
+        && let Some(contour_countries) = contour_countries
+    {
         let scaled_w = (ctx.size.width as f64 * ctx.scale) as i32;
         let scaled_h = (ctx.size.height as f64 * ctx.scale) as i32;
 
         context.push_group(); // all contours — composited at 0.33 opacity via OVER
 
-        // Per-country: render contours masked to (country mask − better-priority masks).
-        for (country, better_countries) in HILLSHADING_HIERARCHY {
+        // Countries that have a country-specific contour source. Countries with hillshading
+        // only (e.g. "fi") are not in this set, so Norway's contours extend into Finland
+        // unmasked rather than being cut at the Finnish border.
+        let countries_with_contour_data: HashSet<&str> = contour_countries
+            .entries()
+            .iter()
+            .map(|e| e.country)
+            .collect();
+
+        // Per-country: render contours masked to (country mask − better-priority masks that
+        // also have contour data). A hillshading-only better country does not cut contours.
+        for entry in hierarchy.entries() {
+            let country = entry.country;
+
             let Some(rows) = contour_rows.remove(&Some(country)) else {
                 continue;
             };
@@ -156,8 +162,10 @@ pub fn render(
                 cc.set_source_surface(mask_surface, 0.0, 0.0)?;
                 cc.paint()?;
                 cc.set_operator(cairo::Operator::DestOut);
-                for bc in better_countries.iter() {
-                    if let Some((_, Some(bc_mask))) = country_masks.iter().find(|(c, _)| *c == *bc)
+                for &bc in &entry.better {
+                    if countries_with_contour_data.contains(bc)
+                        && let Some((_, Some(bc_mask))) =
+                            country_masks.iter().find(|(c, _)| *c == bc)
                     {
                         cc.set_source_surface(bc_mask, 0.0, 0.0)?;
                         cc.paint()?;
@@ -177,9 +185,19 @@ pub fn render(
             context.mask(&mask_pattern)?;
         }
 
-        // Fallback: render contours outside all known country masks.
-        // Skipped when tile_covered: the complement would be fully transparent.
-        if !tile_covered
+        // Fallback: render contours outside the masks of countries that have contour data.
+        // Countries with hillshading only (e.g. "fi") are intentionally excluded — their
+        // neighbouring country's contours already cover their area (see above).
+        let contour_covered = {
+            let mut present_mut: Vec<&mut ImageSurface> = country_masks
+                .iter_mut()
+                .filter(|(c, _)| countries_with_contour_data.contains(c))
+                .filter_map(|(_, s)| s.as_mut())
+                .collect();
+            hillshading::mask_covers_tile(&mut present_mut)?
+        };
+
+        if !contour_covered
             && let Some(rows) = contour_rows.remove(&None)
             && !rows.is_empty()
         {
@@ -189,8 +207,10 @@ pub fn render(
                 cc.set_source_rgba(1.0, 1.0, 1.0, 1.0);
                 cc.paint()?;
                 cc.set_operator(cairo::Operator::DestOut);
-                for (_, s) in &country_masks {
-                    if let Some(mask_surface) = s {
+                for (country, s) in &country_masks {
+                    if countries_with_contour_data.contains(country)
+                        && let Some(mask_surface) = s
+                    {
                         cc.set_source_surface(mask_surface, 0.0, 0.0)?;
                         cc.paint()?;
                     }

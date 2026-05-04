@@ -54,12 +54,6 @@ pub async fn query(
         ("wkb_geometry", params)
     };
 
-    let table: Cow<_> = if let Some(country) = country {
-        format!("contour_{country}_split").into()
-    } else {
-        "cont_dmr_split".into()
-    };
-
     let sql = format!(
         "
         SELECT
@@ -67,11 +61,12 @@ pub async fn query(
             height_m,
             ({width_case})::double precision AS width
         FROM
-            {table}
+            {}
         WHERE
             wkb_geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
             AND {height_filter}
-        "
+        ",
+        format!("contours_{}", country.unwrap_or("fallback"))
     );
 
     client.query(&sql, &params.as_params()).await

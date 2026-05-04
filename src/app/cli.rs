@@ -1,4 +1,4 @@
-use crate::render::RenderLayer;
+use crate::render::{ContourCountries, HillshadingHierarchy, RenderLayer};
 use clap::{Parser, ValueEnum, error::ErrorKind};
 use std::{collections::HashSet, net::Ipv4Addr, path::PathBuf, str::FromStr};
 
@@ -93,6 +93,17 @@ pub struct Cli {
     /// Path to hillshading datasets.
     #[arg(long, env = "MAPRENDER_HILLSHADING_BASE_PATH")]
     pub hillshading_base_path: Option<PathBuf>,
+
+    /// Per-country hillshading priority. Format:
+    /// `<country>[:<better-csv>][;<country>[:<better-csv>]…]`. Order matters.
+    /// If unset, no shading is rendered.
+    #[arg(long, env = "MAPRENDER_HILLSHADING_HIERARCHY")]
+    pub hillshading_hierarchy: Option<HillshadingHierarchy>,
+
+    /// Country contour sources. Comma-separated country codes; the token `_` includes
+    /// the global fallback source. If unset, no contours are rendered.
+    #[arg(long, env = "MAPRENDER_CONTOUR_COUNTRIES")]
+    pub contour_countries: Option<ContourCountries>,
 
     /// Number of rendering worker threads.
     #[arg(long, env = "MAPRENDER_WORKER_COUNT")]
@@ -246,6 +257,32 @@ impl Cli {
         }
 
         self.tile_variant_inputs()?;
+
+        if let Some(hierarchy) = self.hillshading_hierarchy.as_ref() {
+            let keys: HashSet<&str> = hierarchy.entries().iter().map(|e| e.country).collect();
+
+            for entry in hierarchy.entries() {
+                for better in &entry.better {
+                    if !keys.contains(better) {
+                        return Err(format!(
+                            "hillshading-hierarchy entry '{}' references unknown better-country '{better}'",
+                            entry.country
+                        ));
+                    }
+                }
+            }
+
+            if let Some(contour_countries) = self.contour_countries.as_ref() {
+                for entry in contour_countries.entries() {
+                    if !keys.contains(entry.country) {
+                        return Err(format!(
+                            "contour-countries country '{}' is not a key in hillshading-hierarchy",
+                            entry.country
+                        ));
+                    }
+                }
+            }
+        }
 
         Ok(())
     }

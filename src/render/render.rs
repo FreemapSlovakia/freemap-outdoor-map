@@ -1,4 +1,5 @@
 use crate::render::{
+    ContourCountries, HillshadingHierarchy,
     image_format::ImageFormat,
     layers::{self, HillshadingDatasets},
     render_request::RenderRequest,
@@ -25,6 +26,8 @@ pub enum RenderError {
 
 pub fn render(
     request: &RenderRequest,
+    hillshading_hierarchy: Option<&HillshadingHierarchy>,
+    contour_countries: Option<&ContourCountries>,
     pool: Pool,
     handle: Handle,
     svg_repo: &mut SvgRepo,
@@ -38,6 +41,8 @@ pub fn render(
         layers::render(
             surface,
             request,
+            hillshading_hierarchy,
+            contour_countries,
             pool,
             handle,
             request.bbox,

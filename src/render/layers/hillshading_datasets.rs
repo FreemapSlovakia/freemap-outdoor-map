@@ -5,19 +5,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-const DATASET_PATHS: [(&str, &str); 10] = [
-    ("sk", "sk/final.tif"),
-    ("cz", "cz/final.tif"),
-    ("at", "at/final.tif"),
-    ("pl", "pl/final.tif"),
-    ("it", "it/final.tif"),
-    ("ch", "ch/final.tif"),
-    ("si", "si/final.tif"),
-    ("fr", "fr/final.tif"),
-    ("no", "no/final.tif"),
-    ("_", "final.tif"),
-];
-
 const EVICT_AFTER: Duration = Duration::from_secs(10);
 
 struct CachedDataset {
@@ -49,12 +36,7 @@ impl HillshadingDatasets {
         match self.datasets.entry(name.to_string()) {
             Entry::Occupied(occ) => Some(&occ.into_mut().dataset),
             Entry::Vacant(vac) => {
-                let Some(path) = dataset_path(name) else {
-                    eprintln!("Unknown hillshading dataset key: {name}");
-                    return None;
-                };
-
-                let full_path = self.base.join(path);
+                let full_path = self.base.join(name).join("final.tif");
 
                 match Dataset::open(&full_path) {
                     Ok(dataset) => {
@@ -82,13 +64,6 @@ impl HillshadingDatasets {
             entry.last_used_at = Instant::now();
         }
     }
-}
-
-fn dataset_path(name: &str) -> Option<&'static str> {
-    DATASET_PATHS
-        .iter()
-        .find(|(dataset_name, _)| dataset_name == &name)
-        .map(|(_, path)| *path)
 }
 
 pub fn load_hillshading_datasets(base: impl AsRef<Path>) -> HillshadingDatasets {

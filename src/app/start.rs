@@ -5,7 +5,7 @@ use crate::app::{
     tile_processing_worker::TileProcessingWorker,
     tile_processor::{TileProcessingConfig, VariantConfig},
 };
-use crate::render::{RenderWorkerPool, set_fonts_path, set_mapping_path};
+use crate::render::{RenderConfig, RenderWorkerPool, set_fonts_path, set_mapping_path};
 use deadpool_postgres::Config;
 use dotenvy::dotenv;
 use geo::{Coord, Geometry, MapCoordsInPlace};
@@ -63,12 +63,18 @@ pub(crate) fn start() {
             .expect("build db pool")
         };
 
+        let render_config = Arc::new(RenderConfig {
+            svg_base_path: Arc::from(cli.svg_base_path),
+            hillshading_base_path: cli.hillshading_base_path,
+            hillshading_hierarchy: cli.hillshading_hierarchy,
+            contour_countries: cli.contour_countries,
+        });
+
         Arc::new(RenderWorkerPool::new(
             pool,
             handle,
             cli.worker_count,
-            Arc::from(cli.svg_base_path),
-            Arc::from(cli.hillshading_base_path),
+            render_config,
         ))
     };
 
