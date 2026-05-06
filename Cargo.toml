@@ -16,10 +16,10 @@ colorsys = "0.7.3"
 geo-postgis = "0.2.2"
 postgis = "0.9.0"
 proj = "=0.31.0"
-gio = "0.22.5"
+gio = "0.22.6"
 xmltree = "0.12.0"
 gdal = { version = "0.19.0", features = ["bindgen"] }
-geo = { version = "0.33.0", features = ["use-proj"] }
+geo = { version = "0.33.1", features = ["use-proj"] }
 earcut = "=0.4.5"
 geojson = "1.0.0"
 tokio-postgres = { version = "0.7", features = ["with-serde_json-1"] }
@@ -28,24 +28,24 @@ futures-util = "0.3"
 regex = "1.12.3"
 serde_json = "1.0.149"
 tracy-client = { version = "0.18.4", default-features = false }
-thiserror = "2.0.17"
+thiserror = "2.0.18"
 axum = "0.8.9"
 clap = { version = "4.6.1", features = ["derive", "env"] }
 dotenvy = "0.15.7"
-tokio = { version = "1.52.1", features = [
+tokio = { version = "1.52.2", features = [
   "fs",
   "macros",
   "rt-multi-thread",
   "signal",
 ] }
-tower = { version = "0.5.1", features = ["limit", "timeout"] }
-tower-http = { version = "0.6.1", features = ["cors"] }
+tower = { version = "0.5.3", features = ["limit", "timeout"] }
+tower-http = { version = "0.6.10", features = ["cors"] }
 rand = "0.10.1"
-serde = { version = "1.0.217", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
 serde-saphyr = "0.0.25"
-indexmap = { version = "2.13.1", features = ["serde"] }
+indexmap = { version = "2.14.0", features = ["serde"] }
 notify = "8.2.0"
-tokio-util = { version = "0.7.12", features = ["io"] }
+tokio-util = { version = "0.7.18", features = ["io"] }
 sled = "0.34.7"
 httpdate = "1.0.3"
 enumset = "1.1.10"
