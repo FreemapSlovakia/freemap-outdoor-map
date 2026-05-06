@@ -35,7 +35,7 @@ pub async fn query(
             COALESCE(a.area, 0) AS area,
             ST_PointOnSurface(a.geometry) AS geometry
         FROM
-            osm_places a LEFT JOIN osm_places b ON a.name = b.name AND a.osm_id <> b.osm_id AND ST_Contains(b.geometry, a.geometry)
+            osm_places a LEFT JOIN osm_places b ON a.name = b.name AND a.osm_id <> b.osm_id AND ST_Contains(a.geometry, b.geometry)
         WHERE
                 {by_zoom} AND
                 a.name <> '' AND
@@ -134,11 +134,7 @@ pub fn render(
                     narrow: true,
                     weight: Weight::BOLD,
                     letter_spacing,
-                    style: if italic {
-                        Style::Italic
-                    } else {
-                        Style::Normal
-                    },
+                    style: if italic { Style::Italic } else { Style::Normal },
                 },
                 halo_width,
                 halo_opacity: 0.9,
