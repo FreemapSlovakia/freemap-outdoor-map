@@ -48,7 +48,7 @@ notify = "8.2.0"
 tokio-util = { version = "0.7.18", features = ["io"] }
 sled = "0.34.7"
 httpdate = "1.0.3"
-enumset = "1.1.10"
+enumset = "1.1.12"
 cosmic-text = { version = "0.19.0", features = [
   "fontconfig",
   "swash",
