@@ -16,8 +16,8 @@ use crate::render::{
 };
 use cairo::Context;
 use core::f64;
-use geo::{Point, Rect};
 use cosmic_text::{Style, Weight};
+use geo::{Point, Rect};
 use std::borrow::Cow;
 use std::{
     collections::{HashMap, HashSet},
@@ -545,7 +545,14 @@ pub async fn query(
         SELECT
             osm_id,
             geometry,
-            COALESCE(NULLIF(name, ''), tags->'ref', '') AS name,
+            CASE
+                WHEN
+                    type = 'board'
+                    AND name <> ''
+                    AND tags ? 'ref'
+                    AND NOT (tags->'ref' = ANY(regexp_split_to_array(name, '[^[:alnum:]_]+')))
+                    THEN tags->'ref' || '. ' || name
+                ELSE COALESCE(NULLIF(name, ''), tags->'ref', '') END AS name,
             hstore(ARRAY[
                 'ele', tags->'ele',
                 'access', tags->'access',
@@ -722,7 +729,9 @@ pub async fn query(
 
     drop(selects);
 
-    client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params()).await
+    client
+        .query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
+        .await
 }
 
 pub(super) struct PendingLabel {
@@ -888,9 +897,9 @@ pub fn render_icons(
 
             context.paint_with_alpha(
                 if typ != "cave_entrance"
-                    && extra.get("access").is_some_and(|access| {
-                        matches!(access.as_deref(), Some("private" | "no"))
-                    })
+                    && extra
+                        .get("access")
+                        .is_some_and(|access| matches!(access.as_deref(), Some("private" | "no")))
                 {
                     0.33
                 } else {
@@ -913,7 +922,15 @@ pub fn render_labels(
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("pois::render_labels");
 
-    for PendingLabel { point, icon_half_height: d, name, ele, bbox_idx, def } in to_label {
+    for PendingLabel {
+        point,
+        icon_half_height: d,
+        name,
+        ele,
+        bbox_idx,
+        def,
+    } in to_label
+    {
         let text_options = TextOptions {
             flo: FontAndLayoutOptions {
                 style: if def.natural {
