@@ -77,7 +77,10 @@ pub static PAINTS: LazyLock<HashMap<&'static str, &'static [Paint]>> = LazyLock:
     paint_map
 });
 
-pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+pub async fn query(
+    ctx: &Ctx,
+    client: &tokio_postgres::Client,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let a = "'pitch', 'playground', 'golf_course', 'track'";
 
     let excl_types = match ctx.zoom {
@@ -118,7 +121,9 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
             osm_id
     ");
 
-    client.query(query, &ctx.bbox_query_params(Some(4.0)).as_params()).await
+    client
+        .query(query, &ctx.bbox_query_params(Some(4.0)).as_params())
+        .await
 }
 
 pub fn render(
@@ -135,10 +140,14 @@ pub fn render(
 
     context.save()?;
 
-    for row in rows {
-        let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
-
+    for row in &rows {
         let typ = row.get_string("type")?;
+
+        if matches!(typ, "forest_boundary" | "forest_compartment") {
+            continue;
+        }
+
+        let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
 
         if let Some(paints) = PAINTS.get(typ) {
             if paints.len() > 1 {
@@ -221,12 +230,38 @@ pub fn render(
             })?;
             context.stroke()?;
 
-            context.pop_group_to_source().expect("group in source");
+            context.pop_group_to_source()?;
             context.paint_with_alpha(0.66)?;
         }
     }
 
     context.restore()?;
+
+    if ctx.zoom >= 14 {
+        context.push_group();
+
+        context.set_source_color(TREE);
+        context.set_line_width(if ctx.zoom == 14 { 4.0 } else { 6.0 });
+        context.set_line_cap(cairo::LineCap::Square);
+
+        for row in rows {
+            let typ = row.get_string("type")?;
+
+            if !matches!(typ, "forest_boundary" | "forest_compartment") {
+                continue;
+            }
+
+            let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
+
+            path_geometry(context, &geom);
+
+            context.stroke()?;
+        }
+
+        context.pop_group_to_source()?;
+
+        context.paint_with_alpha(0.2)?;
+    }
 
     Ok(())
 }

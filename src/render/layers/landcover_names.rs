@@ -14,8 +14,8 @@ use crate::render::{
     regex_replacer::{Replacement, replace},
 };
 use cairo::Context;
-use geo::{Centroid, Geometry};
 use cosmic_text::Style;
+use geo::{Centroid, Geometry};
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -33,7 +33,10 @@ static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
     ]
 });
 
-pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+pub async fn query(
+    ctx: &Ctx,
+    client: &tokio_postgres::Client,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let z_order_case = build_landcover_z_order_case("type");
 
     // TODO include types (`type IN`), don't exclude (`type NOT IN`)
@@ -44,15 +47,16 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
         WITH main AS (
             SELECT DISTINCT ON (osm_id)
                 geometry,
-                name,
+                {},
                 type,
                 osm_id AS osm_id
             FROM
                 osm_landcovers
             WHERE
-                type NOT IN ('zoo', 'theme_park', 'winter_sports', 'national_park', 'protected_area', 'nature_reserve', 'aquaculture') AND
-                name <> '' AND
+                type NOT IN ('zoo', 'theme_park', 'winter_sports', 'national_park',
+                    'protected_area', 'nature_reserve', 'aquaculture') AND
                 area >= $6 AND
+                (name <> '' OR tags ? 'ref') AND
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
         )
         SELECT
@@ -61,18 +65,27 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
             ST_PointOnSurface(geometry) AS geometry
         FROM
             main
+        WHERE
+            name <> ''
         ORDER BY
             {z_order_case} DESC,
             osm_id
-    "
+    ",
+        if ctx.zoom < 15 {
+            "name"
+        } else {
+            "CASE WHEN type IN ('forest', 'forest_compartment') AND tags ? 'ref' THEN CASE WHEN name = '' THEN tags->'ref' ELSE tags->'ref' || ', ' || name END ELSE name END AS name"
+        }
     );
 
-    client.query(
-        &sql,
-        &ctx.bbox_query_params(Some(512.0))
-            .push(2_400_000.0f32 / (2.0f32 * (ctx.zoom as f32 - 10.0)).exp2())
-            .as_params(),
-    ).await
+    client
+        .query(
+            &sql,
+            &ctx.bbox_query_params(Some(512.0))
+                .push(2_400_000.0f32 / (2.0f32 * (ctx.zoom as f32 - 10.0)).exp2())
+                .as_params(),
+        )
+        .await
 }
 
 pub fn render(

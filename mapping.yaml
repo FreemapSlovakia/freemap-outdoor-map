@@ -209,6 +209,9 @@ tables:
         key: name
       - name: type
         type: mapping_value
+        aliases:
+          boundary:
+            forest: forest_boundary
       - name: area
         type: webmerc_area
       - name: tags
