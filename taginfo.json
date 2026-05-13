@@ -1478,6 +1478,13 @@
     },
     {
       "key": "natural",
+      "value": "volcano",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/peak.svg",
+      "description": "Rendered as icon. Icon from zoom 10. Label (name) from zoom 10."
+    },
+    {
+      "key": "natural",
       "value": "ridge",
       "object_types": ["way"],
       "description": "Rendered label (name) from zoom 13."

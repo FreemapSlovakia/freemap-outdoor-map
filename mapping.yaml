@@ -1019,6 +1019,7 @@ tables:
                 - stone
                 - strait # also as way
                 - tree
+                - volcano
           power:
             mapping:
               power:

@@ -118,6 +118,7 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         // (12, 12, Y, N, "guidepost", Extra { icon: Some("guidepost_x"), weight: Weight::BOLD, max_zoom: 12, ..Extra::default() }),
         (13, 13, Y, N, Poi, "guidepost", Extra { icon: Some("guidepost_xx"), weight: Weight::BOLD, max_zoom: 13, ..Extra::default() }),
         (14, 14, Y, N, Poi, "guidepost", Extra { icon: Some("guidepost_xx"), weight: Weight::BOLD, ..Extra::default() }),
+        (10, 10, Y, Y, NaturalPoi, "volcano", Extra { icon: Some("peak"), font_size: 13.0, halo: false, text_color: colors::MILITARY, stylesheet: Some("path { fill: hsl(0, 96%, 39%) }"), ..Extra::default() }),
         (10, 10, Y, Y, NaturalPoi, "peak1", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
         (11, 11, Y, Y, NaturalPoi, "peak2", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
         (12, 12, Y, Y, NaturalPoi, "peak3", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
@@ -465,7 +466,8 @@ pub async fn query(
             geometry,
             name,
             hstore(ARRAY['ele', tags->'ele', 'isolation', tags->'isolation']) AS extra,
-            CASE WHEN isolation > 4500 THEN 'peak1'
+            CASE WHEN type = 'volcano' THEN type
+                WHEN isolation > 4500 THEN 'peak1'
                 WHEN isolation BETWEEN 3000 AND 4500 THEN 'peak2'
                 WHEN isolation BETWEEN 1500 AND 3000 THEN 'peak3'
                 ELSE 'peak'
@@ -476,7 +478,7 @@ pub async fn query(
             isolations
         WHERE
             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-            type = 'peak' AND
+            type IN ('peak', 'volcano') AND
             name <> ''
         ",
     );
@@ -525,7 +527,7 @@ pub async fn query(
 
     if zoom >= 14 {
         let w = {
-            let mut omit_types = vec!["'peak'".to_string()];
+            let mut omit_types = vec!["'peak'".to_string(), "'volcano'".to_string()];
 
             for (typ, defs) in POIS.iter() {
                 let visible = defs
@@ -843,6 +845,8 @@ pub fn render_icons(
                 def.extra.stylesheet.map(str::to_string),
             ),
         };
+
+        println!("{typ} {stylesheet:?}");
 
         let surface = svg_repo.get_extra(
             &key,
