@@ -1,0 +1,5 @@
+[build]
+rustflags = ["-C", "link-arg=-Wl,-rpath,/home/martin/miniforge3/envs/geo/lib"]
+
+[env]
+PKG_CONFIG_PATH = "/home/martin/miniforge3/envs/geo/lib/pkgconfig"
