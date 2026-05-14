@@ -846,8 +846,6 @@ pub fn render_icons(
             ),
         };
 
-        println!("{typ} {stylesheet:?}");
-
         let surface = svg_repo.get_extra(
             &key,
             Some({
