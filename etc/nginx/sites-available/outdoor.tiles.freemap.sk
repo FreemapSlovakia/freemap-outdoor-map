@@ -38,12 +38,6 @@ map $http_referer $referrer_norm {
         default                              $http_referer;
 }
 
-map $http_origin $cors_origin {
-        default "";
-        "https://www.freemap.sk"  $http_origin;
-        "https://www.freemap.eu"  $http_origin;
-}
-
 map $url_scale $scale {
         default $url_scale;
         "" 1;
@@ -97,14 +91,14 @@ server {
 
         location /export {
                 if ($request_method = OPTIONS) {
-                        add_header Access-Control-Allow-Origin $http_origin;
+                        add_header Access-Control-Allow-Origin *;
                         add_header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS";
                         add_header Access-Control-Allow-Headers "Authorization, Content-Type, Accept, Origin";
                         add_header Access-Control-Max-Age 86400;
                         return 204;
                 }
 
-                add_header Access-Control-Allow-Origin $http_origin always;
+                add_header Access-Control-Allow-Origin * always;
 
                 proxy_pass http://localhost:4000/export;
         }
@@ -125,14 +119,14 @@ server {
         #location ~ /(legend-image/.*|legend) {
         location /legend {
                 if ($request_method = OPTIONS) {
-                        add_header Access-Control-Allow-Origin $http_origin;
+                        add_header Access-Control-Allow-Origin *;
                         add_header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS";
                         add_header Access-Control-Allow-Headers "Authorization, Content-Type, Accept, Origin";
                         add_header Access-Control-Max-Age 86400;
                         return 204;
                 }
 
-                add_header Access-Control-Allow-Origin $http_origin always;
+                add_header Access-Control-Allow-Origin * always;
                 add_header Alt-Svc 'h3=":$server_port"; ma=86400';
 
                 proxy_pass http://localhost:4000/legend;
@@ -151,7 +145,7 @@ server {
 
         location ~ ^/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[1234])x)?(?:\.(?:jpe?g|png))?$ {
                 add_header Cache-Control no-cache;
-                add_header Access-Control-Allow-Origin $http_origin always;
+                add_header Access-Control-Allow-Origin * always;
                 add_header Alt-Svc 'h3=":$server_port"; ma=86400';
 
                 if ($arg_rerender) {
@@ -168,7 +162,7 @@ server {
 
         location ~ ^/kst/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[123])x)?(?:\.(?:jpe?g|png))?$ {
                 add_header Cache-Control no-cache;
-                add_header Access-Control-Allow-Origin $http_origin always;
+                add_header Access-Control-Allow-Origin * always;
                 add_header Alt-Svc 'h3=":$server_port"; ma=86400';
 
                 if ($arg_rerender) {
@@ -184,7 +178,7 @@ server {
         }
 
         location @fallback {
-                add_header Access-Control-Allow-Origin $http_origin always;
+                add_header Access-Control-Allow-Origin * always;
                 add_header Cache-Control no-cache;
                 add_header X-Tile-Source render;
                 add_header Alt-Svc 'h3=":$server_port"; ma=86400';
@@ -193,7 +187,7 @@ server {
         }
 
         location @fallback2 {
-                add_header Access-Control-Allow-Origin $http_origin always;
+                add_header Access-Control-Allow-Origin * always;
                 add_header Cache-Control no-cache;
                 add_header X-Tile-Source render;
                 add_header Alt-Svc 'h3=":$server_port"; ma=86400';
@@ -214,4 +208,3 @@ server {
         include /etc/letsencrypt/options-ssl-nginx.conf;
         ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 }
-
