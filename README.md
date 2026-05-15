@@ -70,6 +70,36 @@ nu shading.nu
 
 The script is resumable — re-running it skips already completed tiles.
 
+### GDAL with JPEG-XL-in-GeoTIFF
+
+The merge step uses `-co COMPRESS=JXL`, and this binary reads the resulting `shading.tif` at runtime. Both require GDAL linked against a libtiff that has libjxl support.
+
+Check the system GDAL:
+
+```sh
+gdalinfo --format GTiff | grep -i jxl
+```
+
+If JXL doesn't appear there, the system GDAL can't do it. As of Debian trixie/forky, `libgdal38` links libjxl (so the standalone `.jxl` driver works), but `libtiff6` does not — so `COMPRESS=JXL` inside a GeoTIFF is unavailable. Install GDAL via mamba/miniforge instead:
+
+```sh
+mamba create -n geo -c conda-forge gdal libtiff
+mamba activate geo
+gdalinfo --format GTiff | grep -i jxl   # should print "JXL"
+```
+
+For `cargo build` to link against this GDAL, put a `.cargo/config.toml` at the repo root pointing at the env (adjust the path to your miniforge install):
+
+```toml
+[build]
+rustflags = ["-C", "link-arg=-Wl,-rpath,/home/<you>/miniforge3/envs/geo/lib"]
+
+[env]
+PKG_CONFIG_PATH = "/home/<you>/miniforge3/envs/geo/lib/pkgconfig"
+```
+
+For `shading.nu`, invoke `gdal_translate`/`gdaladdo` from the env (e.g. `mamba activate geo` before running, or hard-code `~/miniforge3/envs/geo/bin/...` paths).
+
 ## Country labels
 
 Import hand-crafted country labels:
