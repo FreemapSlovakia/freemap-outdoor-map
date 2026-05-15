@@ -7,6 +7,7 @@ const PARALLEL = 24   # number of tiles processed in parallel
 const OVERLAP  = 6    # half of retile overlap; used for hillshading context
 const CROP     = 3    # pixels cropped from each edge after hillshading; OVERLAP - CROP leaves margin for warp alignment
 const TMPDIR   = "/dev/shm"  # ramdisk for intermediate files; change to "." to use local disk
+const ZONE     = "29"  # UTM zone to process this run; change to 30/31 and re-run for other zones
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -110,27 +111,38 @@ print $"ZOOM=($ZOOM) TR=($tr)"
 
 # 1. Build VRT from source DTM files
 print "==> Building source VRT"
-glob sweden_dtm/**/*.tif | save -f dtm_index
-gdalbuildvrt -input_file_list dtm_index all.vrt
+glob $"/home/martin/18TB/es/tiles/*-{H,HU}($ZONE)-*.{tif,TIF}" | save -f dtm_index
+gdalbuildvrt -allow_projection_difference -input_file_list dtm_index $"zone($ZONE).vrt"
 
 # 2. Retile with overlap (overlap is kept through processing to avoid hillshade edge artifacts)
 print "==> Retiling"
 mkdir retiled
-gdal_retile.py all.vrt -ps 1500 1500 -overlap 12 -targetDir retiled -co COMPRESS=ZSTD -co PREDICTOR=1
+gdal_retile.py $"zone($ZONE).vrt" -ps 1500 1500 -overlap 12 -targetDir retiled -co COMPRESS=DEFLATE -co PREDICTOR=1
 
 # 3. Smooth tiles — resumable, skips existing and all-nodata tiles
 print "==> Smoothing"
 mkdir smooth
+mkdir smooth/_tmp
 (
   glob retiled/*.tif
     | where {|f| not ($"smooth/($f | path basename)" | path exists)}
     | where {|f| has-data $f}
     | par-each -t $PARALLEL {|f|
-        let a   = $f | path basename
-        let dst = $"smooth/($a)"
-        print $"  smooth ($a)"
-        whitebox_tools -r=FeaturePreservingSmoothing -v --wd="." --dem=retiled/($a) -o=($"($dst).tmp") --filter=11 --norm_diff=16.0 --num_iter=6
-        mv $"($dst).tmp" $dst
+        let a    = $f | path basename
+        let dst  = $"smooth/($a)"
+        let band = gdalinfo -json -mm $f err> /dev/null | from json | get bands | first
+        let cmin = $band | get -o computedMin
+        let cmax = $band | get -o computedMax
+        if ($cmin == $cmax) {
+            # Flat tile (constant elevation, e.g. sea-level coast sliver) — WBT panics on zero-variance input.
+            print $"  copy ($a)"
+            cp $f $dst
+        } else {
+            let tmp = $"smooth/_tmp/($a)"
+            print $"  smooth ($a)"
+            feature-preserving-smoothing --dem retiled/($a) -o $tmp --filter 11 --norm_diff 16 --num_iter 6 --max_diff 6
+            mv $tmp $dst
+        }
       }
 )
 
@@ -145,14 +157,19 @@ mkdir tiles
     | par-each -t $PARALLEL {|src| process-tile $src $tr}
 )
 
+# exit  # stop here per-zone run; remove after processing all zones to merge
+
 # 5. Merge all tiles and build overviews
+# Final shading.tif uses JXL (lossy, distance=3.0); requires GDAL linked against
+# a libtiff with libjxl support — see README. PREDICTOR is intentionally omitted
+# (JXL doesn't use it).
 print "==> Merging tiles"
 glob tiles/*.tif | save -f shading_index
 gdalbuildvrt -input_file_list shading_index shading.vrt
 sed -i 's|<ColorInterp>Alpha</ColorInterp>|<ColorInterp>Undefined</ColorInterp>|g' shading.vrt
-gdal_translate --config GDAL_TIFF_INTERNAL_MASK YES -of GTiff -co TILED=YES -co COMPRESS=ZSTD -co PREDICTOR=2 -co BIGTIFF=YES -co NUM_THREADS=ALL_CPUS shading.vrt shading.tif
+gdal_translate --config GDAL_TIFF_INTERNAL_MASK YES --config GDAL_TIFF_INTERNAL_MASK_TO_8BIT YES -of GTiff -co COMPRESS=JXL -co JXL_LOSSLESS=NO -co JXL_DISTANCE=3.0 -co TILED=YES -co BLOCKXSIZE=256 -co BLOCKYSIZE=256 -co BIGTIFF=YES -co NUM_THREADS=ALL_CPUS shading.vrt shading.tif
 rm shading.vrt shading_index
 gdal_edit.py -colorinterp_4 alpha shading.tif
 print "==> Building overviews"
-gdaladdo --config GDAL_TIFF_INTERNAL_MASK YES --config GDAL_CACHEMAX 4096 --config GDAL_NUM_THREADS ALL_CPUS -r cubic shading.tif
+gdaladdo --config GDAL_TIFF_INTERNAL_MASK YES --config GDAL_CACHEMAX 4096 --config GDAL_NUM_THREADS ALL_CPUS --config COMPRESS_OVERVIEW JXL --config JXL_LOSSLESS_OVERVIEW NO --config JXL_DISTANCE_OVERVIEW 3.0 -r cubic shading.tif
 print "==> Done"
