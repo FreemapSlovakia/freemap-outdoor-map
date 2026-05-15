@@ -108,31 +108,31 @@ let pi = (1 | math arctan) * 4
 let tr = ($pi * 2 * 6378137 / 256 / (2 ** $ZOOM) | into string)
 print $"ZOOM=($ZOOM) TR=($tr)"
 
-# # 1. Build VRT from source DTM files
-# print "==> Building source VRT"
-# glob sweden_dtm/**/*.tif | save -f dtm_index
-# gdalbuildvrt -input_file_list dtm_index all.vrt
+# 1. Build VRT from source DTM files
+print "==> Building source VRT"
+glob sweden_dtm/**/*.tif | save -f dtm_index
+gdalbuildvrt -input_file_list dtm_index all.vrt
 
-# # 2. Retile with overlap (overlap is kept through processing to avoid hillshade edge artifacts)
-# print "==> Retiling"
-# mkdir retiled
-# gdal_retile.py all.vrt -ps 1500 1500 -overlap 12 -targetDir retiled -co COMPRESS=ZSTD -co PREDICTOR=1
+# 2. Retile with overlap (overlap is kept through processing to avoid hillshade edge artifacts)
+print "==> Retiling"
+mkdir retiled
+gdal_retile.py all.vrt -ps 1500 1500 -overlap 12 -targetDir retiled -co COMPRESS=ZSTD -co PREDICTOR=1
 
-# # 3. Smooth tiles — resumable, skips existing and all-nodata tiles
-# print "==> Smoothing"
-# mkdir smooth
-# (
-#   glob retiled/*.tif
-#     | where {|f| not ($"smooth/($f | path basename)" | path exists)}
-#     | where {|f| has-data $f}
-#     | par-each -t $PARALLEL {|f|
-#         let a   = $f | path basename
-#         let dst = $"smooth/($a)"
-#         print $"  smooth ($a)"
-#         whitebox_tools -r=FeaturePreservingSmoothing -v --wd="." --dem=retiled/($a) -o=($"($dst).tmp") --filter=11 --norm_diff=16.0 --num_iter=6
-#         mv $"($dst).tmp" $dst
-#       }
-# )
+# 3. Smooth tiles — resumable, skips existing and all-nodata tiles
+print "==> Smoothing"
+mkdir smooth
+(
+  glob retiled/*.tif
+    | where {|f| not ($"smooth/($f | path basename)" | path exists)}
+    | where {|f| has-data $f}
+    | par-each -t $PARALLEL {|f|
+        let a   = $f | path basename
+        let dst = $"smooth/($a)"
+        print $"  smooth ($a)"
+        whitebox_tools -r=FeaturePreservingSmoothing -v --wd="." --dem=retiled/($a) -o=($"($dst).tmp") --filter=11 --norm_diff=16.0 --num_iter=6
+        mv $"($dst).tmp" $dst
+      }
+)
 
 # 4. Process each smooth tile into shaded relief — resumable
 print "==> Processing tiles"
