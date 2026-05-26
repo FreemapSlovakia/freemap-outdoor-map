@@ -256,39 +256,3 @@ impl ContextExt for Context {
         self.set_source_rgba(color.0, color.1, color.2, alpha);
     }
 }
-
-pub fn parse_hex_rgb(color: &str) -> Option<Color> {
-    let bytes = color.as_bytes();
-    if bytes.len() != 7 || bytes[0] != b'#' {
-        return None;
-    }
-
-    #[inline]
-    fn hex(c: u8) -> Option<u8> {
-        match c {
-            b'0'..=b'9' => Some(c - b'0'),
-            b'a'..=b'f' => Some(10 + c - b'a'),
-            b'A'..=b'F' => Some(10 + c - b'A'),
-            _ => None,
-        }
-    }
-
-    let (Some(rh), Some(rl), Some(gh), Some(gl), Some(bh), Some(bl)) = (
-        hex(bytes[1]),
-        hex(bytes[2]),
-        hex(bytes[3]),
-        hex(bytes[4]),
-        hex(bytes[5]),
-        hex(bytes[6]),
-    ) else {
-        return None;
-    };
-
-    const INV_255: f64 = 1.0 / 255.0;
-
-    Some((
-        f64::from((rh << 4) | rl) * INV_255,
-        f64::from((gh << 4) | gl) * INV_255,
-        f64::from((bh << 4) | bl) * INV_255,
-    ))
-}

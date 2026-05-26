@@ -1,6 +1,5 @@
 use crate::render::{
     collision::Collision,
-    colors::parse_hex_rgb,
     ctx::Ctx,
     draw::{
         font_options::FontAndLayoutOptions,
@@ -14,15 +13,19 @@ use crate::render::{
     projectable::TileProjectable,
 };
 use cairo::{Context, LineCap, LineJoin};
+use colorsys::{Rgb, RgbRatio};
 use geo::{Geometry, InteriorPoint, Rect, Transform, Translate};
 use geojson::Feature;
 use proj::Proj;
 use serde_json::Value;
 
 struct FeatureProps {
-    r: f64,
-    g: f64,
-    b: f64,
+    color: RgbRatio,
+    stroke_opacity: f64,
+    fill: Option<RgbRatio>,
+    fill_opacity: Option<f64>,
+    marker_color: Option<RgbRatio>,
+    marker_color_opacity: Option<f64>,
     width: f64,
     name: Option<String>,
     line_join: Option<LineJoin>,
@@ -32,36 +35,63 @@ struct FeatureProps {
 
 fn parse_props(feature: &Feature) -> FeatureProps {
     let mut width = 3f64;
-    let mut r = 1f64;
-    let mut g = 0f64;
-    let mut b = 1f64;
+    let mut color = RgbRatio::new(1.0, 0.0, 1.0, 1.0);
+    let mut stroke_opacity = 1f64;
+    let mut fill: Option<RgbRatio> = None;
+    let mut fill_opacity: Option<f64> = None;
+    let mut marker_color: Option<RgbRatio> = None;
+    let mut marker_color_opacity: Option<f64> = None;
     let mut name: Option<String> = None;
     let mut line_join: Option<LineJoin> = None;
     let mut line_cap: Option<LineCap> = None;
     let mut dash_array: Option<Vec<f64>> = None;
 
     if let Some(ref properties) = feature.properties {
-        if let Some(Value::String(color)) = properties.get("color")
-            && let Some((cr, cg, cb)) = parse_hex_rgb(color)
+        if let Some(Value::String(c)) = properties.get("stroke")
+            && let Ok(rgb) = Rgb::from_hex_str(c)
         {
-            r = cr;
-            g = cg;
-            b = cb;
+            color = rgb.as_ratio();
         }
 
-        if let Some(Value::String(n)) = properties.get("name")
+        if let Some(Value::Number(o)) = properties.get("stroke-opacity")
+            && let Some(v) = o.as_f64()
+        {
+            stroke_opacity = v;
+        }
+
+        if let Some(Value::String(c)) = properties.get("fill") {
+            fill = Rgb::from_hex_str(c).ok().map(|rgb| rgb.as_ratio());
+        }
+
+        if let Some(Value::Number(o)) = properties.get("fill-opacity")
+            && let Some(v) = o.as_f64()
+        {
+            fill_opacity = Some(v);
+        }
+
+        if let Some(Value::String(c)) = properties.get("marker-color") {
+            marker_color = Rgb::from_hex_str(c).ok().map(|rgb| rgb.as_ratio());
+        }
+
+        if let Some(Value::Number(o)) = properties.get("marker-color-opacity")
+            && let Some(v) = o.as_f64()
+        {
+            marker_color_opacity = Some(v);
+        }
+
+        if let Some(Value::String(n)) = properties.get("title")
             && !n.is_empty()
         {
             name.replace(n.clone());
         }
 
-        if let Some(Value::Number(a)) = properties.get("width")
+        if let Some(Value::Number(a)) = properties.get("stroke-width")
             && let Some(w) = a.as_f64()
         {
             width = w;
         }
 
-        if let Some(Value::String(s)) = properties.get("lineJoin") {
+        if let Some(Value::String(s)) = properties.get("stroke-linejoin") {
             line_join = match s.as_str() {
                 "round" => Some(LineJoin::Round),
                 "miter" => Some(LineJoin::Miter),
@@ -70,7 +100,7 @@ fn parse_props(feature: &Feature) -> FeatureProps {
             };
         }
 
-        if let Some(Value::String(s)) = properties.get("lineCap") {
+        if let Some(Value::String(s)) = properties.get("stroke-linecap") {
             line_cap = match s.as_str() {
                 "butt" => Some(LineCap::Butt),
                 "round" => Some(LineCap::Round),
@@ -79,15 +109,18 @@ fn parse_props(feature: &Feature) -> FeatureProps {
             };
         }
 
-        if let Some(Value::Array(arr)) = properties.get("dashArray") {
+        if let Some(Value::Array(arr)) = properties.get("stroke-dasharray") {
             dash_array = Some(arr.iter().filter_map(|v| v.as_f64()).collect());
         }
     }
 
     FeatureProps {
-        r,
-        g,
-        b,
+        color,
+        stroke_opacity,
+        fill,
+        fill_opacity,
+        marker_color,
+        marker_color_opacity,
         width,
         name,
         line_join,
@@ -122,15 +155,30 @@ pub fn render_lines_polygons(
     // Pass 1: polygon fills (must come before strokes so borders render on top).
     for (geom, props) in &items {
         path_polygons(context, geom);
-        context.set_source_rgba(props.r, props.g, props.b, 0.25);
+        let (fr, fg, fb, base_a) = match &props.fill {
+            Some(fill) => (fill.r(), fill.g(), fill.b(), fill.a()),
+            None => (
+                props.color.r(),
+                props.color.g(),
+                props.color.b(),
+                props.color.a() * 0.25,
+            ),
+        };
+        context.set_source_rgba(fr, fg, fb, base_a * props.fill_opacity.unwrap_or(1.0));
         context.fill()?;
     }
 
     // Pass 2: strokes (polygon borders and lines).
     for (geom, props) in &items {
+        let color = &props.color;
         path_geometry(context, geom);
         context.set_line_width(props.width);
-        context.set_source_rgb(props.r, props.g, props.b);
+        context.set_source_rgba(
+            color.r(),
+            color.g(),
+            color.b(),
+            color.a() * props.stroke_opacity,
+        );
         context.set_line_join(props.line_join.unwrap_or(LineJoin::Round));
         context.set_line_cap(props.line_cap.unwrap_or(LineCap::Round));
         context.set_dash(props.dash_array.as_deref().unwrap_or(&[]), 0.0);
@@ -157,9 +205,16 @@ pub fn render_points(
 
         let geom = geom.project_to_tile(&ctx.tile_projector);
 
-        let FeatureProps { r, g, b, .. } = parse_props(feature);
+        let FeatureProps {
+            color,
+            marker_color,
+            marker_color_opacity,
+            ..
+        } = parse_props(feature);
 
-        context.set_source_rgb(r, g, b);
+        let c = marker_color.unwrap_or(color);
+
+        context.set_source_rgba(c.r(), c.g(), c.b(), c.a() * marker_color_opacity.unwrap_or(1.0));
 
         walk_geometry_points(&geom, &mut |point| -> cairo::Result<()> {
             let x = point.x();
