@@ -118,7 +118,8 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         // (12, 12, Y, N, "guidepost", Extra { icon: Some("guidepost_x"), weight: Weight::BOLD, max_zoom: 12, ..Extra::default() }),
         (13, 13, Y, N, Poi, "guidepost", Extra { icon: Some("guidepost_xx"), weight: Weight::BOLD, max_zoom: 13, ..Extra::default() }),
         (14, 14, Y, N, Poi, "guidepost", Extra { icon: Some("guidepost_xx"), weight: Weight::BOLD, ..Extra::default() }),
-        (10, 10, Y, Y, NaturalPoi, "volcano", Extra { icon: Some("peak"), font_size: 13.0, halo: false, text_color: colors::MILITARY, stylesheet: Some("path { fill: hsl(0, 96%, 39%) }"), ..Extra::default() }),
+        // hex, not hsl(): older librsvg versions (e.g. on the production server) silently drop hsl() in user stylesheets, leaving the icon black
+        (10, 10, Y, Y, NaturalPoi, "volcano", Extra { icon: Some("peak"), font_size: 13.0, halo: false, text_color: colors::MILITARY, stylesheet: Some("path { fill: #c30404 }"), ..Extra::default() }),
         (10, 10, Y, Y, NaturalPoi, "peak1", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
         (11, 11, Y, Y, NaturalPoi, "peak2", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
         (12, 12, Y, Y, NaturalPoi, "peak3", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
