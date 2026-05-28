@@ -91,7 +91,11 @@ pub fn pois(
             continue;
         };
 
-        let visual_key = def.icon_key(typ);
+        let visual_key = if *typ == "volcano" {
+            typ
+        } else {
+            def.icon_key(typ)
+        };
 
         let entry = poi_groups
             .entry(visual_key)
