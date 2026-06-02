@@ -1,8 +1,8 @@
 use crate::{
     app::server::app_state::AppState,
     render::{
-        CustomLayer, CustomLayerOrder, ImageFormat, RenderLayer, RenderRequest, RenderWorkerPool,
-        bbox_size_in_pixels,
+        CustomLayer, CustomLayerOrder, Decorations, ImageFormat, RenderLayer, RenderRequest,
+        RenderWorkerPool, bbox_size_in_pixels,
     },
 };
 use axum::{
@@ -87,6 +87,15 @@ pub(crate) struct ExportRequest {
     format: Option<String>,
     scale: Option<f64>,
     features: Option<ExportFeatures>,
+    decorations: Option<ExportDecorations>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ExportDecorations {
+    scale_bar: Option<bool>,
+    north_arrow: Option<String>,
+    attribution: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -226,6 +235,32 @@ pub(crate) async fn post(
     } else {
         None
     };
+
+    render_request.decorations = request.decorations.as_ref().and_then(|d| {
+        let trimmed = |s: &Option<String>| {
+            s.as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        };
+
+        let scale_bar = d.scale_bar.unwrap_or(false);
+        let north_arrow = trimmed(&d.north_arrow);
+        let attribution = trimmed(&d.attribution);
+
+        if !scale_bar && north_arrow.is_none() && attribution.is_none() {
+            return None;
+        }
+
+        Some(Decorations {
+            scale_bar,
+            north_arrow,
+            attribution,
+            // Center latitude of the original WGS84 bbox, used to correct the
+            // Web-Mercator scale for the scale bar.
+            center_lat: (request.bbox[1] + request.bbox[3]) / 2.0,
+        })
+    });
 
     let job = spawn_export_job(
         state.render_worker_pool.clone(),

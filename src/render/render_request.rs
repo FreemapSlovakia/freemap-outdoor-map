@@ -36,6 +36,20 @@ pub struct CustomLayer {
     pub order: CustomLayerOrder,
 }
 
+/// Cartographic decorations drawn on top of the finished map (scale bar, north
+/// arrow, attribution). All opt-in (a `None`/`false` field is omitted). The
+/// north-arrow label is provided by the client for localization — "N" in
+/// English but "S" (sever) in Slovak; the scale bar uses the universal SI unit
+/// symbols (m/km) directly. `center_lat` is the bbox center latitude in degrees
+/// (WGS84), used to correct the Web-Mercator scale for the scale bar.
+#[derive(Debug, Clone)]
+pub struct Decorations {
+    pub scale_bar: bool,
+    pub north_arrow: Option<String>,
+    pub attribution: Option<String>,
+    pub center_lat: f64,
+}
+
 #[derive(Debug, Clone)]
 pub struct RenderRequest {
     pub bbox: Rect<f64>,
@@ -46,6 +60,7 @@ pub struct RenderRequest {
     pub coverage_geometry: Option<Arc<Geometry>>,
     pub custom_layer: Option<CustomLayer>,
     pub legend: Option<LegendItemData>,
+    pub decorations: Option<Decorations>,
 }
 
 impl RenderRequest {
@@ -66,6 +81,7 @@ impl RenderRequest {
             coverage_geometry,
             custom_layer: None,
             legend: None,
+            decorations: None,
         }
     }
 }

@@ -16,6 +16,7 @@ mod buildings;
 mod contours;
 mod country_names;
 mod custom;
+mod decorations;
 mod embankments;
 mod feature_lines;
 mod fixmes;

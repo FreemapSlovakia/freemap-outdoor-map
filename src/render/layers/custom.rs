@@ -12,36 +12,57 @@ use crate::render::{
     layer_render_error::{LayerRenderError, LayerRenderResult},
     projectable::TileProjectable,
 };
-use cairo::{Context, LineCap, LineJoin};
+use cairo::{Context, LineCap, LineJoin, Rectangle};
 use colorsys::{Rgb, RgbRatio};
 use geo::{Geometry, InteriorPoint, Rect, Transform, Translate};
 use geojson::Feature;
+use gio::glib;
 use proj::Proj;
 use serde_json::Value;
 
-struct FeatureProps {
+/// Rendered width (in tile/CSS pixels) of a drawing-point marker. All marker
+/// shapes share viewBox width 310 and are scaled to this width; height follows
+/// from each SVG's aspect ratio. The render context is already scaled by the
+/// request's `scale`, so no extra scaling is needed here. Matches the ~30 px
+/// in-app marker.
+const MARKER_WIDTH: f64 = 30.0;
+
+/// Styling for line and polygon features (simplestyle `stroke`/`fill`/…).
+struct LinePolygonProps {
     color: RgbRatio,
     stroke_opacity: f64,
     fill: Option<RgbRatio>,
     fill_opacity: Option<f64>,
-    marker_color: Option<RgbRatio>,
-    marker_color_opacity: Option<f64>,
     width: f64,
-    name: Option<String>,
     line_join: Option<LineJoin>,
     line_cap: Option<LineCap>,
     dash_array: Option<Vec<f64>>,
 }
 
-fn parse_props(feature: &Feature) -> FeatureProps {
+/// Styling for drawing-point features. The marker is fully described by its
+/// self-contained `marker-svg`; points have no simplestyle color of their own.
+struct PointProps {
+    marker_svg: Option<String>,
+    name: Option<String>,
+}
+
+/// The optional `title` label, shared by every geometry type.
+fn parse_title(feature: &Feature) -> Option<String> {
+    feature
+        .properties
+        .as_ref()?
+        .get("title")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+fn parse_line_polygon_props(feature: &Feature) -> LinePolygonProps {
     let mut width = 3f64;
     let mut color = RgbRatio::new(1.0, 0.0, 1.0, 1.0);
     let mut stroke_opacity = 1f64;
     let mut fill: Option<RgbRatio> = None;
     let mut fill_opacity: Option<f64> = None;
-    let mut marker_color: Option<RgbRatio> = None;
-    let mut marker_color_opacity: Option<f64> = None;
-    let mut name: Option<String> = None;
     let mut line_join: Option<LineJoin> = None;
     let mut line_cap: Option<LineCap> = None;
     let mut dash_array: Option<Vec<f64>> = None;
@@ -67,22 +88,6 @@ fn parse_props(feature: &Feature) -> FeatureProps {
             && let Some(v) = o.as_f64()
         {
             fill_opacity = Some(v);
-        }
-
-        if let Some(Value::String(c)) = properties.get("marker-color") {
-            marker_color = Rgb::from_hex_str(c).ok().map(|rgb| rgb.as_ratio());
-        }
-
-        if let Some(Value::Number(o)) = properties.get("marker-color-opacity")
-            && let Some(v) = o.as_f64()
-        {
-            marker_color_opacity = Some(v);
-        }
-
-        if let Some(Value::String(n)) = properties.get("title")
-            && !n.is_empty()
-        {
-            name.replace(n.clone());
         }
 
         if let Some(Value::Number(a)) = properties.get("stroke-width")
@@ -114,18 +119,30 @@ fn parse_props(feature: &Feature) -> FeatureProps {
         }
     }
 
-    FeatureProps {
+    LinePolygonProps {
         color,
         stroke_opacity,
         fill,
         fill_opacity,
-        marker_color,
-        marker_color_opacity,
         width,
-        name,
         line_join,
         line_cap,
         dash_array,
+    }
+}
+
+fn parse_point_props(feature: &Feature) -> PointProps {
+    let marker_svg = feature
+        .properties
+        .as_ref()
+        .and_then(|p| p.get("marker-svg"))
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+
+    PointProps {
+        marker_svg,
+        name: parse_title(feature),
     }
 }
 
@@ -146,7 +163,10 @@ pub fn render_lines_polygons(
         .map(|f| {
             let mut geom: Geometry = Geometry::try_from(f.clone())?;
             geom.transform(&proj).unwrap();
-            Ok((geom.project_to_tile(&ctx.tile_projector), parse_props(f)))
+            Ok((
+                geom.project_to_tile(&ctx.tile_projector),
+                parse_line_polygon_props(f),
+            ))
         })
         .collect::<Result<Vec<_>, LayerRenderError>>()?;
 
@@ -170,15 +190,18 @@ pub fn render_lines_polygons(
 
     // Pass 2: strokes (polygon borders and lines).
     for (geom, props) in &items {
-        let color = &props.color;
         path_geometry(context, geom);
+
         context.set_line_width(props.width);
+
+        let color = &props.color;
         context.set_source_rgba(
             color.r(),
             color.g(),
             color.b(),
             color.a() * props.stroke_opacity,
         );
+
         context.set_line_join(props.line_join.unwrap_or(LineJoin::Round));
         context.set_line_cap(props.line_cap.unwrap_or(LineCap::Round));
         context.set_dash(props.dash_array.as_deref().unwrap_or(&[]), 0.0);
@@ -188,6 +211,81 @@ pub fn render_lines_polygons(
     context.restore()?;
 
     Ok(())
+}
+
+/// Rasterize an inline `marker-svg` (the entire self-contained marker — shape,
+/// color, opacity and glyph) and paint it so the viewBox center lands on
+/// `(x, y)`. The marker is scaled to a fixed width; height follows from its
+/// aspect ratio (pins are taller, with transparent padding below the tip so the
+/// tip ends up at center). Returns the rendered height on success, or `None`
+/// when the SVG cannot be loaded (so the caller can fall back to a default
+/// marker).
+fn render_marker_svg(context: &Context, svg: &str, x: f64, y: f64) -> Option<f64> {
+    let bytes = glib::Bytes::from_owned(svg.as_bytes().to_vec());
+
+    let stream = gio::MemoryInputStream::from_bytes(&bytes);
+
+    let handle = rsvg::Loader::new()
+        .read_stream(&stream, None::<&gio::File>, None::<&gio::Cancellable>)
+        .ok()?;
+
+    let renderer = rsvg::CairoRenderer::new(&handle);
+
+    let (sw, sh) = renderer.intrinsic_size_in_pixels()?;
+
+    if sw <= 0.0 || sh <= 0.0 {
+        return None;
+    }
+
+    let height = MARKER_WIDTH * sh / sw;
+
+    let left = x - MARKER_WIDTH / 2.0;
+    let top = y - height / 2.0;
+
+    renderer
+        .render_document(context, &Rectangle::new(left, top, MARKER_WIDTH, height))
+        .ok()?;
+
+    Some(height)
+}
+
+/// Rendered height of a `marker-svg` (scaled to `MARKER_WIDTH`), derived from
+/// the root element's `width`/`height` attributes. Used to position the label
+/// above the marker without re-rasterizing.
+fn marker_svg_height(svg: &str) -> Option<f64> {
+    let el = xmltree::Element::parse(svg.as_bytes()).ok()?;
+
+    let w: f64 = el.attributes.get("width")?.parse().ok()?;
+    let h: f64 = el.attributes.get("height")?.parse().ok()?;
+
+    if w <= 0.0 {
+        return None;
+    }
+
+    Some(MARKER_WIDTH * h / w)
+}
+
+/// Draw the default marker (a teardrop pin) for point features that carry no
+/// `marker-svg` — e.g. points imported from tracks or search. Its tip sits on
+/// `(x, y)`. Point features have no color of their own, so it uses the app's
+/// default marker color (`#d00000`).
+fn draw_default_marker(context: &Context, x: f64, y: f64) -> cairo::Result<f64> {
+    let radius = 10f64;
+    let h = radius * 2.2;
+    let dy = radius * radius / h;
+    let tx = (radius * radius - dy * dy).max(0.0).sqrt();
+
+    context.set_source_rgb(0.815_686, 0.0, 0.0);
+
+    context.new_sub_path();
+    context.move_to(x, y);
+    context.line_to(x - tx, y + (dy - h));
+    context.arc(x, y - h, radius, dy.atan2(-tx), dy.atan2(tx));
+    context.line_to(x, y);
+    context.close_path();
+    context.fill()?;
+
+    Ok(h + radius)
 }
 
 pub fn render_points(
@@ -205,37 +303,34 @@ pub fn render_points(
 
         let geom = geom.project_to_tile(&ctx.tile_projector);
 
-        let FeatureProps {
-            color,
-            marker_color,
-            marker_color_opacity,
-            ..
-        } = parse_props(feature);
-
-        let c = marker_color.unwrap_or(color);
-
-        context.set_source_rgba(c.r(), c.g(), c.b(), c.a() * marker_color_opacity.unwrap_or(1.0));
+        let PointProps { marker_svg, .. } = parse_point_props(feature);
 
         walk_geometry_points(&geom, &mut |point| -> cairo::Result<()> {
             let x = point.x();
             let y = point.y();
-            let radius = 10f64;
-            let h = radius * 2.2;
-            let dy = radius * radius / h;
-            let tx_sq = radius * radius - dy * dy;
-            let tx = tx_sq.max(0.0).sqrt();
 
-            context.new_sub_path();
-            context.move_to(x, y);
-            context.line_to(x - tx, y + (dy - h));
-            context.arc(x, y - h, radius, dy.atan2(-tx), dy.atan2(tx));
-            context.line_to(x, y);
-            context.close_path();
-            context.fill()?;
+            // The marker SVG is fully self-contained and authored so its anchor
+            // (the geographic location) is the exact center of the viewBox, so
+            // every shape uses the same rule: center the bitmap on (x, y).
+            if let Some(svg) = marker_svg.as_deref()
+                && let Some(height) = render_marker_svg(context, svg, x, y)
+            {
+                // Register the marker footprint so other layers respect it.
+                collision.add(Rect::new(
+                    (x - MARKER_WIDTH / 2.0, y - height / 2.0),
+                    (x + MARKER_WIDTH / 2.0, y + height / 2.0),
+                ));
 
-            // Register teardrop bbox so other layers respect its footprint.
-            // TODO: check collision before rendering (currently always renders).
-            collision.add(Rect::new((x - radius, y - h - radius), (x + radius, y)));
+                return Ok(());
+            }
+
+            // Fall back to a default marker (tip on the point).
+            let h = draw_default_marker(context, x, y)?;
+
+            collision.add(Rect::new(
+                (x - MARKER_WIDTH / 2.0, y - h),
+                (x + MARKER_WIDTH / 2.0, y),
+            ));
 
             Ok(())
         })?;
@@ -263,9 +358,9 @@ pub fn render_line_polygon_labels(
             continue;
         }
 
-        let FeatureProps { name, .. } = parse_props(feature);
-
-        let Some(name) = name else { continue };
+        let Some(name) = parse_title(feature) else {
+            continue;
+        };
 
         if matches!(geom, Geometry::LineString(_) | Geometry::MultiLineString(_)) {
             walk_geometry_line_strings(&geom, &mut |ls| {
@@ -330,11 +425,19 @@ pub fn render_point_labels(
             continue;
         };
 
-        let FeatureProps { name, .. } = parse_props(feature);
+        let PointProps { name, marker_svg } = parse_point_props(feature);
 
         let Some(name) = name else { continue };
 
-        let point = point.translate(0.0, -44.0);
+        // Place the label just above the top of the marker. The marker's anchor
+        // is the viewBox center, so its top edge is half its rendered height
+        // above the point; the default marker is ~64 px tall (tip on the point).
+        let half_height = marker_svg
+            .as_deref()
+            .and_then(marker_svg_height)
+            .map_or(32.0, |h| h / 2.0);
+
+        let point = point.translate(0.0, -(half_height + 12.0));
 
         // TODO: render unconditionally; currently draw_text skips on collision
         let _ = draw_text(
