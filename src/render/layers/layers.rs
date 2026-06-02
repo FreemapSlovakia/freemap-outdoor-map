@@ -971,6 +971,14 @@ pub fn render(
 
     prefetcher.run(svg_repo, hillshading_datasets.as_deref_mut(), collision)?;
 
+    // Decorations (scale bar, north arrow, attribution) are drawn last so they
+    // sit on top of everything, and never on legend renders.
+    if ctx.legend.is_none()
+        && let Some(decorations) = &request.decorations
+    {
+        layers::decorations::render(&ctx, context, decorations)?;
+    }
+
     if let Some(hillshading_datasets) = hillshading_datasets {
         hillshading_datasets.evict_unused();
     }
