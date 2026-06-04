@@ -516,8 +516,10 @@ fn collect_clusters(text: &str, flo: &FontAndLayoutOptions) -> Vec<ClusterInfo> 
                     };
 
                     if same_cluster {
-                        let origin_x = open.unwrap().1;
-                        let cluster = out.last_mut().unwrap();
+                        let origin_x = open.expect("same_cluster implies open is Some").1;
+                        let cluster = out
+                            .last_mut()
+                            .expect("same_cluster implies a cluster was pushed");
                         let rel_x = gx - origin_x;
                         // Glyph box in cluster-origin coords.
                         let l = rel_x + g_ink_l;

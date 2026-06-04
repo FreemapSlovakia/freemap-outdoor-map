@@ -248,8 +248,8 @@ fn shutdown_tile_workers(
     tile_invalidation_watcher: &Arc<Mutex<Option<tile_invalidation::TileInvalidationWatcher>>>,
     tile_processing_worker: &Arc<Mutex<Option<TileProcessingWorker>>>,
 ) {
-    let watcher = tile_invalidation_watcher.lock().unwrap().take();
-    let worker = tile_processing_worker.lock().unwrap().take();
+    let watcher = tile_invalidation_watcher.lock().expect("mutex not poisoned").take();
+    let worker = tile_processing_worker.lock().expect("mutex not poisoned").take();
 
     if let Some(watcher) = watcher {
         println!("Stopping tile invalidation watcher.");

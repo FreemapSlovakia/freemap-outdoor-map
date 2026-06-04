@@ -20,6 +20,8 @@ many_single_char_names = "allow"
 # In-function `use` imports and by-value args (builder/thread ergonomics) are fine.
 items_after_statements = "allow"
 needless_pass_by_value = "allow"
+# Forbid context-free `unwrap`; use `expect` to document the invariant instead.
+unwrap_used = "warn"
 
 [dependencies]
 image = { version = "0.25.10", default-features = false, features = [

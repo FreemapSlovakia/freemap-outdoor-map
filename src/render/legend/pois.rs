@@ -236,7 +236,7 @@ fn build_poi_tags(
 
         match typ {
             s if typ.starts_with("tower_") || typ.starts_with("mast_") => {
-                let (a, b) = s.split_once('_').unwrap();
+                let (a, b) = s.split_once('_').expect("matched a name containing '_'");
                 tags.push(("man_made", a));
                 tags.push(("tower:type", b));
             }

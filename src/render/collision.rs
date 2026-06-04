@@ -36,7 +36,7 @@ impl<'a> Collision<'a> {
             context.save().expect("context saved");
             context.set_source_rgba(0.0, 0.5, 0.0, 0.5);
             context.set_line_width(1.0);
-            context.stroke().unwrap();
+            context.stroke().expect("context stroked");
             context.restore().expect("context restored");
         }
 
@@ -57,7 +57,7 @@ impl<'a> Collision<'a> {
             context.save().expect("context saved");
             context.set_source_rgba(1.0, 0.0, 0.0, 0.2);
             context.set_line_width(1.0);
-            context.stroke().unwrap();
+            context.stroke().expect("context stroked");
             context.restore().expect("context restored");
         }
 

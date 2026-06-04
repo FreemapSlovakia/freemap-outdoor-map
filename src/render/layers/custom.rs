@@ -162,7 +162,7 @@ pub fn render_lines_polygons(
         .iter()
         .map(|f| {
             let mut geom: Geometry = Geometry::try_from(f.clone())?;
-            geom.transform(&proj).unwrap();
+            geom.transform(&proj).expect("geometry transformed");
             Ok((
                 geom.project_to_tile(&ctx.tile_projector),
                 parse_line_polygon_props(f),
@@ -301,7 +301,7 @@ pub fn render_points(
     for feature in features {
         let mut geom: Geometry = Geometry::try_from(feature.clone())?;
 
-        geom.transform(&proj).unwrap();
+        geom.transform(&proj).expect("geometry transformed");
 
         let geom = geom.project_to_tile(&ctx.tile_projector);
 
@@ -352,7 +352,7 @@ pub fn render_line_polygon_labels(
     for feature in features {
         let mut geom: Geometry = Geometry::try_from(feature.clone())?;
 
-        geom.transform(&proj).unwrap();
+        geom.transform(&proj).expect("geometry transformed");
 
         let geom = geom.project_to_tile(&ctx.tile_projector);
 
@@ -419,7 +419,7 @@ pub fn render_point_labels(
     for feature in features {
         let mut geom: Geometry = Geometry::try_from(feature.clone())?;
 
-        geom.transform(&proj).unwrap();
+        geom.transform(&proj).expect("geometry transformed");
 
         let geom = geom.project_to_tile(&ctx.tile_projector);
 

@@ -307,8 +307,8 @@ fn place_and_draw(
     let layout_y = layout_min_top;
     let layout_height = layout_max_bottom - layout_min_top;
 
-    let first = lines.first().unwrap();
-    let last = lines.last().unwrap();
+    let first = lines.first().expect("lines is non-empty");
+    let last = lines.last().expect("lines is non-empty");
     let first_baseline = first.line_y as f64;
     let last_baseline = last.line_y as f64;
     // Anchor for "label above" uses the baseline directly (pango semantics:

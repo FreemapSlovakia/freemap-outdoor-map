@@ -68,7 +68,7 @@ impl RenderWorkerPool {
 
                     loop {
                         let task = {
-                            let mut guard = rx.lock().unwrap();
+                            let mut guard = rx.lock().expect("mutex not poisoned");
                             guard.blocking_recv()
                         };
 
@@ -105,7 +105,7 @@ impl RenderWorkerPool {
         let (resp_tx, resp_rx) = oneshot::channel();
 
         let tx = {
-            let guard = self.tx.lock().unwrap();
+            let guard = self.tx.lock().expect("mutex not poisoned");
             guard.clone().ok_or(ReError::QueueClosed)?
         };
 
@@ -117,10 +117,10 @@ impl RenderWorkerPool {
     }
 
     pub(crate) fn shutdown(&self) {
-        let tx = self.tx.lock().unwrap().take();
+        let tx = self.tx.lock().expect("mutex not poisoned").take();
         drop(tx);
 
-        let mut workers = self.workers.lock().unwrap();
+        let mut workers = self.workers.lock().expect("mutex not poisoned");
         for handle in workers.drain(..) {
             let _ = handle.join();
         }

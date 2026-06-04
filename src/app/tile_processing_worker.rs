@@ -105,7 +105,7 @@ impl TileProcessingWorker {
         variant_index: usize,
     ) -> Result<(), TileProcessingSendError> {
         let tx = {
-            let guard = self.inner.tx.lock().unwrap();
+            let guard = self.inner.tx.lock().expect("mutex not poisoned");
             guard.clone().ok_or(TileProcessingSendError::QueueClosed)?
         };
 
@@ -126,7 +126,7 @@ impl TileProcessingWorker {
         invalidated_at: SystemTime,
     ) -> Result<(), TileProcessingSendError> {
         let tx = {
-            let guard = self.inner.tx.lock().unwrap();
+            let guard = self.inner.tx.lock().expect("mutex not poisoned");
             guard.clone().ok_or(TileProcessingSendError::QueueClosed)?
         };
 
@@ -138,10 +138,10 @@ impl TileProcessingWorker {
     }
 
     pub(crate) fn shutdown(&self) {
-        let tx = self.inner.tx.lock().unwrap().take();
+        let tx = self.inner.tx.lock().expect("mutex not poisoned").take();
         drop(tx);
 
-        let handle = self.inner.handle.lock().unwrap().take();
+        let handle = self.inner.handle.lock().expect("mutex not poisoned").take();
         if let Some(handle) = handle {
             let _ = handle.join();
         }

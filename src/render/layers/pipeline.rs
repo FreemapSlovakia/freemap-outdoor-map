@@ -268,7 +268,7 @@ pub fn render(
         && let Some(ref coverage_geometry) = request.coverage_geometry
     {
         context.set_source_rgb(0.82, 0.80, 0.78);
-        context.paint().unwrap();
+        context.paint().expect("context painted");
 
         context.push_group();
 
@@ -414,7 +414,7 @@ pub fn render(
                 None,
                 |ctx, conn| async move { layers::bridge_areas::query(&ctx, &conn).await }.boxed(),
                 move |features, _params| {
-                    acc.lock().unwrap().insert(Some("__bridge__"), features);
+                    acc.lock().expect("mutex not poisoned").insert(Some("__bridge__"), features);
                     Ok(())
                 },
             );
@@ -437,7 +437,7 @@ pub fn render(
                             .boxed()
                     },
                     move |features, _params| {
-                        acc.lock().unwrap().insert(Some(country), features);
+                        acc.lock().expect("mutex not poisoned").insert(Some(country), features);
                         Ok(())
                     },
                 );
@@ -453,7 +453,7 @@ pub fn render(
                         async move { layers::contours::query(&ctx, &conn, None).await }.boxed()
                     },
                     move |features, _params| {
-                        acc.lock().unwrap().insert(None, features);
+                        acc.lock().expect("mutex not poisoned").insert(None, features);
                         Ok(())
                     },
                 );
