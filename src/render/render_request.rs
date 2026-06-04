@@ -1,5 +1,6 @@
 use crate::render::{image_format::ImageFormat, legend::LegendItemData};
 use clap::ValueEnum;
+use colorsys::RgbRatio;
 use enumset::EnumSetType;
 use geo::Geometry;
 use geo::Rect;
@@ -30,10 +31,25 @@ pub enum CustomLayerOrder {
     Topmost,
 }
 
+/// Glow halo drawn behind the custom features.
+#[derive(Debug, Clone)]
+pub struct Glow {
+    /// Halo color; its alpha is the opacity at which the whole glow layer is
+    /// composited.
+    pub color: RgbRatio,
+    /// Width (in tile/CSS pixels) the halo extends on each side of a line /
+    /// polygon edge or marker outline.
+    pub width: f64,
+}
+
 #[derive(Debug, Clone)]
 pub struct CustomLayer {
     pub features: Vec<Feature>,
     pub order: CustomLayerOrder,
+    /// Rendered width (in tile/CSS pixels) of a drawing-point marker.
+    pub marker_width: f64,
+    /// Optional glow halo. `None` disables the glow entirely.
+    pub glow_color: Option<Glow>,
 }
 
 /// Cartographic decorations drawn on top of the finished map (scale bar, north

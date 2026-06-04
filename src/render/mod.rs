@@ -4,7 +4,7 @@ pub use image_format::ImageFormat;
 pub use legend::{LegendMeta, LegendMode, legend_metadata, legend_render_request};
 pub use render_config::{ContourCountries, HillshadingHierarchy, RenderConfig};
 pub use render_request::{
-    CustomLayer, CustomLayerOrder, Decorations, RenderLayer, RenderRequest,
+    CustomLayer, CustomLayerOrder, Decorations, Glow, RenderLayer, RenderRequest,
 };
 pub use render_worker_pool::RenderWorkerPool;
 pub use xyz::bbox_size_in_pixels;

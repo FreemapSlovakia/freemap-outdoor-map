@@ -414,7 +414,9 @@ pub fn render(
                 None,
                 |ctx, conn| async move { layers::bridge_areas::query(&ctx, &conn).await }.boxed(),
                 move |features, _params| {
-                    acc.lock().expect("mutex not poisoned").insert(Some("__bridge__"), features);
+                    acc.lock()
+                        .expect("mutex not poisoned")
+                        .insert(Some("__bridge__"), features);
                     Ok(())
                 },
             );
@@ -437,7 +439,9 @@ pub fn render(
                             .boxed()
                     },
                     move |features, _params| {
-                        acc.lock().expect("mutex not poisoned").insert(Some(country), features);
+                        acc.lock()
+                            .expect("mutex not poisoned")
+                            .insert(Some(country), features);
                         Ok(())
                     },
                 );
@@ -453,7 +457,9 @@ pub fn render(
                         async move { layers::contours::query(&ctx, &conn, None).await }.boxed()
                     },
                     move |features, _params| {
-                        acc.lock().expect("mutex not poisoned").insert(None, features);
+                        acc.lock()
+                            .expect("mutex not poisoned")
+                            .insert(None, features);
                         Ok(())
                     },
                 );
@@ -488,9 +494,9 @@ pub fn render(
             let bridge_rows = results.remove(&Some("__bridge__")).unwrap_or_default();
 
             let contour_rows: HashMap<Option<&'static str>, Vec<Feature>> =
-                contour_countries_for_render.as_ref().map_or_else(
-                    HashMap::new,
-                    |cc| {
+                contour_countries_for_render
+                    .as_ref()
+                    .map_or_else(HashMap::new, |cc| {
                         let mut rows: HashMap<Option<&'static str>, Vec<Feature>> = cc
                             .entries()
                             .iter()
@@ -507,8 +513,7 @@ pub fn render(
                         }
 
                         rows
-                    },
-                );
+                    });
 
             layers::shading_and_contours::render(
                 ctx,
@@ -642,8 +647,33 @@ pub fn render(
     if let Some(CustomLayer {
         features,
         order: CustomLayerOrder::Natural,
+        marker_width,
+        glow_color,
     }) = &request.custom_layer
     {
+        if let Some(glow) = glow_color {
+            let color = (
+                glow.color.r(),
+                glow.color.g(),
+                glow.color.b(),
+                glow.color.a(),
+            );
+            let glow_width = glow.width;
+            let marker_width = *marker_width;
+            let ctx = ctx.clone();
+            prefetcher.push(move |_params| {
+                layers::custom::render_glow(
+                    &ctx,
+                    context,
+                    features,
+                    color,
+                    marker_width,
+                    glow_width,
+                )
+                .with_layer("custom_glow")
+            });
+        }
+
         prefetcher.push(|_params| {
             layers::custom::render_lines_polygons(&ctx, context, features)
                 .with_layer("custom_lines_polygons")
@@ -710,22 +740,44 @@ pub fn render(
     if let Some(CustomLayer {
         features,
         order: CustomLayerOrder::Natural,
+        marker_width,
+        ..
     }) = &request.custom_layer
     {
-        prefetcher.push(|params| {
-            layers::custom::render_points(&ctx, context, features, params.collision)
+        let marker_width = *marker_width;
+
+        {
+            let ctx = ctx.clone();
+            prefetcher.push(move |params| {
+                layers::custom::render_points(
+                    &ctx,
+                    context,
+                    features,
+                    params.collision,
+                    marker_width,
+                )
                 .with_layer("custom_points")
-        });
+            });
+        }
 
         prefetcher.push(|params| {
             layers::custom::render_line_polygon_labels(&ctx, context, features, params.collision)
                 .with_layer("custom_line_polygon_labels")
         });
 
-        prefetcher.push(|params| {
-            layers::custom::render_point_labels(&ctx, context, features, params.collision)
+        {
+            let ctx = ctx.clone();
+            prefetcher.push(move |params| {
+                layers::custom::render_point_labels(
+                    &ctx,
+                    context,
+                    features,
+                    params.collision,
+                    marker_width,
+                )
                 .with_layer("custom_point_labels")
-        });
+            });
+        }
     }
 
     if (8..=14).contains(&zoom) {
@@ -962,27 +1014,71 @@ pub fn render(
     if let Some(CustomLayer {
         features,
         order: CustomLayerOrder::Topmost,
+        marker_width,
+        glow_color,
     }) = &request.custom_layer
     {
+        let marker_width = *marker_width;
+
+        if let Some(glow) = glow_color {
+            let color = (
+                glow.color.r(),
+                glow.color.g(),
+                glow.color.b(),
+                glow.color.a(),
+            );
+            let glow_width = glow.width;
+            let ctx = ctx.clone();
+            prefetcher.push(move |_params| {
+                layers::custom::render_glow(
+                    &ctx,
+                    context,
+                    features,
+                    color,
+                    marker_width,
+                    glow_width,
+                )
+                .with_layer("custom_glow")
+            });
+        }
+
         prefetcher.push(|_params| {
             layers::custom::render_lines_polygons(&ctx, context, features)
                 .with_layer("custom_lines_polygons")
         });
 
-        prefetcher.push(|params| {
-            layers::custom::render_points(&ctx, context, features, params.collision)
+        {
+            let ctx = ctx.clone();
+            prefetcher.push(move |params| {
+                layers::custom::render_points(
+                    &ctx,
+                    context,
+                    features,
+                    params.collision,
+                    marker_width,
+                )
                 .with_layer("custom_points")
-        });
+            });
+        }
 
         prefetcher.push(|params| {
             layers::custom::render_line_polygon_labels(&ctx, context, features, params.collision)
                 .with_layer("custom_line_polygon_labels")
         });
 
-        prefetcher.push(|params| {
-            layers::custom::render_point_labels(&ctx, context, features, params.collision)
+        {
+            let ctx = ctx.clone();
+            prefetcher.push(move |params| {
+                layers::custom::render_point_labels(
+                    &ctx,
+                    context,
+                    features,
+                    params.collision,
+                    marker_width,
+                )
                 .with_layer("custom_point_labels")
-        });
+            });
+        }
     }
 
     prefetcher.run(svg_repo, shading.datasets.as_deref_mut(), collision)?;
