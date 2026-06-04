@@ -247,6 +247,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::float_cmp)] // nice_distance returns exact 1/2/5 multiples
     fn nice_distance_rounds_to_1_2_5() {
         assert_eq!(nice_distance(1.0), 1.0);
         assert_eq!(nice_distance(1.4), 1.0);

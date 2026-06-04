@@ -260,7 +260,7 @@ fn trim_line_to_span(pts: &[Coord], cum: &[f64], span_start: f64, span_end: f64)
     }
 
     if let Some((p, _)) = position_at(pts, cum, end)
-        && trimmed.last().map_or(true, |q| *q != p)
+        && trimmed.last().is_none_or(|q| *q != p)
     {
         trimmed.push(p);
     }
@@ -373,7 +373,7 @@ fn prepare_label_span(
     }
 
     let intersects_clip = clip_extents
-        .map_or(true, |clip| bbox_intersects_clip(&pts_use, clip, clip_padding));
+        .is_none_or(|clip| bbox_intersects_clip(&pts_use, clip, clip_padding));
 
     let cum_use = cumulative_lengths(&pts_use);
     let total_length_use = *cum_use.last().unwrap_or(&0.0);
@@ -860,7 +860,7 @@ pub fn draw_text_on_line(
             let trim_padding = options.flo.size.mul_add(5.0, options.halo_width) + offset.abs();
             let keep_offset_side = options.keep_offset_side && matches!(upright, Upright::Auto);
             let clip_padding = options.halo_width + options.flo.size;
-            let prepared = match prepare_label_span(
+            let Some(prepared) = prepare_label_span(
                 &pts,
                 total_length,
                 repeat_span,
@@ -873,9 +873,8 @@ pub fn draw_text_on_line(
                     clip_padding,
                     clip_extents,
                 },
-            ) {
-                Some(p) => p,
-                None => continue 'outer,
+            ) else {
+                continue 'outer;
             };
 
             let should_draw = prepared.intersects_clip;
@@ -901,14 +900,11 @@ pub fn draw_text_on_line(
                     continue 'outer;
                 }
 
-                let (_, tangent) =
-                    match position_at(&prepared.pts, &prepared.cum, span_start + eff_advance / 2.0)
-                    {
-                        Some(v) => v,
-                        None => {
-                            continue 'outer;
-                        }
-                    };
+                let Some((_, tangent)) =
+                    position_at(&prepared.pts, &prepared.cum, span_start + eff_advance / 2.0)
+                else {
+                    continue 'outer;
+                };
 
                 let weighted_tangent =
                     weighted_tangent_for_span(&prepared.pts, &prepared.cum, span_start, span_end)
@@ -973,11 +969,9 @@ pub fn draw_text_on_line(
                     continue 'outer;
                 }
 
-                let (pos, _) = match position_at(&prepared.pts, &prepared.cum, shifted_center) {
-                    Some(v) => v,
-                    None => {
-                        continue 'outer;
-                    }
+                let Some((pos, _)) = position_at(&prepared.pts, &prepared.cum, shifted_center)
+                else {
+                    continue 'outer;
                 };
 
                 let weighted_tangent = weighted_tangent_for_span(

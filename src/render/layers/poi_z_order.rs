@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 const POI_Z_ORDER: &[&str] = &[
     "monument",
     "archaeological_site",
@@ -163,7 +165,7 @@ pub fn build_poi_z_order_case(column: &str) -> String {
     let mut case = format!("CASE {column}");
     for (idx, typ) in POI_Z_ORDER.iter().enumerate() {
         let escaped = typ.replace('\'', "''");
-        case.push_str(&format!(" WHEN '{escaped}' THEN {idx}"));
+        let _ = write!(case, " WHEN '{escaped}' THEN {idx}");
     }
     case.push_str(" END");
     case

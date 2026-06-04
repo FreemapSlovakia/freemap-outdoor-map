@@ -17,6 +17,7 @@ use serde::Deserialize;
 use serde_json::json;
 use std::{
     collections::HashMap,
+    fmt::Write as _,
     path::PathBuf,
     sync::{
         Arc,
@@ -308,10 +309,7 @@ pub async fn head(
     }
 }
 
-pub async fn get(
-    State(state): State<AppState>,
-    Query(query): Query<TokenQuery>,
-) -> Response<Body> {
+pub async fn get(State(state): State<AppState>, Query(query): Query<TokenQuery>) -> Response<Body> {
     let Some(job) = get_job(&state, &query.token).await else {
         return not_found();
     };
@@ -325,14 +323,11 @@ pub async fn get(
             .expect("get error body");
     }
 
-    let file = match fs::File::open(&job.file_path).await {
-        Ok(file) => file,
-        Err(_) => {
-            return Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(Body::empty())
-                .expect("read error body");
-        }
+    let Ok(file) = fs::File::open(&job.file_path).await else {
+        return Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(Body::empty())
+            .expect("read error body");
     };
 
     let stream = ReaderStream::new(file);
@@ -380,7 +375,10 @@ fn generate_token() -> String {
         .try_fill_bytes(&mut bytes)
         .expect("os rng error");
 
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    bytes.iter().fold(String::new(), |mut out, b| {
+        let _ = write!(out, "{b:02x}");
+        out
+    })
 }
 
 fn parse_format(
@@ -402,7 +400,7 @@ fn geojson_to_features(geojson: GeoJson) -> Result<Vec<Feature>, &'static str> {
     match geojson {
         GeoJson::FeatureCollection(collection) => Ok(collection.features),
         GeoJson::Feature(feature) => Ok(vec![feature]),
-        _ => Err("unsupported geojson"),
+        GeoJson::Geometry(_) => Err("unsupported geojson"),
     }
 }
 
@@ -414,7 +412,7 @@ fn bbox4326_to_3857(bbox: [f64; 4]) -> [f64; 4] {
 
 fn lon_lat_to_3857(lon: f64, lat: f64) -> (f64, f64) {
     const EARTH_RADIUS: f64 = 6_378_137.0;
-    const MAX_LAT: f64 = 85.05112878;
+    const MAX_LAT: f64 = 85.051_128_78;
 
     let clamped_lat = lat.clamp(-MAX_LAT, MAX_LAT);
     let x = (lon.to_radians()) * EARTH_RADIUS;
@@ -467,13 +465,14 @@ fn spawn_export_job(
     let file_path_clone = file_path.clone();
 
     let handle = tokio::spawn(async move {
-        let permit = if let Some(permit) = wait_for_permit(
+        let Some(permit) = wait_for_permit(
             semaphore,
             poller_count_clone,
             poller_change_clone,
             abandon_grace,
         )
-        .await { permit } else {
+        .await
+        else {
             let mut guard = status_clone.lock().await;
             *guard = ExportStatus::Done(Err(ExportError::Abandoned));
             drop(guard);
@@ -533,7 +532,7 @@ async fn wait_for_permit(
 
             tokio::select! {
                 () = sleep(abandon_grace) => return,
-                () = &mut changed => continue,
+                () = &mut changed => {}
             }
         }
     };

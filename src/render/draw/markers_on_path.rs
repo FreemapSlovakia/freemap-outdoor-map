@@ -61,7 +61,7 @@ where
             PathSegment::ClosePath => {
                 draw_on_line(sx, sy, &mut px, &mut py)?;
             }
-            _ => panic!("unsupported path segment type: {ps:?}"),
+            PathSegment::CurveTo(..) => panic!("unsupported path segment type: {ps:?}"),
         }
     }
 

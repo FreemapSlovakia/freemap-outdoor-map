@@ -284,6 +284,8 @@ impl LegendItemBuilder<'_> {
     ) -> Self {
         let factor = (19.0 - self.zoom as f64).exp2();
 
+        // Explicit per-category lookup table; clearer than merged arms.
+        #[allow(clippy::match_same_arms)]
         let bg = match category {
             Category::RoadsAndPaths => "meadow",
             Category::Railway => "residential",

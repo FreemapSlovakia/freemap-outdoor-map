@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 pub const LANDCOVER_Z_ORDER: &[&str] = &[
     "winter_sports",
     "pedestrian",
@@ -56,7 +58,7 @@ pub fn build_landcover_z_order_case(column: &str) -> String {
     let mut case = format!("CASE {column}");
 
     for (idx, typ) in LANDCOVER_Z_ORDER.iter().enumerate() {
-        case.push_str(&format!(" WHEN '{typ}' THEN {idx}"));
+        let _ = write!(case, " WHEN '{typ}' THEN {idx}");
     }
 
     case.push_str(" END");

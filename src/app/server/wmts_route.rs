@@ -38,19 +38,16 @@ pub async fn service_handler(
                 _ => return bad_request(),
             };
 
-            let zoom = match tile_matrix.and_then(|v| v.parse::<u8>().ok()) {
-                Some(value) => value,
-                None => return bad_request(),
+            let Some(zoom) = tile_matrix.and_then(|v| v.parse::<u8>().ok()) else {
+                return bad_request();
             };
 
-            let x = match tile_col.and_then(|v| v.parse::<u32>().ok()) {
-                Some(value) => value,
-                None => return bad_request(),
+            let Some(x) = tile_col.and_then(|v| v.parse::<u32>().ok()) else {
+                return bad_request();
             };
 
-            let y = match tile_row.and_then(|v| v.parse::<u32>().ok()) {
-                Some(value) => value,
-                None => return bad_request(),
+            let Some(y) = tile_row.and_then(|v| v.parse::<u32>().ok()) else {
+                return bad_request();
             };
 
             serve_tile(

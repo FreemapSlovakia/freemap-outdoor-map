@@ -13,9 +13,13 @@ cast_precision_loss = "allow"
 cast_sign_loss = "allow"
 cast_possible_wrap = "allow"
 cast_lossless = "allow"
-# Large rendering functions and short geometry variable names are intentional.
+# Large rendering functions and short geometry/color variable names are intentional.
 too_many_lines = "allow"
 similar_names = "allow"
+many_single_char_names = "allow"
+# In-function `use` imports and by-value args (builder/thread ergonomics) are fine.
+items_after_statements = "allow"
+needless_pass_by_value = "allow"
 
 [dependencies]
 image = { version = "0.25.10", default-features = false, features = [

@@ -19,6 +19,7 @@ use core::f64;
 use cosmic_text::{Style, Weight};
 use geo::{Point, Rect};
 use std::borrow::Cow;
+use std::fmt::Write as _;
 use std::{
     collections::{HashMap, HashSet},
     sync::LazyLock,
@@ -822,7 +823,7 @@ pub fn render_icons(
                     names.push("intermittent".into());
                 }
 
-                stylesheet.push_str(&format!("#spring {{ fill: {fill} }}"));
+                let _ = write!(stylesheet, "#spring {{ fill: {fill} }}");
 
                 match extra.get("drinkable").and_then(Option::as_deref) {
                     Some("yes" | "treated") => {
@@ -960,7 +961,7 @@ pub fn render_labels(
             ..Default::default()
         };
 
-        let drawn = if def.with_ele
+        if def.with_ele
             && let Some(ele) = ele
         {
             draw_text(
@@ -973,10 +974,6 @@ pub fn render_labels(
         } else {
             draw_text(context, Some(collision), &point, &name, &text_options)?
         };
-
-        if drawn.is_none() {
-            continue;
-        }
     }
 
     Ok(())

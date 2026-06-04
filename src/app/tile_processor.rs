@@ -31,6 +31,9 @@ pub struct TileProcessor {
     last_prune: SystemTime,
 }
 
+// Signature is dictated by sled's merge-operator API; the `Option` return
+// (None = delete) is part of that contract.
+#[allow(clippy::unnecessary_wraps)]
 fn concatenate_merge(
     _key: &[u8],              // the key being merged
     old_value: Option<&[u8]>, // the previous value, if one existed
@@ -98,7 +101,7 @@ impl TileProcessor {
             return;
         };
 
-        self.append_index_entry(variant.db.as_ref(), coord, scale);
+        Self::append_index_entry(variant.db.as_ref(), coord, scale);
 
         let file_path = cached_tile_path(tile_cache_base_path, coord, scale);
 
@@ -135,7 +138,7 @@ impl TileProcessor {
 
             let mut batch = Batch::default();
 
-            self.remove_descendants(db, &mut batch, coord, base_path);
+            Self::remove_descendants(db, &mut batch, coord, base_path);
 
             let mut current = coord;
             loop {
@@ -149,7 +152,7 @@ impl TileProcessor {
 
                 current = parent;
 
-                self.remove_exact(db, &mut batch, current, base_path);
+                Self::remove_exact(db, &mut batch, current, base_path);
             }
 
             if let Err(err) = db.apply_batch(batch) {
@@ -194,7 +197,7 @@ impl TileProcessor {
         false
     }
 
-    fn append_index_entry(&self, db: Option<&sled::Db>, coord: TileCoord, scale: f64) {
+    fn append_index_entry(db: Option<&sled::Db>, coord: TileCoord, scale: f64) {
         let Some(db) = db else {
             return;
         };
@@ -207,7 +210,6 @@ impl TileProcessor {
     }
 
     fn remove_descendants(
-        &self,
         db: &sled::Db,
         batch: &mut Batch,
         coord: TileCoord,
@@ -219,7 +221,7 @@ impl TileProcessor {
             match item {
                 Ok(entry) => {
                     let entry_coord = entry.0.as_ref().into();
-                    self.remove_files(entry_coord, entry.1.as_ref(), base_path);
+                    Self::remove_files(entry_coord, entry.1.as_ref(), base_path);
                     batch.remove(entry.0);
                 }
                 Err(err) => {
@@ -230,7 +232,6 @@ impl TileProcessor {
     }
 
     fn remove_exact(
-        &self,
         db: &sled::Db,
         batch: &mut Batch,
         coord: TileCoord,
@@ -247,11 +248,11 @@ impl TileProcessor {
             }
         };
 
-        self.remove_files(coord, scales.as_ref(), base_path);
+        Self::remove_files(coord, scales.as_ref(), base_path);
         batch.remove(key);
     }
 
-    fn remove_files(&self, coord: TileCoord, scales: &[u8], base_path: &std::path::Path) {
+    fn remove_files(coord: TileCoord, scales: &[u8], base_path: &std::path::Path) {
         let unique_scales: HashSet<u8> = scales.iter().copied().collect();
 
         for scale in unique_scales {

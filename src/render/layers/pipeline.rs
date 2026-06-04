@@ -235,6 +235,7 @@ pub fn render(
 
     let scale = request.scale;
 
+    #[allow(clippy::float_cmp)] // exact identity check: skip transform when scale is 1.0
     if scale != 1.0 {
         context.scale(scale, scale);
     }

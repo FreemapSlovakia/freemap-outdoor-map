@@ -4,6 +4,7 @@ use crate::render::{
     legend::{LegendItem, PropsBuilder},
 };
 use indexmap::IndexMap;
+use std::fmt::Write as _;
 
 pub fn roads(for_taginfo: bool) -> Vec<LegendItem<'static>> {
     [
@@ -69,9 +70,10 @@ pub fn roads(for_taginfo: bool) -> Vec<LegendItem<'static>> {
             LegendItem::builder(
                 format!(
                     "road_{}",
-                    tags.iter()
-                        .map(|t| format!("{}_{}", t.0, t.1))
-                        .collect::<String>()
+                    tags.iter().fold(String::new(), |mut out, t| {
+                        let _ = write!(out, "{}_{}", t.0, t.1);
+                        out
+                    })
                 )
                 .leak(),
                 Category::RoadsAndPaths,

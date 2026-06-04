@@ -200,8 +200,9 @@ impl Feature {
                         field: GEOMETRY_COLUMN.to_string(),
                         expected: "Point",
                     })? {
-                    LegendValue::Point(point) => Ok(*point),
-                    LegendValue::Geometry(Geometry::Point(point)) => Ok(*point),
+                    LegendValue::Point(point) | LegendValue::Geometry(Geometry::Point(point)) => {
+                        Ok(*point)
+                    }
                     LegendValue::Geometry(Geometry::Polygon(polygon)) => {
                         Ok(polygon.centroid().ok_or_else(|| {
                             WrongTypeError::new(GEOMETRY_COLUMN, "Point", "Geometry")

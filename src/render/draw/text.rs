@@ -38,7 +38,7 @@ impl Default for TextOptions<'_> {
             halo_color: colors::WHITE,
             halo_opacity: 0.75,
             halo_width: 1.5,
-            flo: Default::default(),
+            flo: FontAndLayoutOptions::default(),
             placements: &[
                 (0.0, 0.0),
                 (0.0, 3.0),
@@ -109,6 +109,7 @@ pub fn draw_text(
         let mut buffer = Buffer::new(font_system, metrics);
         buffer.set_wrap(Wrap::Word);
 
+        #[allow(clippy::float_cmp)] // exact identity check: skip when sub-size scale is 1.0
         if let Some(scale) = sub_size_scale
             && *scale > 0.0
             && *scale != 1.0
@@ -143,16 +144,15 @@ pub fn draw_text(
             point,
             &buffer,
             font_system,
-            halo_width,
+            *halo_width,
             placements,
-            valign_by_placement,
-            omit_bbox,
+            *valign_by_placement,
+            *omit_bbox,
         )
-    })?;
+    });
 
-    let placement_idx = match m {
-        Some(idx) => idx,
-        None => return Ok(None),
+    let Some(placement_idx) = m else {
+        return Ok(None);
     };
 
     context.status()?;
@@ -281,15 +281,15 @@ fn place_and_draw(
     point: &Point,
     buffer: &Buffer,
     font_system: &mut cosmic_text::FontSystem,
-    halo_width: &f64,
+    halo_width: f64,
     placements: &[(f64, f64)],
-    valign_by_placement: &bool,
-    omit_bbox: &Option<usize>,
-) -> cairo::Result<Option<usize>> {
+    valign_by_placement: bool,
+    omit_bbox: Option<usize>,
+) -> Option<usize> {
     let lines = with_scale_context(|sc| compute_lines(buffer, font_system, sc));
 
     if lines.is_empty() {
-        return Ok(Some(0));
+        return Some(0);
     }
 
     let layout_width = lines.iter().map(|l| l.line_w).fold(0.0f32, f32::max) as f64;
@@ -327,7 +327,7 @@ fn place_and_draw(
     'outer: for &(dx, dy) in placements {
         i += 1;
 
-        let y_anchor = if *valign_by_placement {
+        let y_anchor = if valign_by_placement {
             if dy > 0.0 {
                 first_baseline - cap_height
             } else if dy < 0.0 {
@@ -359,7 +359,7 @@ fn place_and_draw(
             );
 
             if let Some(ref collision) = collision {
-                if let Some(omit_idx) = *omit_bbox {
+                if let Some(omit_idx) = omit_bbox {
                     if collision.collides_with_exclusion(&ci, omit_idx) {
                         collided = true;
                         break;
@@ -387,9 +387,7 @@ fn place_and_draw(
         break;
     }
 
-    let Some((tx, ty, _)) = m else {
-        return Ok(None);
-    };
+    let (tx, ty, _) = m?;
 
     context.new_path();
 
@@ -416,5 +414,5 @@ fn place_and_draw(
         }
     });
 
-    Ok(m.map(|(_, _, idx)| idx))
+    m.map(|(_, _, idx)| idx)
 }

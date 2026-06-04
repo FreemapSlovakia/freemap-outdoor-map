@@ -81,7 +81,7 @@ const fn parse_color(color: &str) -> Color {
 
     #[inline]
     const fn parse_uint(bytes: &[u8], mut i: usize) -> (i64, usize) {
-        assert!(!(i >= bytes.len() || !is_digit(bytes[i])), "invalid number");
+        assert!(i < bytes.len() && is_digit(bytes[i]), "invalid number");
 
         let mut v: i64 = 0;
 

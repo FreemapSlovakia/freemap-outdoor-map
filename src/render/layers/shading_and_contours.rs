@@ -186,6 +186,7 @@ pub fn render(
             }
 
             let mask_pattern = SurfacePattern::create(&combined);
+            #[allow(clippy::float_cmp)] // exact identity check: skip transform when scale is 1.0
             if ctx.scale != 1.0 {
                 mask_pattern
                     .set_matrix(cairo::Matrix::new(ctx.scale, 0.0, 0.0, ctx.scale, 0.0, 0.0));
@@ -230,6 +231,7 @@ pub fn render(
             }
 
             let mask_pattern = SurfacePattern::create(&complement);
+            #[allow(clippy::float_cmp)] // exact identity check: skip transform when scale is 1.0
             if ctx.scale != 1.0 {
                 mask_pattern
                     .set_matrix(cairo::Matrix::new(ctx.scale, 0.0, 0.0, ctx.scale, 0.0, 0.0));

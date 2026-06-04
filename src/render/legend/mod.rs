@@ -77,10 +77,7 @@ impl<'a> LegendItemBuilder<'a> {
         }
     }
 
-    fn add_tag_set(
-        self,
-        cb: impl FnOnce(TagsSetBuilder<'a>) -> TagsSetBuilder<'a>,
-    ) -> Self {
+    fn add_tag_set(self, cb: impl FnOnce(TagsSetBuilder<'a>) -> TagsSetBuilder<'a>) -> Self {
         let tsb = cb(TagsSetBuilder { parent: self });
 
         tsb.parent
@@ -165,7 +162,7 @@ impl PropsBuilder {
 static MAPPING_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 pub fn set_mapping_path(path: PathBuf) {
-    assert!(!MAPPING_PATH.set(path).is_err(), "mapping path already set");
+    assert!(MAPPING_PATH.set(path).is_ok(), "mapping path already set");
 }
 
 pub fn mapping_path() -> &'static PathBuf {
@@ -343,5 +340,5 @@ pub fn leak_str(value: &str) -> &'static str {
 }
 
 fn to_px(zoom: u8) -> f64 {
-    6378137.0 * 2.0 * f64::consts::PI / (256.0 * (zoom as f64).exp2())
+    6_378_137.0 * f64::consts::TAU / (256.0 * (zoom as f64).exp2())
 }

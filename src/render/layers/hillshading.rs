@@ -304,6 +304,7 @@ pub fn paint_surface(
 ) -> LayerRenderResult {
     context.save()?;
 
+    #[allow(clippy::float_cmp)] // exact identity check: skip transform when scale is 1.0
     if ctx.scale != 1.0 {
         context.scale(1.0 / ctx.scale, 1.0 / ctx.scale);
     }
