@@ -78,7 +78,7 @@ impl TileProcessor {
     }
 
     pub(crate) fn handle_save_tile(
-        &mut self,
+        &self,
         data: Vec<u8>,
         coord: TileCoord,
         scale: f64,

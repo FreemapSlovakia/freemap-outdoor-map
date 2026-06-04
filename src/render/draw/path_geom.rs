@@ -195,7 +195,7 @@ pub fn path_line_string_with_offset(context: &Context, line_string: &LineString,
                         end_angle += std::f64::consts::PI;
 
                         while end_angle < start_angle {
-                            end_angle += 2.0 * std::f64::consts::PI;
+                            end_angle += std::f64::consts::TAU;
                         }
 
                         let mut angle = start_angle;
@@ -210,7 +210,7 @@ pub fn path_line_string_with_offset(context: &Context, line_string: &LineString,
                         }
                     } else {
                         while end_angle > start_angle {
-                            end_angle -= 2.0 * std::f64::consts::PI;
+                            end_angle -= std::f64::consts::TAU;
                         }
 
                         let mut angle = start_angle;

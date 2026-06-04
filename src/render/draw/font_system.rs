@@ -101,10 +101,10 @@ pub fn stamp_outline(context: &Context, outline: &Outline, gx: f64, gy: f64) {
                 let (x1, y1) = (gx + p1.x as f64, gy - p1.y as f64);
                 let (x2, y2) = (gx + p2.x as f64, gy - p2.y as f64);
                 let (x0, y0) = cur;
-                let c1x = x0 + 2.0 / 3.0 * (x1 - x0);
-                let c1y = y0 + 2.0 / 3.0 * (y1 - y0);
-                let c2x = x2 + 2.0 / 3.0 * (x1 - x2);
-                let c2y = y2 + 2.0 / 3.0 * (y1 - y2);
+                let c1x = (2.0_f64 / 3.0).mul_add(x1 - x0, x0);
+                let c1y = (2.0_f64 / 3.0).mul_add(y1 - y0, y0);
+                let c2x = (2.0_f64 / 3.0).mul_add(x1 - x2, x2);
+                let c2y = (2.0_f64 / 3.0).mul_add(y1 - y2, y2);
                 context.curve_to(c1x, c1y, c2x, c2y, x2, y2);
                 cur = (x2, y2);
             }

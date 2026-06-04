@@ -141,7 +141,8 @@ impl TileProcessingWorker {
         let tx = self.inner.tx.lock().unwrap().take();
         drop(tx);
 
-        if let Some(handle) = self.inner.handle.lock().unwrap().take() {
+        let handle = self.inner.handle.lock().unwrap().take();
+        if let Some(handle) = handle {
             let _ = handle.join();
         }
     }

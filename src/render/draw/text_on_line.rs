@@ -488,19 +488,21 @@ fn collect_clusters(text: &str, flo: &FontAndLayoutOptions) -> Vec<ClusterInfo> 
                     let g_desc = (fm.descent.abs() * s) as f64;
 
                     // Per-glyph ink box in the glyph's own pen coords (Y-up → Y-down flip).
-                    let (g_ink_l, g_ink_r, g_ink_t, g_ink_b) =
-                        match scale_outline(sc, font_ref, glyph.font_size, glyph.glyph_id) {
-                            Some(o) => {
-                                let b = o.bounds();
-                                (
-                                    b.min.x as f64,
-                                    b.max.x as f64,
-                                    -(b.max.y as f64),
-                                    -(b.min.y as f64),
-                                )
-                            }
-                            None => (0.0, 0.0, 0.0, 0.0),
-                        };
+                    let (g_ink_l, g_ink_r, g_ink_t, g_ink_b) = scale_outline(
+                        sc,
+                        font_ref,
+                        glyph.font_size,
+                        glyph.glyph_id,
+                    )
+                    .map_or((0.0, 0.0, 0.0, 0.0), |o| {
+                        let b = o.bounds();
+                        (
+                            b.min.x as f64,
+                            b.max.x as f64,
+                            -(b.max.y as f64),
+                            -(b.min.y as f64),
+                        )
+                    });
 
                     let gx = glyph.x as f64;
                     let same_cluster = matches!(open, Some((s, _)) if s == glyph.start);
@@ -857,7 +859,7 @@ pub fn draw_text_on_line(
                 normalize_angle(adjusted_angle - base_angle)
             };
 
-            let trim_padding = (options.flo.size * 5.0) + options.halo_width + offset.abs();
+            let trim_padding = options.flo.size.mul_add(5.0, options.halo_width) + offset.abs();
             let keep_offset_side = options.keep_offset_side && matches!(upright, Upright::Auto);
             let clip_padding = options.halo_width + options.flo.size;
             let prepared = match prepare_label_span(
@@ -1015,8 +1017,8 @@ pub fn draw_text_on_line(
                 let mut maxx = f64::NEG_INFINITY;
                 let mut maxy = f64::NEG_INFINITY;
                 for (dx, dy) in corners {
-                    let rx = dx * c - dy * s;
-                    let ry = dx * s + dy * c;
+                    let rx = dy.mul_add(-s, dx * c);
+                    let ry = dy.mul_add(c, dx * s);
                     minx = minx.min(rx);
                     miny = miny.min(ry);
                     maxx = maxx.max(rx);

@@ -479,6 +479,7 @@ fn spawn_export_job(
             None => {
                 let mut guard = status_clone.lock().await;
                 *guard = ExportStatus::Done(Err(ExportError::Abandoned));
+                drop(guard);
                 notify_clone.notify_waiters();
                 return;
             }
@@ -495,6 +496,7 @@ fn spawn_export_job(
 
         let mut guard = status_clone.lock().await;
         *guard = ExportStatus::Done(result);
+        drop(guard);
         notify_clone.notify_waiters();
     });
 

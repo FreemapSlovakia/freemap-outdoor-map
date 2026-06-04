@@ -10,7 +10,7 @@ pub struct SvgRepo {
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("{msg}{}", source.as_deref().map_or("".to_string(), |err| format!(": {err}")))]
+#[error("{msg}{}", source.as_deref().map_or_else(String::new, |err| format!(": {err}")))]
 pub struct SvgRepoError {
     msg: String,
     source: Option<Box<dyn std::error::Error + Sync + Send>>,

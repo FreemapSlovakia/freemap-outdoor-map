@@ -487,26 +487,27 @@ pub fn render(
             let bridge_rows = results.remove(&Some("__bridge__")).unwrap_or_default();
 
             let contour_rows: HashMap<Option<&'static str>, Vec<Feature>> =
-                if let Some(cc) = contour_countries_for_render.as_ref() {
-                    let mut rows: HashMap<Option<&'static str>, Vec<Feature>> = cc
-                        .entries()
-                        .iter()
-                        .map(|e| {
-                            (
-                                Some(e.country),
-                                results.remove(&Some(e.country)).unwrap_or_default(),
-                            )
-                        })
-                        .collect();
+                contour_countries_for_render.as_ref().map_or_else(
+                    HashMap::new,
+                    |cc| {
+                        let mut rows: HashMap<Option<&'static str>, Vec<Feature>> = cc
+                            .entries()
+                            .iter()
+                            .map(|e| {
+                                (
+                                    Some(e.country),
+                                    results.remove(&Some(e.country)).unwrap_or_default(),
+                                )
+                            })
+                            .collect();
 
-                    if cc.has_fallback() {
-                        rows.insert(None, results.remove(&None).unwrap_or_default());
-                    }
+                        if cc.has_fallback() {
+                            rows.insert(None, results.remove(&None).unwrap_or_default());
+                        }
 
-                    rows
-                } else {
-                    HashMap::new()
-                };
+                        rows
+                    },
+                );
 
             layers::shading_and_contours::render(
                 ctx,

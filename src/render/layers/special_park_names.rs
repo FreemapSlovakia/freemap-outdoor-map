@@ -45,7 +45,7 @@ pub fn render(
     let text_options = TextOptions {
         flo: FontAndLayoutOptions {
             style: Style::Normal,
-            size: 11.0 + (ctx.zoom as f64 * 0.75 - 10.0).exp2(),
+            size: 11.0 + (ctx.zoom as f64).mul_add(0.75, -10.0).exp2(),
             ..FontAndLayoutOptions::default()
         },
         color: colors::SPECIAL_PARK,

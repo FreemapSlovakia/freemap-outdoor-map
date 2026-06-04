@@ -175,15 +175,17 @@ pub fn render_lines_polygons(
     // Pass 1: polygon fills (must come before strokes so borders render on top).
     for (geom, props) in &items {
         path_polygons(context, geom);
-        let (fr, fg, fb, base_a) = match &props.fill {
-            Some(fill) => (fill.r(), fill.g(), fill.b(), fill.a()),
-            None => (
-                props.color.r(),
-                props.color.g(),
-                props.color.b(),
-                props.color.a() * 0.25,
-            ),
-        };
+        let (fr, fg, fb, base_a) = props.fill.as_ref().map_or_else(
+            || {
+                (
+                    props.color.r(),
+                    props.color.g(),
+                    props.color.b(),
+                    props.color.a() * 0.25,
+                )
+            },
+            |fill| (fill.r(), fill.g(), fill.b(), fill.a()),
+        );
         context.set_source_rgba(fr, fg, fb, base_a * props.fill_opacity.unwrap_or(1.0));
         context.fill()?;
     }
@@ -273,7 +275,7 @@ fn draw_default_marker(context: &Context, x: f64, y: f64) -> cairo::Result<f64> 
     let radius = 10f64;
     let h = radius * 2.2;
     let dy = radius * radius / h;
-    let tx = (radius * radius - dy * dy).max(0.0).sqrt();
+    let tx = radius.mul_add(radius, -(dy * dy)).max(0.0).sqrt();
 
     context.set_source_rgb(0.815_686, 0.0, 0.0);
 

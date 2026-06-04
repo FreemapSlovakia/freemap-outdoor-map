@@ -202,9 +202,11 @@ impl Feature {
                     })? {
                     LegendValue::Point(point) => Ok(*point),
                     LegendValue::Geometry(Geometry::Point(point)) => Ok(*point),
-                    LegendValue::Geometry(Geometry::Polygon(polygon)) => Ok(polygon
-                        .centroid()
-                        .ok_or(WrongTypeError::new(GEOMETRY_COLUMN, "Point", "Geometry"))?),
+                    LegendValue::Geometry(Geometry::Polygon(polygon)) => {
+                        Ok(polygon.centroid().ok_or_else(|| {
+                            WrongTypeError::new(GEOMETRY_COLUMN, "Point", "Geometry")
+                        })?)
+                    }
                     other => {
                         Err(
                             WrongTypeError::new(GEOMETRY_COLUMN, "Point", legend_value_type(other))
