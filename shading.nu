@@ -7,7 +7,7 @@ const PARALLEL = 24   # number of tiles processed in parallel
 const OVERLAP  = 6    # half of retile overlap; used for hillshading context
 const CROP     = 3    # pixels cropped from each edge after hillshading; OVERLAP - CROP leaves margin for warp alignment
 const TMPDIR   = "/dev/shm"  # ramdisk for intermediate files; change to "." to use local disk
-const ZONE     = "29"  # UTM zone to process this run; change to 30/31 and re-run for other zones
+const ZONE     = "31"  # UTM zone to process this run; change to 30/31 and re-run for other zones
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -111,7 +111,7 @@ print $"ZOOM=($ZOOM) TR=($tr)"
 
 # 1. Build VRT from source DTM files
 print "==> Building source VRT"
-glob $"/home/martin/18TB/es/tiles/*-{H,HU}($ZONE)-*.{tif,TIF}" | save -f dtm_index
+glob $"/home/martin/18TB/es/input/*-{H,HU}($ZONE)-*.{tif,TIF}" | save -f dtm_index
 gdalbuildvrt -allow_projection_difference -input_file_list dtm_index $"zone($ZONE).vrt"
 
 # 2. Retile with overlap (overlap is kept through processing to avoid hillshade edge artifacts)
@@ -124,10 +124,11 @@ print "==> Smoothing"
 mkdir smooth
 mkdir smooth/_tmp
 (
-  glob retiled/*.tif
+  glob retiled/zone*.tif
     | where {|f| not ($"smooth/($f | path basename)" | path exists)}
     | where {|f| has-data $f}
     | par-each -t $PARALLEL {|f|
+        print $f
         let a    = $f | path basename
         let dst  = $"smooth/($a)"
         let band = gdalinfo -json -mm $f err> /dev/null | from json | get bands | first
@@ -156,8 +157,6 @@ mkdir tiles
     # | first 20
     | par-each -t $PARALLEL {|src| process-tile $src $tr}
 )
-
-# exit  # stop here per-zone run; remove after processing all zones to merge
 
 # 5. Merge all tiles and build overviews
 # Final shading.tif uses JXL (lossy, distance=3.0); requires GDAL linked against
