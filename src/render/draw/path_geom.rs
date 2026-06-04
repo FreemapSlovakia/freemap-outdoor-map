@@ -194,12 +194,14 @@ pub fn path_line_string_with_offset(context: &Context, line_string: &LineString,
                         start_angle += std::f64::consts::PI;
                         end_angle += std::f64::consts::PI;
 
+                        #[allow(clippy::while_float)]
                         while end_angle < start_angle {
                             end_angle += std::f64::consts::TAU;
                         }
 
                         let mut angle = start_angle;
 
+                        #[allow(clippy::while_float)]
                         while angle < end_angle {
                             angle += std::f64::consts::PI / 10.0;
 
@@ -209,12 +211,14 @@ pub fn path_line_string_with_offset(context: &Context, line_string: &LineString,
                             );
                         }
                     } else {
+                        #[allow(clippy::while_float)]
                         while end_angle > start_angle {
                             end_angle -= std::f64::consts::TAU;
                         }
 
                         let mut angle = start_angle;
 
+                        #[allow(clippy::while_float)]
                         while angle > end_angle {
                             angle -= std::f64::consts::PI / 10.0;
 

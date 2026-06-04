@@ -103,6 +103,7 @@ fn render_rows(
 
         let geom = geom.chaikin_smoothing(3);
 
+        #[allow(clippy::while_float)]
         while options.flo.letter_spacing >= 0.0 {
             let drawn = draw_text_on_line(context, &geom, &name, Some(collision), &options)?;
 

@@ -22,6 +22,7 @@ where
 
         m += d;
 
+        #[allow(clippy::while_float)]
         while m >= spacing {
             let t = off / d;
             let xx = t.mul_add(x - *px, *px);

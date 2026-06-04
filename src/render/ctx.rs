@@ -8,6 +8,7 @@ pub struct SqlParams {
 
 // SAFETY: all values are inserted via `push` which requires `T: Send`,
 // so every stored value is guaranteed to be Send.
+#[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl Send for SqlParams {}
 
 impl SqlParams {

@@ -57,6 +57,7 @@ fn hatch(
 
     let mut off = 0.0;
 
+    #[allow(clippy::while_float)]
     while off < len {
         context.move_to(-len, off + d);
         context.line_to(len, off + d);

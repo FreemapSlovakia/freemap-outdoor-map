@@ -84,6 +84,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
             // TODO offset_line_string produces bad results for `align: Align::Justify`
             // options.offset = offset;
 
+            #[allow(clippy::while_float)]
             while options.flo.size > 10.0 {
                 let geom = offset_line_string(&geom, offset);
 
