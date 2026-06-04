@@ -20,7 +20,6 @@ use cairo::{Context, Surface};
 use deadpool_postgres::Pool;
 use futures_util::FutureExt;
 use futures_util::future::BoxFuture;
-use geo::Rect;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -71,20 +70,26 @@ struct Params<'p, 'ctx> {
     hsd: Option<&'p mut HillshadingDatasets>,
 }
 
+/// Renders a layer from its (already fetched) features.
+type LayerRenderFn<'a> = Box<dyn FnOnce(Vec<Feature>, Params) -> LayerRenderResult + 'a>;
+
+/// Render-only step that needs no features.
+type PushFn<'a> = Box<dyn FnOnce(Params) -> Result<(), RenderError> + 'a>;
+
 enum PendingLayer<'a> {
     /// A DB query running as its own tokio task (own pool connection → true parallelism).
     Query {
         name: &'static str,
         jh: JoinHandle<Result<Vec<Feature>, LayerRenderError>>,
-        render_fn: Box<dyn FnOnce(Vec<Feature>, Params) -> LayerRenderResult + 'a>,
+        render_fn: LayerRenderFn<'a>,
     },
     /// Render-only step (push_group, pop_group, blur_edges, custom, …)
-    Push(Box<dyn FnOnce(Params) -> Result<(), RenderError> + 'a>),
+    Push(PushFn<'a>),
     /// Legend path: features pre-built, render directly.
     Legend {
         name: &'static str,
         features: Vec<Feature>,
-        render_fn: Box<dyn FnOnce(Vec<Feature>, Params) -> LayerRenderResult + 'a>,
+        render_fn: LayerRenderFn<'a>,
     },
 }
 
@@ -206,19 +211,25 @@ impl<'a> Prefetcher<'a> {
     }
 }
 
+/// Optional hillshading / contour inputs threaded through the render pipeline.
+pub struct Shading<'a> {
+    pub hierarchy: Option<&'a HillshadingHierarchy>,
+    pub contour_countries: Option<&'a ContourCountries>,
+    pub datasets: Option<&'a mut HillshadingDatasets>,
+}
+
 pub fn render(
     surface: &Surface,
     request: &RenderRequest,
-    hillshading_hierarchy: Option<&HillshadingHierarchy>,
-    contour_countries: Option<&ContourCountries>,
+    mut shading: Shading,
     pool: Pool,
     handle: Handle,
-    bbox: Rect<f64>,
     size: Size<u32>,
     svg_repo: &mut SvgRepo,
-    mut hillshading_datasets: Option<&mut HillshadingDatasets>,
 ) -> Result<(), RenderError> {
     let _span = tracy_client::span!("render_tile::draw");
+
+    let bbox = request.bbox;
 
     let context = &Context::new(surface)?;
 
@@ -234,11 +245,11 @@ pub fn render(
 
     let to_render = &request.to_render;
 
-    let do_shading = to_render.contains(&RenderLayer::Shading) && hillshading_hierarchy.is_some();
+    let do_shading = to_render.contains(&RenderLayer::Shading) && shading.hierarchy.is_some();
 
     let do_contours = to_render.contains(&RenderLayer::Contours)
-        && hillshading_hierarchy.is_some()
-        && contour_countries.is_some();
+        && shading.hierarchy.is_some()
+        && shading.contour_countries.is_some();
 
     let legend = request.legend.clone();
 
@@ -410,7 +421,7 @@ pub fn render(
 
         if do_contours
             && zoom >= 12
-            && let Some(contour_countries) = contour_countries
+            && let Some(contour_countries) = shading.contour_countries
         {
             for entry in contour_countries.entries() {
                 let acc = results.clone();
@@ -449,13 +460,14 @@ pub fn render(
         }
 
         // do_shading || do_contours implies hillshading_hierarchy.is_some() (caller gating).
-        let hierarchy = hillshading_hierarchy
+        let hierarchy = shading
+            .hierarchy
             .cloned()
             .expect("do_shading || do_contours implies hierarchy");
 
         // Only pass contour-countries when the caller actually requested contours.
         let contour_countries_for_render = if do_contours {
-            contour_countries.cloned()
+            shading.contour_countries.cloned()
         } else {
             None
         };
@@ -501,10 +513,12 @@ pub fn render(
                 context,
                 bridge_rows,
                 contour_rows,
-                hsd,
-                &hierarchy,
-                contour_countries_for_render.as_ref(),
-                do_shading,
+                layers::shading_and_contours::ShadingParams {
+                    datasets: hsd,
+                    hierarchy: &hierarchy,
+                    contour_countries: contour_countries_for_render.as_ref(),
+                    do_shading,
+                },
             )
             .with_layer("shading_and_contours")?;
 
@@ -969,7 +983,7 @@ pub fn render(
         });
     }
 
-    prefetcher.run(svg_repo, hillshading_datasets.as_deref_mut(), collision)?;
+    prefetcher.run(svg_repo, shading.datasets.as_deref_mut(), collision)?;
 
     // Decorations (scale bar, north arrow, attribution) are drawn last so they
     // sit on top of everything, and never on legend renders.
@@ -979,7 +993,7 @@ pub fn render(
         layers::decorations::render(&ctx, context, decorations)?;
     }
 
-    if let Some(hillshading_datasets) = hillshading_datasets {
+    if let Some(hillshading_datasets) = shading.datasets {
         hillshading_datasets.evict_unused();
     }
 

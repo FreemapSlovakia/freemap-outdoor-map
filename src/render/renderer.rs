@@ -41,14 +41,15 @@ pub fn render(
         layers::render(
             surface,
             request,
-            hillshading_hierarchy,
-            contour_countries,
+            layers::Shading {
+                hierarchy: hillshading_hierarchy,
+                contour_countries,
+                datasets: hillshading_datasets,
+            },
             pool,
             handle,
-            request.bbox,
             size,
             svg_repo,
-            hillshading_datasets,
         )
     };
 

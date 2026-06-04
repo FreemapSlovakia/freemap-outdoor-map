@@ -302,18 +302,31 @@ fn bbox_intersects_clip(pts: &[Coord], clip: (f64, f64, f64, f64), padding: f64)
     maxx >= min_cx && max_cx >= minx && maxy >= min_cy && max_cy >= miny
 }
 
+/// Trimming / offsetting / clipping knobs for [`prepare_label_span`].
+struct LabelSpanOpts {
+    trim_padding: f64,
+    offset: f64,
+    keep_offset_side: bool,
+    clip_padding: f64,
+    clip_extents: Option<(f64, f64, f64, f64)>,
+}
+
 fn prepare_label_span(
     pts: &[Coord],
     total_length: f64,
     repeat_span: f64,
     label_start: f64,
     flip_needed: bool,
-    trim_padding: f64,
-    offset: f64,
-    keep_offset_side: bool,
-    clip_padding: f64,
-    clip_extents: Option<(f64, f64, f64, f64)>,
+    opts: LabelSpanOpts,
 ) -> Option<PreparedLine> {
+    let LabelSpanOpts {
+        trim_padding,
+        offset,
+        keep_offset_side,
+        clip_padding,
+        clip_extents,
+    } = opts;
+
     // Orient the geometry according to the chosen upright direction.
     let mut oriented_pts = pts.to_vec();
     if flip_needed {
@@ -853,11 +866,13 @@ pub fn draw_text_on_line(
                 repeat_span,
                 label_start_try,
                 flip_needed,
-                trim_padding,
-                *offset,
-                keep_offset_side,
-                clip_padding,
-                clip_extents,
+                LabelSpanOpts {
+                    trim_padding,
+                    offset: *offset,
+                    keep_offset_side,
+                    clip_padding,
+                    clip_extents,
+                },
             ) {
                 Some(p) => p,
                 None => continue 'outer,

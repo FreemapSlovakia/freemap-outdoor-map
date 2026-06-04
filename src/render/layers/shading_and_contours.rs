@@ -7,17 +7,29 @@ use crate::render::{
 use cairo::{Context, Format, ImageSurface, SurfacePattern};
 use std::collections::{HashMap, HashSet};
 
+/// Hillshading / contour data sources and toggles for [`render`].
+pub struct ShadingParams<'a> {
+    pub datasets: &'a mut HillshadingDatasets,
+    pub hierarchy: &'a HillshadingHierarchy,
+    pub contour_countries: Option<&'a ContourCountries>,
+    pub do_shading: bool,
+}
+
 pub fn render(
     ctx: &Ctx,
     context: &Context,
     bridge_rows: Vec<Feature>,
     mut contour_rows: HashMap<Option<&'static str>, Vec<Feature>>,
-    hillshading_datasets: &mut HillshadingDatasets,
-    hierarchy: &HillshadingHierarchy,
-    contour_countries: Option<&ContourCountries>,
-    do_shading: bool,
+    params: ShadingParams,
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("shading_and_contours::render");
+
+    let ShadingParams {
+        datasets: hillshading_datasets,
+        hierarchy,
+        contour_countries,
+        do_shading,
+    } = params;
 
     let fade_alpha = 1.0f64.min(1.0 - (ctx.zoom as f64 - 7.0).ln() / 5.0);
 

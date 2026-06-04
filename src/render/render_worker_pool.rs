@@ -1,5 +1,5 @@
 use crate::render::{
-    self, RenderConfig, RenderRequest, layers::load_hillshading_datasets, render::RenderError,
+    self, RenderConfig, RenderRequest, layers::load_hillshading_datasets, renderer::RenderError,
     svg_repo::SvgRepo,
 };
 use deadpool_postgres::Pool;
@@ -76,7 +76,7 @@ impl RenderWorkerPool {
                             break;
                         };
 
-                        let result = render::render::render(
+                        let result = render::renderer::render(
                             &request,
                             config.hillshading_hierarchy.as_ref(),
                             config.contour_countries.as_ref(),
