@@ -8,7 +8,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-pub(crate) fn process_existing_expiration_files(watch_base: &Path, worker: &TileProcessingWorker) {
+pub fn process_existing_expiration_files(watch_base: &Path, worker: &TileProcessingWorker) {
     let mut pending = Vec::new();
 
     collect_expiration_files(watch_base, &mut pending);
@@ -23,7 +23,7 @@ pub(crate) fn process_existing_expiration_files(watch_base: &Path, worker: &Tile
     }
 }
 
-pub(crate) struct TileInvalidationWatcher {
+pub struct TileInvalidationWatcher {
     stop_tx: mpsc::Sender<WatcherMessage>,
     handle: Option<thread::JoinHandle<()>>,
 }
@@ -37,7 +37,7 @@ impl TileInvalidationWatcher {
     }
 }
 
-pub(crate) fn start_watcher(
+pub fn start_watcher(
     watch_base: &Path,
     worker: TileProcessingWorker,
 ) -> TileInvalidationWatcher {

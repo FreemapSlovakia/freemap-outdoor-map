@@ -49,11 +49,11 @@ static GRAY_TILE_JPEG: LazyLock<Vec<u8>> = LazyLock::new(|| {
 });
 
 #[derive(serde::Deserialize)]
-pub(crate) struct QueryParams {
+pub struct QueryParams {
     rerender: Option<bool>,
 }
 
-pub(crate) async fn get(
+pub async fn get(
     State(tile_route_state): State<TileRouteState>,
     Path((zoom, x, y_with_suffix)): Path<(u8, u32, String)>,
     Query(QueryParams { rerender }): Query<QueryParams>,
@@ -81,7 +81,7 @@ pub(crate) async fn get(
     .await
 }
 
-pub(crate) async fn serve_tile(
+pub async fn serve_tile(
     state: &AppState,
     variant_index: usize,
     coord: TileCoord,

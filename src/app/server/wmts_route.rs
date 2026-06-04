@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 const CAPABILITIES_XML: &str = include_str!("wmts_capabilities.xml");
 
-pub(crate) async fn service_handler(
+pub async fn service_handler(
     State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,

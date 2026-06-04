@@ -8,13 +8,13 @@ use std::{
 };
 
 #[derive(Clone)]
-pub(crate) struct VariantConfig {
+pub struct VariantConfig {
     pub(crate) tile_cache_base_path: Option<PathBuf>,
     pub(crate) tile_index: Option<PathBuf>,
 }
 
 #[derive(Clone)]
-pub(crate) struct TileProcessingConfig {
+pub struct TileProcessingConfig {
     pub(crate) variants: Vec<VariantConfig>,
     pub(crate) invalidate_min_zoom: u8,
 }
@@ -24,7 +24,7 @@ struct VariantRuntime {
     db: Option<sled::Db>,
 }
 
-pub(crate) struct TileProcessor {
+pub struct TileProcessor {
     variants: Vec<VariantRuntime>,
     invalidate_min_zoom: u8,
     invalidation_register: HashMap<TileCoord, SystemTime>,
@@ -266,7 +266,7 @@ impl TileProcessor {
     }
 }
 
-pub(crate) fn cached_tile_path(base: &std::path::Path, coord: TileCoord, scale: f64) -> PathBuf {
+pub fn cached_tile_path(base: &std::path::Path, coord: TileCoord, scale: f64) -> PathBuf {
     let mut path = base.to_owned();
     path.push(coord.zoom.to_string());
     path.push(coord.x.to_string());

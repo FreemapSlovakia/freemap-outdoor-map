@@ -6,14 +6,14 @@ use geo::Geometry;
 use std::{collections::HashSet, path::PathBuf, sync::Arc};
 
 #[derive(Clone)]
-pub(crate) struct TileVariantState {
+pub struct TileVariantState {
     pub(crate) tile_cache_base_path: Option<PathBuf>,
     pub(crate) coverage_geometry: Option<Arc<Geometry>>,
     pub(crate) render: HashSet<RenderLayer>,
 }
 
 #[derive(Clone)]
-pub(crate) struct AppState {
+pub struct AppState {
     pub(crate) render_worker_pool: Arc<RenderWorkerPool>,
     pub(crate) export_state: Arc<ExportState>,
     pub(crate) tile_variants: Arc<Vec<TileVariantState>>,
@@ -25,7 +25,7 @@ pub(crate) struct AppState {
 }
 
 #[derive(Clone)]
-pub(crate) struct TileRouteState {
+pub struct TileRouteState {
     pub(crate) app_state: AppState,
     pub(crate) variant_index: usize,
 }

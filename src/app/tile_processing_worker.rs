@@ -14,13 +14,13 @@ const INVALIDATION_REGISTER_TTL: Duration = Duration::from_secs(60);
 const INVALIDATION_REGISTER_PRUNE_INTERVAL: Duration = Duration::from_secs(30);
 
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum TileProcessingSendError {
+pub enum TileProcessingSendError {
     #[error("tile processing queue closed")]
     QueueClosed,
 }
 
 #[derive(Clone)]
-pub(crate) struct TileProcessingWorker {
+pub struct TileProcessingWorker {
     inner: Arc<TileProcessingInner>,
 }
 

@@ -15,13 +15,13 @@ struct RenderTask {
     resp_tx: oneshot::Sender<Result<Vec<u8>, ReError>>,
 }
 
-pub(crate) struct RenderWorkerPool {
+pub struct RenderWorkerPool {
     tx: Mutex<Option<mpsc::Sender<RenderTask>>>,
     workers: Mutex<Vec<JoinHandle<()>>>,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum ReError {
+pub enum ReError {
     #[error(transparent)]
     RenderError(#[from] RenderError),
 

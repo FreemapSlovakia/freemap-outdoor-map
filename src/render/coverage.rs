@@ -1,17 +1,17 @@
 use geo::{Contains, Geometry, Intersects, Rect};
 
-pub(crate) const MAX_EDGE_FADE_RADIUS_M: f64 = 5_000.0;
-pub(crate) const EDGE_FADE_CUTOFF_SIGMA: f64 = 3.0;
-pub(crate) const MAX_EDGE_FADE_SIGMA_PX: f64 = 10.0;
+pub const MAX_EDGE_FADE_RADIUS_M: f64 = 5_000.0;
+pub const EDGE_FADE_CUTOFF_SIGMA: f64 = 3.0;
+pub const MAX_EDGE_FADE_SIGMA_PX: f64 = 10.0;
 
 #[derive(Copy, Clone, Eq, PartialEq)]
-pub(crate) enum TileCoverageRelation {
+pub enum TileCoverageRelation {
     Inside,
     Crosses,
     Outside,
 }
 
-pub(crate) fn tile_touches_coverage(
+pub fn tile_touches_coverage(
     coverage: &Geometry,
     bbox: Rect<f64>,
     meters_per_pixel: f64,
@@ -35,12 +35,12 @@ pub(crate) fn tile_touches_coverage(
 }
 
 #[inline]
-pub(crate) fn edge_fade_sigma_px(meters_per_pixel: f64) -> f64 {
+pub fn edge_fade_sigma_px(meters_per_pixel: f64) -> f64 {
     (MAX_EDGE_FADE_RADIUS_M / meters_per_pixel / EDGE_FADE_CUTOFF_SIGMA).min(MAX_EDGE_FADE_SIGMA_PX)
 }
 
 #[inline]
-pub(crate) fn edge_fade_cutoff_px(meters_per_pixel: f64) -> f64 {
+pub fn edge_fade_cutoff_px(meters_per_pixel: f64) -> f64 {
     edge_fade_cutoff_m(meters_per_pixel) / meters_per_pixel
 }
 

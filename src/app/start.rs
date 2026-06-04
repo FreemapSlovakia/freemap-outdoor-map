@@ -22,7 +22,7 @@ use std::{
 use tokio::signal::unix::{SignalKind, signal as unix_signal};
 use tokio::sync::broadcast;
 
-pub(crate) fn start() {
+pub fn start() {
     dotenv().ok();
 
     tracy_client::Client::start();

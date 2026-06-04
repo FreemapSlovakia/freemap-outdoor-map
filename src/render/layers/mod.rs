@@ -1,7 +1,7 @@
 pub use crate::render::categories::Category;
 pub use hillshading_datasets::HillshadingDatasets;
 pub use hillshading_datasets::load_hillshading_datasets;
-pub(crate) use landcover::PAINT_DEFS;
+pub use landcover::PAINT_DEFS;
 pub use pipeline::RenderError;
 pub use pipeline::Shading;
 pub use pipeline::render;

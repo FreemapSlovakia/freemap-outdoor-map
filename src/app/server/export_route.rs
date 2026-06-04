@@ -31,7 +31,7 @@ use tokio::{
 };
 use tokio_util::io::ReaderStream;
 
-pub(crate) struct ExportState {
+pub struct ExportState {
     jobs: Mutex<HashMap<String, Arc<ExportJob>>>,
     semaphore: Arc<Semaphore>,
     max_pixels: u64,
@@ -81,7 +81,7 @@ impl ExportError {
 }
 
 #[derive(Deserialize, Debug)]
-pub(crate) struct ExportRequest {
+pub struct ExportRequest {
     zoom: u8,
     bbox: [f64; 4],
     format: Option<String>,
@@ -92,7 +92,7 @@ pub(crate) struct ExportRequest {
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ExportDecorations {
+pub struct ExportDecorations {
     scale_bar: Option<bool>,
     north_arrow: Option<String>,
     attribution: Option<String>,
@@ -100,7 +100,7 @@ pub(crate) struct ExportDecorations {
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ExportFeatures {
+pub struct ExportFeatures {
     shading: Option<bool>,
     contours: Option<bool>,
     bicycle_trails: Option<bool>,
@@ -112,11 +112,11 @@ pub(crate) struct ExportFeatures {
 }
 
 #[derive(Deserialize)]
-pub(crate) struct TokenQuery {
+pub struct TokenQuery {
     token: String,
 }
 
-pub(crate) async fn post(
+pub async fn post(
     State(state): State<AppState>,
     Json(request): Json<ExportRequest>,
 ) -> Response<Body> {
@@ -286,7 +286,7 @@ pub(crate) async fn post(
         .expect("token body")
 }
 
-pub(crate) async fn head(
+pub async fn head(
     State(state): State<AppState>,
     Query(query): Query<TokenQuery>,
 ) -> Response<Body> {
@@ -308,7 +308,7 @@ pub(crate) async fn head(
     }
 }
 
-pub(crate) async fn get(
+pub async fn get(
     State(state): State<AppState>,
     Query(query): Query<TokenQuery>,
 ) -> Response<Body> {
@@ -349,7 +349,7 @@ pub(crate) async fn get(
         .expect("download body")
 }
 
-pub(crate) async fn delete(
+pub async fn delete(
     State(state): State<AppState>,
     Query(query): Query<TokenQuery>,
 ) -> Response<Body> {

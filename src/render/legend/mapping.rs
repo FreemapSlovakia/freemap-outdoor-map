@@ -2,13 +2,13 @@ use serde::Deserialize;
 use std::collections::HashMap;
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct MappingRoot {
+pub struct MappingRoot {
     #[serde(default)]
     pub(crate) tables: HashMap<String, Table>,
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct Table {
+pub struct Table {
     #[serde(default)]
     pub(crate) mapping: Option<MappingValues>,
     #[serde(default)]
@@ -20,7 +20,7 @@ pub(crate) struct Table {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct Column {
+pub struct Column {
     #[serde(rename = "type")]
     pub(crate) column_type: String,
     #[serde(default)]
@@ -28,7 +28,7 @@ pub(crate) struct Column {
 }
 
 #[derive(Debug, Default, Deserialize)]
-pub(crate) struct TypeMappings {
+pub struct TypeMappings {
     #[serde(default)]
     pub(crate) points: Option<TypeMapping>,
     #[serde(default)]
@@ -39,17 +39,17 @@ pub(crate) struct TypeMappings {
     pub(crate) any: Option<TypeMapping>,
 }
 
-pub(crate) type MappingValues = HashMap<String, Vec<String>>;
+pub type MappingValues = HashMap<String, Vec<String>>;
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-pub(crate) enum TypeMapping {
+pub enum TypeMapping {
     Direct(MappingValues),
     Expanded(ExpandedTypeMapping),
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct ExpandedTypeMapping {
+pub struct ExpandedTypeMapping {
     #[serde(default)]
     pub(crate) mapping: Option<MappingValues>,
     #[serde(default)]
@@ -57,12 +57,12 @@ pub(crate) struct ExpandedTypeMapping {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct SubMapping {
+pub struct SubMapping {
     pub(crate) mapping: MappingValues,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum MappingKind {
+pub enum MappingKind {
     TableMapping,
     TableMappingNested,
     TypeMappingDirect,
@@ -70,14 +70,14 @@ pub(crate) enum MappingKind {
 }
 
 #[derive(Debug)]
-pub(crate) struct MappingEntry {
+pub struct MappingEntry {
     pub(crate) table: String,
     pub(crate) key: String,
     pub(crate) value: String,
     pub(crate) kind: MappingKind,
 }
 
-pub(crate) fn collect_mapping_entries(root: &MappingRoot) -> Vec<MappingEntry> {
+pub fn collect_mapping_entries(root: &MappingRoot) -> Vec<MappingEntry> {
     let mut entries = Vec::new();
 
     for (table_name, table) in &root.tables {

@@ -1,7 +1,7 @@
 use std::{fmt::Display, str::FromStr};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct TileCoord {
+pub struct TileCoord {
     pub(crate) zoom: u8,
     pub(crate) x: u32,
     pub(crate) y: u32,
@@ -52,7 +52,7 @@ impl FromStr for TileCoord {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum TileCoordParseError {
+pub enum TileCoordParseError {
     #[error("invalid tile coordinate format")]
     InvalidFormat,
     #[error(transparent)]

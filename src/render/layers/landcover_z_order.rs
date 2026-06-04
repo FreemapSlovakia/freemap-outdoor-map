@@ -1,4 +1,4 @@
-pub(crate) const LANDCOVER_Z_ORDER: &[&str] = &[
+pub const LANDCOVER_Z_ORDER: &[&str] = &[
     "winter_sports",
     "pedestrian",
     "footway",
@@ -52,7 +52,7 @@ pub(crate) const LANDCOVER_Z_ORDER: &[&str] = &[
     "glacier",
 ];
 
-pub(crate) fn build_landcover_z_order_case(column: &str) -> String {
+pub fn build_landcover_z_order_case(column: &str) -> String {
     let mut case = format!("CASE {column}");
 
     for (idx, typ) in LANDCOVER_Z_ORDER.iter().enumerate() {

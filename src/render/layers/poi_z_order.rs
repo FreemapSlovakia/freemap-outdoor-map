@@ -159,7 +159,7 @@ const POI_Z_ORDER: &[&str] = &[
     "route_marker",
 ];
 
-pub(crate) fn build_poi_z_order_case(column: &str) -> String {
+pub fn build_poi_z_order_case(column: &str) -> String {
     let mut case = format!("CASE {column}");
     for (idx, typ) in POI_Z_ORDER.iter().enumerate() {
         let escaped = typ.replace('\'', "''");

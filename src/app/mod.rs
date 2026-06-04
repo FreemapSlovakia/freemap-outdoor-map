@@ -1,6 +1,6 @@
-pub(super) use start::start;
+pub use start::start;
 
-pub(crate) mod cli;
+pub mod cli;
 mod server;
 mod start;
 mod tile_coord;

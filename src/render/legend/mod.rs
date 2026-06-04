@@ -164,7 +164,7 @@ impl PropsBuilder {
 
 static MAPPING_PATH: OnceLock<PathBuf> = OnceLock::new();
 
-pub(crate) fn set_mapping_path(path: PathBuf) {
+pub fn set_mapping_path(path: PathBuf) {
     if MAPPING_PATH.set(path).is_err() {
         panic!("mapping path already set");
     }

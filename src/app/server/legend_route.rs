@@ -16,11 +16,11 @@ pub struct LegendQuery {
     mode: Option<LegendMode>,
 }
 
-pub(crate) async fn get_metadata() -> Json<Vec<LegendMeta<'static>>> {
+pub async fn get_metadata() -> Json<Vec<LegendMeta<'static>>> {
     Json(legend_metadata())
 }
 
-pub(crate) async fn get(
+pub async fn get(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Query(LegendQuery { scale, mode }): Query<LegendQuery>,
