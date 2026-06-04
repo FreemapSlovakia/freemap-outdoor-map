@@ -11,9 +11,11 @@ use crate::render::{
     },
     layer_render_error::{LayerRenderError, LayerRenderResult},
     projectable::TileProjectable,
+    render_request::LabelStyle,
 };
 use cairo::{Context, LineCap, LineJoin, Rectangle};
 use colorsys::{Rgb, RgbRatio};
+use cosmic_text::Weight;
 use geo::{Geometry, InteriorPoint, Rect, Transform};
 use geojson::Feature;
 use gio::glib;
@@ -522,8 +524,12 @@ pub fn render_line_polygon_labels(
     context: &Context,
     features: &[Feature],
     collision: &mut Collision,
+    label_style: LabelStyle,
 ) -> LayerRenderResult {
     let proj = make_proj();
+
+    let size = label_style.size.unwrap_or(15.0);
+    let weight = label_style.weight.unwrap_or_default();
 
     for feature in features {
         let mut geom: Geometry = Geometry::try_from(feature.clone())?;
@@ -541,21 +547,22 @@ pub fn render_line_polygon_labels(
         };
 
         if matches!(geom, Geometry::LineString(_) | Geometry::MultiLineString(_)) {
+            let mut options = TextOnLineOptions {
+                flo: FontAndLayoutOptions {
+                    size,
+                    weight,
+                    ..Default::default()
+                },
+                halo_width: 2.0,
+                ..Default::default()
+            };
+
+            if let Some(color) = label_style.color {
+                options.color = color;
+            }
+
             walk_geometry_line_strings(&geom, &mut |ls| {
-                let _ = draw_text_on_line(
-                    context,
-                    ls,
-                    &name,
-                    Some(collision),
-                    &TextOnLineOptions {
-                        flo: FontAndLayoutOptions {
-                            size: 15.0,
-                            ..Default::default()
-                        },
-                        halo_width: 2.0,
-                        ..Default::default()
-                    },
-                )?;
+                let _ = draw_text_on_line(context, ls, &name, Some(collision), &options)?;
                 cairo::Result::Ok(())
             })?;
         } else {
@@ -563,21 +570,21 @@ pub fn render_line_polygon_labels(
                 continue;
             };
 
-            // TODO: render unconditionally; currently draw_text skips on collision
-            let _ = draw_text(
-                context,
-                Some(collision),
-                &point,
-                &name,
-                &TextOptions {
-                    flo: FontAndLayoutOptions {
-                        size: 15.0,
-                        ..Default::default()
-                    },
-                    halo_width: 2.0,
+            let mut options = TextOptions {
+                flo: FontAndLayoutOptions {
+                    size,
+                    weight,
                     ..Default::default()
                 },
-            );
+                halo_width: 2.0,
+                ..Default::default()
+            };
+
+            if let Some(color) = label_style.color {
+                options.color = color;
+            }
+
+            let _ = draw_text(context, Some(collision), &point, &name, &options);
         }
     }
 
@@ -590,8 +597,13 @@ pub fn render_point_labels(
     features: &[Feature],
     collision: &mut Collision,
     marker_width: f64,
+    label_style: LabelStyle,
 ) -> LayerRenderResult {
     let proj = make_proj();
+
+    let size = label_style.size.unwrap_or(15.0);
+    let weight = label_style.weight.unwrap_or(Weight::BOLD);
+    let color = label_style.color.unwrap_or((0.0, 0.0, 1.0));
 
     for feature in features {
         let mut geom: Geometry = Geometry::try_from(feature.clone())?;
@@ -630,7 +642,6 @@ pub fn render_point_labels(
             (0.0, half_height + 4.0),
         ];
 
-        // TODO: render unconditionally; currently draw_text skips on collision
         let _ = draw_text(
             context,
             Some(collision),
@@ -638,9 +649,11 @@ pub fn render_point_labels(
             &name,
             &TextOptions {
                 flo: FontAndLayoutOptions {
-                    size: 15.0,
+                    size,
+                    weight,
                     ..Default::default()
                 },
+                color,
                 halo_width: 2.0,
                 valign_by_placement: true,
                 placements: &placements,

@@ -1,8 +1,8 @@
 use crate::{
     app::server::app_state::AppState,
     render::{
-        CustomLayer, CustomLayerOrder, Decorations, Glow, ImageFormat, RenderLayer, RenderRequest,
-        RenderWorkerPool, bbox_size_in_pixels,
+        CustomLayer, CustomLayerOrder, Decorations, Glow, ImageFormat, LabelStyle, RenderLayer,
+        RenderRequest, RenderWorkerPool, bbox_size_in_pixels,
     },
 };
 use axum::{
@@ -11,6 +11,7 @@ use axum::{
     http::{Response, StatusCode},
 };
 use colorsys::{Rgb, RgbRatio};
+use cosmic_text::Weight;
 use geo::Rect;
 use geojson::{Feature, GeoJson};
 use rand::TryRng;
@@ -147,9 +148,10 @@ pub struct ExportFeatures {
 }
 
 /// A custom `GeoJSON` overlay plus its rendering options. The options
-/// (`feature_collection_order`, `marker_width`, `glow_color`, `glow_width`) only
-/// make sense when there are features to draw, so they live here alongside the
-/// (mandatory) `feature_collection` rather than on [`ExportFeatures`].
+/// (`feature_collection_order`, `marker_width`, `glow_color`, `glow_width`,
+/// `label_color`, `label_weight`, `label_size`) only make sense when there are
+/// features to draw, so they live here alongside the (mandatory)
+/// `feature_collection` rather than on [`ExportFeatures`].
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportCustomLayer {
@@ -168,6 +170,17 @@ pub struct ExportCustomLayer {
     /// Width (in tile/CSS pixels) the glow halo extends on each side. Defaults to
     /// [`DEFAULT_GLOW_WIDTH`]. Only used when `glow_color` is set.
     glow_width: Option<f64>,
+    /// Text color for feature `title` labels, as a CSS color string (e.g.
+    /// `#0000ff` or `rgb(0,0,255)`). Omitted/empty keeps the per-kind default
+    /// (blue for point labels, black for line/polygon labels).
+    label_color: Option<String>,
+    /// Font weight for feature `title` labels (e.g. `400` normal, `700` bold).
+    /// Omitted keeps the per-kind default (bold for point labels, normal for
+    /// line/polygon labels).
+    label_weight: Option<u16>,
+    /// Font size (in tile/CSS pixels) for feature `title` labels. Omitted keeps
+    /// the default ([`DEFAULT_LABEL_SIZE`]).
+    label_size: Option<f64>,
 }
 
 /// Default rendered width of a drawing-point marker, matching the ~30 px in-app
@@ -176,6 +189,10 @@ const DEFAULT_MARKER_WIDTH: f64 = 30.0;
 
 /// Default per-side glow halo width.
 const DEFAULT_GLOW_WIDTH: f64 = 2.0;
+
+/// Default font size (tile/CSS px) for custom-feature labels, matching the
+/// in-app overlay label size.
+const DEFAULT_LABEL_SIZE: f64 = 15.0;
 
 #[derive(Deserialize)]
 pub struct TokenQuery {
@@ -263,6 +280,12 @@ pub async fn post(
             return bad_request();
         }
 
+        if let Some(label_size) = custom_layer.label_size
+            && !(label_size.is_finite() && label_size > 0.0)
+        {
+            return bad_request();
+        }
+
         let glow_color = match custom_layer
             .glow_color
             .as_deref()
@@ -279,6 +302,25 @@ pub async fn post(
             None => None,
         };
 
+        let label_color = match custom_layer
+            .label_color
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            Some(s) => match parse_glow(s) {
+                Some(color) => Some((color.r(), color.g(), color.b())),
+                None => return bad_request(),
+            },
+            None => None,
+        };
+
+        let label_style = LabelStyle {
+            color: label_color,
+            weight: custom_layer.label_weight.map(Weight),
+            size: custom_layer.label_size.or(Some(DEFAULT_LABEL_SIZE)),
+        };
+
         match serde_json::from_value::<GeoJson>(custom_layer.feature_collection.clone())
             .map_err(|_err| "error parsing geojson")
             .and_then(geojson_to_features)
@@ -290,6 +332,7 @@ pub async fn post(
                     .unwrap_or(CustomLayerOrder::Topmost),
                 marker_width,
                 glow_color,
+                label_style,
             }),
             Err(_) => return bad_request(),
         }

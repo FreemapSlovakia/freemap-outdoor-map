@@ -240,8 +240,6 @@ pub fn render(
         context.scale(scale, scale);
     }
 
-    let collision = &mut Collision::new(Some(context));
-
     let zoom = request.zoom;
 
     let to_render = &request.to_render;
@@ -649,6 +647,7 @@ pub fn render(
         order: CustomLayerOrder::Natural,
         marker_width,
         glow_color,
+        ..
     }) = &request.custom_layer
     {
         if let Some(glow) = glow_color {
@@ -741,10 +740,12 @@ pub fn render(
         features,
         order: CustomLayerOrder::Natural,
         marker_width,
+        label_style,
         ..
     }) = &request.custom_layer
     {
         let marker_width = *marker_width;
+        let label_style = *label_style;
 
         {
             let ctx = ctx.clone();
@@ -760,10 +761,19 @@ pub fn render(
             });
         }
 
-        prefetcher.push(|params| {
-            layers::custom::render_line_polygon_labels(&ctx, context, features, params.collision)
+        {
+            let ctx = ctx.clone();
+            prefetcher.push(move |params| {
+                layers::custom::render_line_polygon_labels(
+                    &ctx,
+                    context,
+                    features,
+                    params.collision,
+                    label_style,
+                )
                 .with_layer("custom_line_polygon_labels")
-        });
+            });
+        }
 
         {
             let ctx = ctx.clone();
@@ -774,6 +784,7 @@ pub fn render(
                     features,
                     params.collision,
                     marker_width,
+                    label_style,
                 )
                 .with_layer("custom_point_labels")
             });
@@ -1016,9 +1027,11 @@ pub fn render(
         order: CustomLayerOrder::Topmost,
         marker_width,
         glow_color,
+        label_style,
     }) = &request.custom_layer
     {
         let marker_width = *marker_width;
+        let label_style = *label_style;
 
         if let Some(glow) = glow_color {
             let color = (
@@ -1049,37 +1062,47 @@ pub fn render(
 
         {
             let ctx = ctx.clone();
-            prefetcher.push(move |params| {
+            prefetcher.push(move |_params| {
+                // Topmost custom markers/labels sit above all lower layers, so
+                // they collide only among themselves: a private collision set
+                // (not the shared `params.collision`) means labels avoid the
+                // custom markers and each other while ignoring everything below.
+                let mut collision = Collision::new(Some(context));
+
                 layers::custom::render_points(
                     &ctx,
                     context,
                     features,
-                    params.collision,
+                    &mut collision,
                     marker_width,
                 )
-                .with_layer("custom_points")
-            });
-        }
+                .with_layer("custom_points")?;
 
-        prefetcher.push(|params| {
-            layers::custom::render_line_polygon_labels(&ctx, context, features, params.collision)
-                .with_layer("custom_line_polygon_labels")
-        });
+                layers::custom::render_line_polygon_labels(
+                    &ctx,
+                    context,
+                    features,
+                    &mut collision,
+                    label_style,
+                )
+                .with_layer("custom_line_polygon_labels")?;
 
-        {
-            let ctx = ctx.clone();
-            prefetcher.push(move |params| {
                 layers::custom::render_point_labels(
                     &ctx,
                     context,
                     features,
-                    params.collision,
+                    &mut collision,
                     marker_width,
+                    label_style,
                 )
-                .with_layer("custom_point_labels")
+                .with_layer("custom_point_labels")?;
+
+                Ok(())
             });
         }
     }
+
+    let collision = &mut Collision::new(Some(context));
 
     prefetcher.run(svg_repo, shading.datasets.as_deref_mut(), collision)?;
 
