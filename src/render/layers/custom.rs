@@ -115,7 +115,7 @@ fn parse_line_polygon_props(feature: &Feature) -> LinePolygonProps {
         }
 
         if let Some(Value::Array(arr)) = properties.get("stroke-dasharray") {
-            dash_array = Some(arr.iter().filter_map(|v| v.as_f64()).collect());
+            dash_array = Some(arr.iter().filter_map(serde_json::Value::as_f64).collect());
         }
     }
 

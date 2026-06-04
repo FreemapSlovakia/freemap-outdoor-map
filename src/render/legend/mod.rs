@@ -120,7 +120,7 @@ pub struct TagsSetBuilder<'a> {
     parent: LegendItemBuilder<'a>,
 }
 
-impl<'a> TagsSetBuilder<'a> {
+impl TagsSetBuilder<'_> {
     fn add_tags(mut self, cb: impl FnOnce(TagsBuilder) -> TagsBuilder) -> Self {
         let tb = cb(TagsBuilder {
             tags: IndexMap::new(),
@@ -165,9 +165,7 @@ impl PropsBuilder {
 static MAPPING_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 pub fn set_mapping_path(path: PathBuf) {
-    if MAPPING_PATH.set(path).is_err() {
-        panic!("mapping path already set");
-    }
+    assert!(!MAPPING_PATH.set(path).is_err(), "mapping path already set");
 }
 
 pub fn mapping_path() -> &'static PathBuf {

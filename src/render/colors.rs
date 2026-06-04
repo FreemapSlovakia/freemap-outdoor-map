@@ -57,9 +57,7 @@ const fn hue_to_rgb(p: i64, q: i64, mut t: i64) -> i64 {
 const fn parse_color(color: &str) -> Color {
     let bytes = color.as_bytes();
 
-    if bytes.is_empty() {
-        panic!("empty color");
-    }
+    assert!(!bytes.is_empty(), "empty color");
     const INV_255: f64 = 1.0 / 255.0;
 
     #[inline]
@@ -77,17 +75,13 @@ const fn parse_color(color: &str) -> Color {
 
     #[inline]
     const fn expect(bytes: &[u8], i: usize, c: u8) -> usize {
-        if i >= bytes.len() || bytes[i] != c {
-            panic!("invalid color");
-        }
+        assert!(!(i >= bytes.len() || bytes[i] != c), "invalid color");
         i + 1
     }
 
     #[inline]
     const fn parse_uint(bytes: &[u8], mut i: usize) -> (i64, usize) {
-        if i >= bytes.len() || !is_digit(bytes[i]) {
-            panic!("invalid number");
-        }
+        assert!(!(i >= bytes.len() || !is_digit(bytes[i])), "invalid number");
 
         let mut v: i64 = 0;
 
@@ -110,9 +104,7 @@ const fn parse_color(color: &str) -> Color {
     }
 
     if bytes[0] == b'#' {
-        if bytes.len() != 7 {
-            panic!("invalid hex length");
-        }
+        assert!(bytes.len() == 7, "invalid hex length");
         let r = (hex(bytes[1]) << 4) | hex(bytes[2]);
         let g = (hex(bytes[3]) << 4) | hex(bytes[4]);
         let b = (hex(bytes[5]) << 4) | hex(bytes[6]);
@@ -139,9 +131,7 @@ const fn parse_color(color: &str) -> Color {
         i = expect(bytes, j, b'%');
         i = skip_spaces(bytes, i);
         i = expect(bytes, i, b')');
-        if i != bytes.len() {
-            panic!("trailing characters");
-        }
+        assert!(i == bytes.len(), "trailing characters");
         return hsl_to_rgb(h as u16, s as u8, l as u8);
     }
 
@@ -163,9 +153,7 @@ const fn parse_color(color: &str) -> Color {
         let (b, j) = parse_uint(bytes, i);
         i = skip_spaces(bytes, j);
         i = expect(bytes, i, b')');
-        if i != bytes.len() {
-            panic!("trailing characters");
-        }
+        assert!(i == bytes.len(), "trailing characters");
         return (r as f64 * INV_255, g as f64 * INV_255, b as f64 * INV_255);
     }
 

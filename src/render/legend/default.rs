@@ -46,7 +46,7 @@ pub(super) fn build_legend_items(for_taginfo: bool) -> Vec<LegendItem<'static>> 
             for_taginfo,
         )
         .add_tag_set(|mut ts| {
-            for typ in types.iter() {
+            for typ in *types {
                 ts = ts.add_tags(|tags| tags.add("waterway", typ));
             }
             ts

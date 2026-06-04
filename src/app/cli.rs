@@ -109,7 +109,7 @@ pub struct Cli {
     #[arg(long, env = "MAPRENDER_WORKER_COUNT")]
     pub worker_count: usize,
 
-    /// Database connection string (e.g. postgres://user:pass@host/dbname).
+    /// Database connection string (e.g. <postgres://user:pass@host/dbname>).
     #[arg(long, env = "MAPRENDER_DATABASE_URL")]
     pub database_url: String,
 

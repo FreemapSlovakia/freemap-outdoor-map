@@ -163,7 +163,7 @@ pub async fn post(
 
     let file_path = std::env::temp_dir().join(&filename);
 
-    let mut render = state.default_render.to_owned();
+    let mut render = state.default_render.clone();
 
     if let Some(features) = &request.features {
         if let Some(shading) = features.shading {
@@ -258,7 +258,7 @@ pub async fn post(
             attribution,
             // Center latitude of the original WGS84 bbox, used to correct the
             // Web-Mercator scale for the scale bar.
-            center_lat: (request.bbox[1] + request.bbox[3]) / 2.0,
+            center_lat: f64::midpoint(request.bbox[1], request.bbox[3]),
         })
     });
 
@@ -467,22 +467,18 @@ fn spawn_export_job(
     let file_path_clone = file_path.clone();
 
     let handle = tokio::spawn(async move {
-        let permit = match wait_for_permit(
+        let permit = if let Some(permit) = wait_for_permit(
             semaphore,
             poller_count_clone,
             poller_change_clone,
             abandon_grace,
         )
-        .await
-        {
-            Some(permit) => permit,
-            None => {
-                let mut guard = status_clone.lock().await;
-                *guard = ExportStatus::Done(Err(ExportError::Abandoned));
-                drop(guard);
-                notify_clone.notify_waiters();
-                return;
-            }
+        .await { permit } else {
+            let mut guard = status_clone.lock().await;
+            *guard = ExportStatus::Done(Err(ExportError::Abandoned));
+            drop(guard);
+            notify_clone.notify_waiters();
+            return;
         };
 
         let result = run_export(worker_pool, file_path_clone, request)
@@ -536,15 +532,15 @@ async fn wait_for_permit(
             }
 
             tokio::select! {
-                _ = sleep(abandon_grace) => return,
-                _ = &mut changed => continue,
+                () = sleep(abandon_grace) => return,
+                () = &mut changed => continue,
             }
         }
     };
 
     tokio::select! {
         res = semaphore.acquire_owned() => res.ok(),
-        _ = watchdog => None,
+        () = watchdog => None,
     }
 }
 

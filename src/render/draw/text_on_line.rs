@@ -260,7 +260,7 @@ fn trim_line_to_span(pts: &[Coord], cum: &[f64], span_start: f64, span_end: f64)
     }
 
     if let Some((p, _)) = position_at(pts, cum, end)
-        && trimmed.last().map(|q| *q != p).unwrap_or(true)
+        && trimmed.last().map_or(true, |q| *q != p)
     {
         trimmed.push(p);
     }
@@ -373,8 +373,7 @@ fn prepare_label_span(
     }
 
     let intersects_clip = clip_extents
-        .map(|clip| bbox_intersects_clip(&pts_use, clip, clip_padding))
-        .unwrap_or(true);
+        .map_or(true, |clip| bbox_intersects_clip(&pts_use, clip, clip_padding));
 
     let cum_use = cumulative_lengths(&pts_use);
     let total_length_use = *cum_use.last().unwrap_or(&0.0);
@@ -476,7 +475,7 @@ fn collect_clusters(text: &str, flo: &FontAndLayoutOptions) -> Vec<ClusterInfo> 
             let mut open: Option<(usize, f64)> = None;
 
             for run in buffer.layout_runs() {
-                for glyph in run.glyphs.iter() {
+                for glyph in run.glyphs {
                     let Some(font) = fs.get_font(glyph.font_id, glyph.font_weight) else {
                         continue;
                     };
@@ -572,8 +571,8 @@ fn draw_label(
         with_scale_context(|sc| {
             for (cluster, pos, angle) in placements {
                 // Rotate around the cluster's logical bbox center.
-                let cx = (cluster.logical_left + cluster.logical_right) / 2.0;
-                let cy = (cluster.logical_top + cluster.logical_bottom) / 2.0;
+                let cx = f64::midpoint(cluster.logical_left, cluster.logical_right);
+                let cy = f64::midpoint(cluster.logical_top, cluster.logical_bottom);
 
                 cr.save().ok();
                 cr.translate(pos.x, pos.y);
@@ -623,8 +622,7 @@ fn label_offsets(
 
     // Step between label starts when repeating is enabled: pack by (advance + spacing).
     let step = spacing
-        .map(|s| (label_span + s).max(label_span * 0.2))
-        .unwrap_or(total_length);
+        .map_or(total_length, |s| (label_span + s).max(label_span * 0.2));
 
     // How many full labels can we fit (repetition only if spacing is Some).
     let count = if spacing.is_some() {
@@ -917,16 +915,14 @@ pub fn draw_text_on_line(
                         .unwrap_or(tangent);
 
                 let tangent_before = position_at(&prepared.pts, &prepared.cum, span_start.max(0.0))
-                    .map(|(_, t)| t)
-                    .unwrap_or(weighted_tangent);
+                    .map_or(weighted_tangent, |(_, t)| t);
 
                 let tangent_after = position_at(
                     &prepared.pts,
                     &prepared.cum,
                     span_end.min(prepared.total_length),
                 )
-                .map(|(_, t)| t)
-                .unwrap_or(weighted_tangent);
+                .map_or(weighted_tangent, |(_, t)| t);
 
                 let mut max_bend = angle_between(tangent_before, tangent_after);
 
@@ -970,7 +966,7 @@ pub fn draw_text_on_line(
                 let shifted_start = span_start;
                 let shifted_end = shifted_start + eff_advance;
 
-                let logical_cx = (cluster.logical_left + cluster.logical_right) / 2.0;
+                let logical_cx = f64::midpoint(cluster.logical_left, cluster.logical_right);
                 let shifted_center = shifted_start + eff_advance / 2.0;
 
                 if shifted_end > prepared.total_length && !is_justify {
@@ -1002,7 +998,7 @@ pub fn draw_text_on_line(
                 // cluster-origin coords and shifted to be relative to that
                 // pivot.
                 let cx = logical_cx;
-                let cy = (cluster.logical_top + cluster.logical_bottom) / 2.0;
+                let cy = f64::midpoint(cluster.logical_top, cluster.logical_bottom);
                 let hw = options.halo_width;
                 let corners = [
                     (cluster.ink_left - hw - cx, cluster.ink_top - hw - cy),
@@ -1091,7 +1087,7 @@ pub fn draw_text_on_line(
     if repeat.defer_collision
         && let Some(col) = collision
     {
-        for bb in new_collision_bboxes.into_iter() {
+        for bb in new_collision_bboxes {
             let _ = col.add(bb);
         }
     }

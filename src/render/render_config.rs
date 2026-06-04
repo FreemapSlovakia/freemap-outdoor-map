@@ -7,7 +7,7 @@ use std::{
 
 #[derive(Clone, Debug)]
 pub struct HillshadingEntry {
-    /// Pre-leaked country code, suitable for `&'static str` APIs (e.g. HashMap keys).
+    /// Pre-leaked country code, suitable for `&'static str` APIs (e.g. `HashMap` keys).
     pub country: &'static str,
     /// Pre-leaked better-country codes.
     pub better: Vec<&'static str>,
@@ -43,7 +43,7 @@ impl FromStr for HillshadingHierarchy {
                     let country = c.trim().to_string();
                     let better: Vec<String> = b.split(',').map(|x| x.trim().to_string()).collect();
 
-                    if better.iter().any(|x| x.is_empty()) {
+                    if better.iter().any(std::string::String::is_empty) {
                         return Err(format!(
                             "empty better-country code in hillshading-hierarchy entry '{raw}'"
                         ));

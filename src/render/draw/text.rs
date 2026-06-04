@@ -217,7 +217,7 @@ fn compute_lines(
             })
             .unwrap_or((0.0, 0.0));
 
-        for glyph in run.glyphs.iter() {
+        for glyph in run.glyphs {
             let Some(font) = font_system.get_font(glyph.font_id, glyph.font_weight) else {
                 continue;
             };
@@ -397,7 +397,7 @@ fn place_and_draw(
         for run in buffer.layout_runs() {
             let line_x = (layout_width - run.line_w as f64) / 2.0;
 
-            for glyph in run.glyphs.iter() {
+            for glyph in run.glyphs {
                 let Some(font) = font_system.get_font(glyph.font_id, glyph.font_weight) else {
                     continue;
                 };

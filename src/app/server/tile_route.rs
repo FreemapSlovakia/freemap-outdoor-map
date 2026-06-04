@@ -215,7 +215,7 @@ pub async fn serve_tile(
         coord.zoom,
         scale,
         ImageFormat::Jpeg,
-        variant.render.to_owned(),
+        variant.render.clone(),
         variant.coverage_geometry.clone(),
     );
 

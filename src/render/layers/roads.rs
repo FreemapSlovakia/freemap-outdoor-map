@@ -604,7 +604,7 @@ pub fn render(
             }
 
             _ => (),
-        };
+        }
 
         let oneway = row.get_i16("oneway")?;
 

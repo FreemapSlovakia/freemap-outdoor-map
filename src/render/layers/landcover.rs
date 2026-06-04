@@ -1,7 +1,7 @@
 use super::landcover_z_order::build_landcover_z_order_case;
 use crate::render::{
     Feature,
-    colors::{self, Color, ContextExt, *},
+    colors::{self, Color, ContextExt, FOREST, GRASSY, SCRUB, HEATH, GLACIER, SCREE, FARMLAND, FARMYARD, BLACK, BEACH, ORCHARD, QUARRY, RESIDENTIAL, COMMERCIAL, INDUSTRIAL, BROWNFIELD, LANDFILL, DAM, HOSPITAL, ALLOTMENTS, PITCH, PITCH_STROKE, COLLEGE, NONE, PARKING, PARKING_STROKE, RECREATION_GROUND, SILO, SILO_STROKE, TREE},
     ctx::Ctx,
     draw::path_geom::{path_geometry, path_line_string_with_offset, walk_geometry_line_strings},
     layer_render_error::LayerRenderResult,
@@ -154,7 +154,7 @@ pub fn render(
                 context.push_group();
             }
 
-            for paint in paints.iter() {
+            for paint in *paints {
                 match paint {
                     Paint::Fill(color) => {
                         context.set_source_color(*color);

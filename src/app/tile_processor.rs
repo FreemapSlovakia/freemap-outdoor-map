@@ -37,7 +37,7 @@ fn concatenate_merge(
     merged_bytes: &[u8],      // the new bytes being merged in
 ) -> Option<Vec<u8>> {
     // set the new value, return None to delete
-    let mut ret = old_value.map(|ov| ov.to_vec()).unwrap_or_default();
+    let mut ret = old_value.map(<[u8]>::to_vec).unwrap_or_default();
 
     ret.extend_from_slice(merged_bytes);
 
@@ -153,7 +153,7 @@ impl TileProcessor {
             }
 
             if let Err(err) = db.apply_batch(batch) {
-                eprintln!("failed to apply DB remove batch for {}: {err}", coord);
+                eprintln!("failed to apply DB remove batch for {coord}: {err}");
             }
         }
     }
@@ -202,7 +202,7 @@ impl TileProcessor {
         let key: Vec<u8> = coord.into();
 
         if let Err(err) = db.merge(key, [scale.round() as u8; 1]) {
-            eprint!("error merging tile {coord}: {err}")
+            eprint!("error merging tile {coord}: {err}");
         }
     }
 
@@ -242,7 +242,7 @@ impl TileProcessor {
             Ok(Some(scales)) => scales,
             Ok(None) => return,
             Err(err) => {
-                eprintln!("failed to get {} from DB: {err}", coord);
+                eprintln!("failed to get {coord} from DB: {err}");
                 return;
             }
         };

@@ -37,7 +37,7 @@ pub fn roads(for_taginfo: bool) -> Vec<LegendItem<'static>> {
                     ts = ts
                         .add_tags(|tags| tags.add("highway", "platform"))
                         .add_tags(|tags| tags.add("railway", "platform"))
-                        .add_tags(|tags| tags.add("public_transport", "platform"))
+                        .add_tags(|tags| tags.add("public_transport", "platform"));
                 } else {
                     ts = ts.add_tags(|tags| tags.add("highway", typ));
                 }

@@ -10,7 +10,7 @@ use std::{
 use tokio::sync::mpsc;
 
 const TILE_PROCESSING_QUEUE: usize = 4096;
-const INVALIDATION_REGISTER_TTL: Duration = Duration::from_secs(60);
+const INVALIDATION_REGISTER_TTL: Duration = Duration::from_mins(1);
 const INVALIDATION_REGISTER_PRUNE_INTERVAL: Duration = Duration::from_secs(30);
 
 #[derive(Debug, thiserror::Error)]

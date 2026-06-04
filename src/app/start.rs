@@ -280,12 +280,9 @@ pub fn load_geometry_from_geojson(path: &Path) -> Result<Geometry, String> {
 
     let failed = Cell::new(false);
 
-    geometry.map_coords_in_place(|coord: Coord| match proj.convert((coord.x, coord.y)) {
-        Ok((x, y)) => Coord { x, y },
-        Err(_) => {
-            failed.set(true);
-            coord
-        }
+    geometry.map_coords_in_place(|coord: Coord| if let Ok((x, y)) = proj.convert((coord.x, coord.y)) { Coord { x, y } } else {
+        failed.set(true);
+        coord
     });
 
     if failed.get() {

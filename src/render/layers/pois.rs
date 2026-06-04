@@ -107,7 +107,7 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
 
     let university_replacements = build_replacements(&[(r"[V]ysoká [Šš]kola", "VŠ")]);
 
-    use Category::*;
+    use Category::{Poi, NaturalPoi, Water, Accommodation, Institution, Railway, Sport, GastroPoi, Other};
 
     #[rustfmt::skip]
     let entries = vec![
@@ -435,7 +435,7 @@ static OFFSETS: LazyLock<[(f64, f64); 33]> = LazyLock::new(|| {
     let mut offsets = [(0.0, 0.0); 33];
     let mut idx = 1;
 
-    for &r in RADII.iter() {
+    for &r in &RADII {
         for pos in 0..8 {
             offsets[idx] = offset_at(r, pos);
             idx += 1;
@@ -828,12 +828,12 @@ pub fn render_icons(
                     Some("yes" | "treated") => {
                         key.push_str("|drinkable");
                         names.push("drinkable_spring".into());
-                        stylesheet.push_str(r#"#drinkable { fill: #00ff00 } "#);
+                        stylesheet.push_str(r"#drinkable { fill: #00ff00 } ");
                     }
                     Some("no") => {
                         key.push_str("|not_drinkable");
                         names.push("drinkable_spring".into());
-                        stylesheet.push_str(r#"#drinkable { fill: #ff0000 } "#);
+                        stylesheet.push_str(r"#drinkable { fill: #ff0000 } ");
                     }
                     _ => {}
                 }
@@ -967,7 +967,7 @@ pub fn render_labels(
                 context,
                 Some(collision),
                 &point,
-                format!("{}\n{}", name, ele).trim(),
+                format!("{name}\n{ele}").trim(),
                 &text_options,
             )?
         } else {

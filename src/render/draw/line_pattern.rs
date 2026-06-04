@@ -194,13 +194,13 @@ pub fn draw_line_pattern_scaled(
             if !bevel {
                 extra_corner1 = Some(if cp < 0.0 {
                     Coord {
-                        x: (corner1.x + prev_corner4.x) / 2.0,
-                        y: (corner1.y + prev_corner4.y) / 2.0,
+                        x: f64::midpoint(corner1.x, prev_corner4.x),
+                        y: f64::midpoint(corner1.y, prev_corner4.y),
                     }
                 } else {
                     Coord {
-                        x: (corner2.x + prev_corner3.x) / 2.0,
-                        y: (corner2.y + prev_corner3.y) / 2.0,
+                        x: f64::midpoint(corner2.x, prev_corner3.x),
+                        y: f64::midpoint(corner2.y, prev_corner3.y),
                     }
                 });
             }
@@ -251,13 +251,13 @@ pub fn draw_line_pattern_scaled(
             if !bevel {
                 extra_corner2 = Some(if cp < 0.0 {
                     Coord {
-                        x: (corner4.x + next_corner1.x) / 2.0,
-                        y: (corner4.y + next_corner1.y) / 2.0,
+                        x: f64::midpoint(corner4.x, next_corner1.x),
+                        y: f64::midpoint(corner4.y, next_corner1.y),
                     }
                 } else {
                     Coord {
-                        x: (corner3.x + next_corner2.x) / 2.0,
-                        y: (corner3.y + next_corner2.y) / 2.0,
+                        x: f64::midpoint(corner3.x, next_corner2.x),
+                        y: f64::midpoint(corner3.y, next_corner2.y),
                     }
                 });
             }

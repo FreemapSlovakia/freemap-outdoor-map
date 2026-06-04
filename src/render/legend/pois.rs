@@ -126,7 +126,7 @@ pub fn pois(
                 if visual_key == "spring" {
                     ts = ts
                         .add_tags(|t| t.add("natural", "geyser"))
-                        .add_tags(|t| t.add("man_made", "spring_box"))
+                        .add_tags(|t| t.add("man_made", "spring_box"));
                 }
 
                 ts
@@ -236,7 +236,7 @@ fn build_poi_tags(
 
         match typ {
             s if typ.starts_with("tower_") || typ.starts_with("mast_") => {
-                let (a, b) = s.split_once("_").unwrap();
+                let (a, b) = s.split_once('_').unwrap();
                 tags.push(("man_made", a));
                 tags.push(("tower:type", b));
             }
@@ -275,7 +275,7 @@ fn build_poi_tags(
     build_tags_map(tags)
 }
 
-impl<'a> LegendItemBuilder<'a> {
+impl LegendItemBuilder<'_> {
     fn add_poi(
         self,
         typ: &'static str,

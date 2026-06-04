@@ -58,7 +58,7 @@ fn format_vec(vec: &[&str]) -> String {
         "'_x_'".to_string()
     } else {
         vec.iter()
-            .map(|&item| format!("'{}'", item))
+            .map(|&item| format!("'{item}'"))
             .collect::<Vec<String>>()
             .join(",")
     }
@@ -326,7 +326,7 @@ pub fn render_marking(
 
         let df = 1.25;
 
-        for color in COLORS.iter() {
+        for color in &COLORS {
             if to_render.contains(&RenderLayer::RoutesHorse) {
                 let off = row.get_i32(&format!("r_{}", color.0))?;
 

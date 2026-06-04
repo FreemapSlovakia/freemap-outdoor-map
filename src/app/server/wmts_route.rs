@@ -74,7 +74,7 @@ pub async fn service_handler(
 }
 
 fn get_param<'a>(params: &'a HashMap<String, String>, key: &str) -> Option<&'a str> {
-    params.get(key).map(|value| value.as_str())
+    params.get(key).map(std::string::String::as_str)
 }
 
 fn bad_request() -> Response<Body> {

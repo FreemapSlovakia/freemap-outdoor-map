@@ -110,7 +110,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
             let _drawn = draw_text_on_line(
                 context,
                 &geom,
-                &format!("{}", height),
+                &format!("{height}"),
                 None,
                 &TextOnLineOptions {
                     flo: FontAndLayoutOptions::default(),

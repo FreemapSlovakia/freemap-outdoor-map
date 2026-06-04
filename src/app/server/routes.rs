@@ -64,7 +64,7 @@ pub async fn start_server(
 
     let default_render = tile_variants
         .first()
-        .map(|variant| variant.render.to_owned())
+        .map(|variant| variant.render.clone())
         .unwrap_or_default();
 
     let app_state = AppState {

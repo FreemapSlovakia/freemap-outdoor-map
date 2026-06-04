@@ -155,8 +155,8 @@ fn push_mapping_entries(
         for value in values {
             entries.push(MappingEntry {
                 table: table.to_string(),
-                key: key.to_string(),
-                value: value.to_string(),
+                key: key.clone(),
+                value: value.clone(),
                 kind,
             });
         }

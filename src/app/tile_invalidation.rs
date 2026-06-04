@@ -179,8 +179,7 @@ fn read_with_retry(path: &Path) -> std::io::Result<String> {
         match fs::read_to_string(path) {
             Ok(value) => {
                 let size_after = fs::metadata(path)
-                    .map(|meta| meta.len())
-                    .unwrap_or(size_before);
+                    .map_or(size_before, |meta| meta.len());
                 let stable = size_before == size_after;
                 let complete = value.is_empty() || value.ends_with('\n');
                 if stable && complete {

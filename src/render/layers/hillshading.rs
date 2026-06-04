@@ -96,9 +96,7 @@ fn read_rgba_from_gdal(
 
     let mut band_buffer = vec![0u8; resampled_height * resampled_width];
 
-    if dataset.raster_count() != 4 {
-        panic!("unsupported band count");
-    }
+    assert!(dataset.raster_count() == 4, "unsupported band count");
 
     if matches!(mode, Mode::Shading) {
         for band_index in 0..3 {

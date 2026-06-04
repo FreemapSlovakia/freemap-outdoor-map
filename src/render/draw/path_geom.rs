@@ -58,7 +58,7 @@ pub fn path_polygons(context: &Context, geom: &Geometry) {
 
         Ok(())
     })
-    .expect("ok")
+    .expect("ok");
 }
 
 pub fn walk_geometry_polygons<F, E>(geom: &Geometry, dl: &mut F) -> Result<(), E>
@@ -149,7 +149,7 @@ pub fn path_line_string_with_offset(context: &Context, line_string: &LineString,
 
     for p in line_string
         .into_iter()
-        .skip(if polyline.is_closed { 1 } else { 0 })
+        .skip(usize::from(polyline.is_closed))
     {
         polyline.add_vertex(PlineVertex::new(p.x, p.y, 0.0));
     }
@@ -177,8 +177,8 @@ pub fn path_line_string_with_offset(context: &Context, line_string: &LineString,
                     let radius = dist / (2.0 * (theta / 2.0).sin());
 
                     // Calculate center of the arc
-                    let mx = (p1.0 + p2.0) / 2.0;
-                    let my = (p1.1 + p2.1) / 2.0;
+                    let mx = f64::midpoint(p1.0, p2.0);
+                    let my = f64::midpoint(p1.1, p2.1);
                     let l = (dist / 2.0).mul_add(-(dist / 2.0), radius.powi(2)).sqrt();
                     let direction = if prev_bulge > 0.0 { 1.0 } else { -1.0 };
                     let ox = mx - direction * l * (p2.1 - p1.1) / dist;

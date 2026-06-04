@@ -67,12 +67,10 @@ impl SvgRepo {
         let svg_map = &mut self.svg_map;
 
         if !svg_map.contains_key(key) {
-            let options = get_options
-                .map(|get_options| get_options())
-                .unwrap_or_else(|| Options {
+            let options = get_options.map_or_else(|| Options {
                     names: vec![key.to_string()],
                     ..Default::default()
-                });
+                }, |get_options| get_options());
 
             let mut main_svg: Option<Element> = None;
 

@@ -83,7 +83,7 @@ enum PendingLayer<'a> {
         jh: JoinHandle<Result<Vec<Feature>, LayerRenderError>>,
         render_fn: LayerRenderFn<'a>,
     },
-    /// Render-only step (push_group, pop_group, blur_edges, custom, …)
+    /// Render-only step (`push_group`, `pop_group`, `blur_edges`, custom, …)
     Push(PushFn<'a>),
     /// Legend path: features pre-built, render directly.
     Legend {

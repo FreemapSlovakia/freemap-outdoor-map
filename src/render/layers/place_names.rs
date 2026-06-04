@@ -116,7 +116,7 @@ pub fn render(
         placements.push((0.0, 0.0));
 
         for i in 1..6 {
-            for p in positions.iter() {
+            for p in &positions {
                 placements.push((2.0 * size * p.0 * i as f64, 2.0 * size * p.1 * i as f64));
             }
         }

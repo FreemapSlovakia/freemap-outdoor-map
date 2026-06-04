@@ -15,9 +15,7 @@ pub fn path_smooth_bezier_spline(context: &Context, line_string: &LineString, sm
 
     let mut len = points.len();
 
-    if len < 2 {
-        panic!("At least two points are required");
-    }
+    assert!(len >= 2, "At least two points are required");
 
     let off = if points[0] == points[len - 1] {
         points.pop();
@@ -50,8 +48,8 @@ pub fn path_smooth_bezier_spline(context: &Context, line_string: &LineString, sm
         let Coord { x: x2, y: y2 } = points[(i + 1) % len];
 
         let len2 = (x2 - x1).hypot(y2 - y1);
-        let xc2 = (x1 + x2) / 2.0;
-        let yc2 = (y1 + y2) / 2.0;
+        let xc2 = f64::midpoint(x1, x2);
+        let yc2 = f64::midpoint(y1, y2);
 
         let ctrl1 = if off == 0 && i == 0 {
             Coord { x: x1, y: y1 }
@@ -59,8 +57,8 @@ pub fn path_smooth_bezier_spline(context: &Context, line_string: &LineString, sm
             let Coord { x: x0, y: y0 } = points[(i - 1) % len];
             let len1 = (x1 - x0).hypot(y1 - y0);
             let k1 = len1 / (len1 + len2);
-            let xc1 = (x0 + x1) / 2.0;
-            let yc1 = (y0 + y1) / 2.0;
+            let xc1 = f64::midpoint(x0, x1);
+            let yc1 = f64::midpoint(y0, y1);
             let xm1 = (xc2 - xc1).mul_add(k1, xc1);
             let ym1 = (yc2 - yc1).mul_add(k1, yc1);
 
@@ -76,8 +74,8 @@ pub fn path_smooth_bezier_spline(context: &Context, line_string: &LineString, sm
             let Coord { x: x3, y: y3 } = points[(i + 2) % len];
             let len3 = (x3 - x2).hypot(y3 - y2);
             let k2 = len2 / (len2 + len3);
-            let xc3 = (x2 + x3) / 2.0;
-            let yc3 = (y2 + y3) / 2.0;
+            let xc3 = f64::midpoint(x2, x3);
+            let yc3 = f64::midpoint(y2, y3);
             let xm2 = (xc3 - xc2).mul_add(k2, xc2);
             let ym2 = (yc3 - yc2).mul_add(k2, yc2);
 
