@@ -22,6 +22,10 @@ items_after_statements = "allow"
 needless_pass_by_value = "allow"
 # Forbid context-free `unwrap`; use `expect` to document the invariant instead.
 unwrap_used = "warn"
+# Guardrails: keep debug macros and placeholders out of commits.
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
 
 [dependencies]
 image = { version = "0.25.10", default-features = false, features = [
