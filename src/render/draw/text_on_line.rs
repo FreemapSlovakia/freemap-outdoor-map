@@ -697,7 +697,7 @@ struct PreparedLine {
     intersects_clip: bool,
 }
 
-fn repeat_params(
+const fn repeat_params(
     spacing: Option<f64>,
     total_advance: f64,
     ink_span: f64,

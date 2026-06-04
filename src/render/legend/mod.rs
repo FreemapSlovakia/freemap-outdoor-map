@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::sync::OnceLock;
 
-#[derive(Deserialize, PartialEq, Clone, Copy)]
+#[derive(Deserialize, PartialEq, Eq, Clone, Copy)]
 #[serde(rename_all = "kebab-case")]
 pub enum LegendMode {
     Normal,
@@ -80,7 +80,7 @@ impl<'a> LegendItemBuilder<'a> {
     fn add_tag_set(
         self,
         cb: impl FnOnce(TagsSetBuilder<'a>) -> TagsSetBuilder<'a>,
-    ) -> LegendItemBuilder<'a> {
+    ) -> Self {
         let tsb = cb(TagsSetBuilder { parent: self });
 
         tsb.parent
@@ -121,7 +121,7 @@ pub struct TagsSetBuilder<'a> {
 }
 
 impl<'a> TagsSetBuilder<'a> {
-    fn add_tags(mut self, cb: impl FnOnce(TagsBuilder) -> TagsBuilder) -> TagsSetBuilder<'a> {
+    fn add_tags(mut self, cb: impl FnOnce(TagsBuilder) -> TagsBuilder) -> Self {
         let tb = cb(TagsBuilder {
             tags: IndexMap::new(),
         });

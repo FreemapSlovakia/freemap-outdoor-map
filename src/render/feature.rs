@@ -101,7 +101,7 @@ impl WrongTypeError {
     }
 }
 
-fn legend_value_type(value: &LegendValue) -> &'static str {
+const fn legend_value_type(value: &LegendValue) -> &'static str {
     match value {
         LegendValue::String(_) => "String",
         LegendValue::Bool(_) => "Bool",
@@ -332,7 +332,7 @@ impl Feature {
 
 impl From<Row> for Feature {
     fn from(value: Row) -> Self {
-        Feature::Row(value)
+        Self::Row(value)
     }
 }
 
@@ -349,7 +349,7 @@ pub enum GeomError {
     },
 }
 
-fn geometry_type_name(geometry: &EwkbGeometry<postgis::ewkb::Point>) -> &'static str {
+const fn geometry_type_name(geometry: &EwkbGeometry<postgis::ewkb::Point>) -> &'static str {
     match geometry {
         EwkbGeometry::Point(_) => "Point",
         EwkbGeometry::LineString(_) => "LineString",

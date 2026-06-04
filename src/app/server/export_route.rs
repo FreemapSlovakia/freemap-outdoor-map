@@ -72,7 +72,7 @@ enum ExportError {
 }
 
 impl ExportError {
-    fn status_code(&self) -> StatusCode {
+    const fn status_code(&self) -> StatusCode {
         match self {
             Self::Abandoned => StatusCode::GONE,
             Self::Render => StatusCode::INTERNAL_SERVER_ERROR,

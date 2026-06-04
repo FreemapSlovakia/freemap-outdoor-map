@@ -105,7 +105,7 @@ impl ContourCountries {
         &self.countries
     }
 
-    pub fn has_fallback(&self) -> bool {
+    pub const fn has_fallback(&self) -> bool {
         self.has_fallback
     }
 }

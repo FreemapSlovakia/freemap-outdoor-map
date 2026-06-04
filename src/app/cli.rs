@@ -6,7 +6,7 @@ use std::{collections::HashSet, net::Ipv4Addr, path::PathBuf, str::FromStr};
 pub struct TileUrlPath(String);
 
 impl TileUrlPath {
-    pub fn as_str(&self) -> &str {
+    pub const fn as_str(&self) -> &str {
         self.0.as_str()
     }
 }
@@ -37,7 +37,7 @@ impl FromStr for TileUrlPath {
 pub struct RenderGroup(HashSet<RenderLayer>);
 
 impl RenderGroup {
-    pub fn layers(&self) -> &HashSet<RenderLayer> {
+    pub const fn layers(&self) -> &HashSet<RenderLayer> {
         &self.0
     }
 }

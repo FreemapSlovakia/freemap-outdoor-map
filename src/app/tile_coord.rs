@@ -8,7 +8,7 @@ pub(crate) struct TileCoord {
 }
 
 impl TileCoord {
-    pub(crate) fn parent(self) -> Option<Self> {
+    pub(crate) const fn parent(self) -> Option<Self> {
         if self.zoom == 0 {
             return None;
         }
@@ -97,7 +97,7 @@ impl From<TileCoord> for Vec<u8> {
 
         assert!(z == 0 || t.y < (1u32 << z));
 
-        let mut out = Vec::with_capacity(z);
+        let mut out = Self::with_capacity(z);
 
         for level in 0..z {
             let bit = (z - 1 - level) as u32;

@@ -49,7 +49,7 @@ pub enum RenderError {
 }
 
 impl RenderError {
-    pub fn new(layer: &'static str, source: LayerRenderError) -> Self {
+    pub const fn new(layer: &'static str, source: LayerRenderError) -> Self {
         Self::Layer { layer, source }
     }
 }
@@ -101,7 +101,7 @@ struct Prefetcher<'a> {
 }
 
 impl<'a> Prefetcher<'a> {
-    fn new(pool: Pool, handle: Handle, ctx: Arc<Ctx>) -> Self {
+    const fn new(pool: Pool, handle: Handle, ctx: Arc<Ctx>) -> Self {
         Self {
             pool,
             handle,
@@ -276,7 +276,7 @@ pub fn render(
         None
     };
 
-    let mut prefetcher = Prefetcher::new(pool.clone(), handle.clone(), ctx.clone());
+    let mut prefetcher = Prefetcher::new(pool, handle, ctx.clone());
 
     if request.legend.is_none() {
         prefetcher.add(
@@ -790,7 +790,7 @@ pub fn render(
     }
 
     if zoom >= 10 {
-        let slot_labels = pois_to_label_slot.clone();
+        let slot_labels = pois_to_label_slot;
         let ctx = ctx.clone();
 
         prefetcher.push(move |params| {

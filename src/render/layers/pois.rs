@@ -60,7 +60,7 @@ pub struct Def {
 }
 
 impl Def {
-    pub(crate) fn is_active_at(&self, zoom: u8) -> bool {
+    pub(crate) const fn is_active_at(&self, zoom: u8) -> bool {
         self.min_zoom <= zoom && self.extra.max_zoom >= zoom
     }
 

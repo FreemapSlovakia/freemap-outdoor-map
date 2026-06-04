@@ -49,7 +49,7 @@ pub(crate) fn start_watcher(
     let handle = thread::Builder::new()
         .name("expired-tiles-watcher".to_string())
         .spawn({
-            let tx = tx.clone();
+            let tx = tx;
             move || run_watcher(watch_base.as_path(), worker, tx, rx)
         })
         .expect("spawn expired tiles watcher");

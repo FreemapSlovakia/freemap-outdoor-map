@@ -64,7 +64,7 @@ pub struct RenderRequest {
 }
 
 impl RenderRequest {
-    pub fn new(
+    pub const fn new(
         bbox: Rect<f64>,
         zoom: u8,
         scale: f64,

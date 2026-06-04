@@ -69,11 +69,11 @@ impl TileProcessor {
         })
     }
 
-    pub(crate) fn last_prune(&self) -> SystemTime {
+    pub(crate) const fn last_prune(&self) -> SystemTime {
         self.last_prune
     }
 
-    pub(crate) fn set_last_prune(&mut self, now: SystemTime) {
+    pub(crate) const fn set_last_prune(&mut self, now: SystemTime) {
         self.last_prune = now;
     }
 
