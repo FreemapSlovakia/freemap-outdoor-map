@@ -14,7 +14,7 @@ use crate::render::{
 };
 use cairo::{Context, LineCap, LineJoin, Rectangle};
 use colorsys::{Rgb, RgbRatio};
-use geo::{Geometry, InteriorPoint, Rect, Transform, Translate};
+use geo::{Geometry, InteriorPoint, Rect, Transform};
 use geojson::Feature;
 use gio::glib;
 use proj::Proj;
@@ -439,7 +439,19 @@ pub fn render_point_labels(
             .and_then(marker_svg_height)
             .map_or(32.0, |h| h / 2.0);
 
-        let point = point.translate(0.0, -(half_height + 12.0));
+        // Anchor the label by its near edge (`valign_by_placement`) instead of
+        // its center, so a multi-line label stacks away from the marker rather
+        // than growing into it (which would collide with the marker footprint
+        // and suppress the whole label). Prefer placing it above the marker;
+        // fall back to below it when the above placements collide.
+        let placements = [
+            (0.0, -half_height - 4.0),
+            (0.0, -half_height - 6.0),
+            (0.0, -half_height - 8.0),
+            (0.0, half_height),
+            (0.0, half_height + 2.0),
+            (0.0, half_height + 4.0),
+        ];
 
         // TODO: render unconditionally; currently draw_text skips on collision
         let _ = draw_text(
@@ -453,6 +465,8 @@ pub fn render_point_labels(
                     ..Default::default()
                 },
                 halo_width: 2.0,
+                valign_by_placement: true,
+                placements: &placements,
                 ..Default::default()
             },
         );
