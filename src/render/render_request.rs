@@ -62,8 +62,6 @@ pub struct LabelStyle {
 pub struct CustomLayer {
     pub features: Vec<Feature>,
     pub order: CustomLayerOrder,
-    /// Rendered width (in tile/CSS pixels) of a drawing-point marker.
-    pub marker_width: f64,
     /// Optional glow halo. `None` disables the glow entirely.
     pub glow_color: Option<Glow>,
     /// Styling overrides for feature `title` labels.

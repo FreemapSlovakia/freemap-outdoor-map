@@ -645,7 +645,6 @@ pub fn render(
     if let Some(CustomLayer {
         features,
         order: CustomLayerOrder::Natural,
-        marker_width,
         glow_color,
         ..
     }) = &request.custom_layer
@@ -658,18 +657,10 @@ pub fn render(
                 glow.color.a(),
             );
             let glow_width = glow.width;
-            let marker_width = *marker_width;
             let ctx = ctx.clone();
             prefetcher.push(move |_params| {
-                layers::custom::render_glow(
-                    &ctx,
-                    context,
-                    features,
-                    color,
-                    marker_width,
-                    glow_width,
-                )
-                .with_layer("custom_glow")
+                layers::custom::render_glow(&ctx, context, features, color, glow_width)
+                    .with_layer("custom_glow")
             });
         }
 
@@ -739,25 +730,17 @@ pub fn render(
     if let Some(CustomLayer {
         features,
         order: CustomLayerOrder::Natural,
-        marker_width,
         label_style,
         ..
     }) = &request.custom_layer
     {
-        let marker_width = *marker_width;
         let label_style = *label_style;
 
         {
             let ctx = ctx.clone();
             prefetcher.push(move |params| {
-                layers::custom::render_points(
-                    &ctx,
-                    context,
-                    features,
-                    params.collision,
-                    marker_width,
-                )
-                .with_layer("custom_points")
+                layers::custom::render_points(&ctx, context, features, params.collision)
+                    .with_layer("custom_points")
             });
         }
 
@@ -783,7 +766,6 @@ pub fn render(
                     context,
                     features,
                     params.collision,
-                    marker_width,
                     label_style,
                 )
                 .with_layer("custom_point_labels")
@@ -1025,12 +1007,11 @@ pub fn render(
     if let Some(CustomLayer {
         features,
         order: CustomLayerOrder::Topmost,
-        marker_width,
         glow_color,
         label_style,
+        ..
     }) = &request.custom_layer
     {
-        let marker_width = *marker_width;
         let label_style = *label_style;
 
         if let Some(glow) = glow_color {
@@ -1043,15 +1024,8 @@ pub fn render(
             let glow_width = glow.width;
             let ctx = ctx.clone();
             prefetcher.push(move |_params| {
-                layers::custom::render_glow(
-                    &ctx,
-                    context,
-                    features,
-                    color,
-                    marker_width,
-                    glow_width,
-                )
-                .with_layer("custom_glow")
+                layers::custom::render_glow(&ctx, context, features, color, glow_width)
+                    .with_layer("custom_glow")
             });
         }
 
@@ -1069,14 +1043,8 @@ pub fn render(
                 // custom markers and each other while ignoring everything below.
                 let mut collision = Collision::new(Some(context));
 
-                layers::custom::render_points(
-                    &ctx,
-                    context,
-                    features,
-                    &mut collision,
-                    marker_width,
-                )
-                .with_layer("custom_points")?;
+                layers::custom::render_points(&ctx, context, features, &mut collision)
+                    .with_layer("custom_points")?;
 
                 layers::custom::render_line_polygon_labels(
                     &ctx,
@@ -1092,7 +1060,6 @@ pub fn render(
                     context,
                     features,
                     &mut collision,
-                    marker_width,
                     label_style,
                 )
                 .with_layer("custom_point_labels")?;

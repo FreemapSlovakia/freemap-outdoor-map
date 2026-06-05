@@ -148,10 +148,11 @@ pub struct ExportFeatures {
 }
 
 /// A custom `GeoJSON` overlay plus its rendering options. The options
-/// (`feature_collection_order`, `marker_width`, `glow_color`, `glow_width`,
-/// `label_color`, `label_weight`, `label_size`) only make sense when there are
-/// features to draw, so they live here alongside the (mandatory)
-/// `feature_collection` rather than on [`ExportFeatures`].
+/// (`feature_collection_order`, `glow_color`, `glow_width`, `label_color`,
+/// `label_weight`, `label_size`) only make sense when there are features to
+/// draw, so they live here alongside the (mandatory) `feature_collection`
+/// rather than on [`ExportFeatures`]. Marker size is baked into each feature's
+/// `marker-svg` (drawn at its natural size), so there is no marker-width field.
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportCustomLayer {
@@ -160,9 +161,6 @@ pub struct ExportCustomLayer {
     /// Where in the layer stack to draw the overlay. Defaults to
     /// [`CustomLayerOrder::Topmost`].
     feature_collection_order: Option<CustomLayerOrder>,
-    /// Rendered width (in tile/CSS pixels) of a drawing-point marker. Defaults to
-    /// [`DEFAULT_MARKER_WIDTH`].
-    marker_width: Option<f64>,
     /// Glow halo color for the custom features, as a CSS color string. The alpha
     /// channel is the glow opacity (e.g. `#00000040` or `rgba(0,0,0,0.25)`).
     /// Omitted/empty disables the glow.
@@ -182,10 +180,6 @@ pub struct ExportCustomLayer {
     /// the default ([`DEFAULT_LABEL_SIZE`]).
     label_size: Option<f64>,
 }
-
-/// Default rendered width of a drawing-point marker, matching the ~30 px in-app
-/// marker.
-const DEFAULT_MARKER_WIDTH: f64 = 30.0;
 
 /// Default per-side glow halo width.
 const DEFAULT_GLOW_WIDTH: f64 = 2.0;
@@ -269,14 +263,9 @@ pub async fn post(
         .as_ref()
         .and_then(|features| features.custom_layer.as_ref())
     {
-        let marker_width = custom_layer.marker_width.unwrap_or(DEFAULT_MARKER_WIDTH);
         let glow_width = custom_layer.glow_width.unwrap_or(DEFAULT_GLOW_WIDTH);
 
-        if !(marker_width.is_finite()
-            && marker_width > 0.0
-            && glow_width.is_finite()
-            && glow_width >= 0.0)
-        {
+        if !(glow_width.is_finite() && glow_width >= 0.0) {
             return bad_request();
         }
 
@@ -330,7 +319,6 @@ pub async fn post(
                 order: custom_layer
                     .feature_collection_order
                     .unwrap_or(CustomLayerOrder::Topmost),
-                marker_width,
                 glow_color,
                 label_style,
             }),

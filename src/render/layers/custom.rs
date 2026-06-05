@@ -22,12 +22,12 @@ use gio::glib;
 use proj::Proj;
 use serde_json::Value;
 
-// The rendered marker width (`marker_width`) and the per-side glow width
-// (`glow_width`) are supplied per request (see `CustomLayer`/`Glow`) and threaded
-// through the functions below. All marker SVGs share viewBox width 310 and are
-// scaled to `marker_width`; height follows from each SVG's aspect ratio. The
-// render context is already scaled by the request's `scale`, so no extra scaling
-// is needed here.
+// Marker SVGs are self-contained and self-sizing: the client bakes the intended
+// on-screen size into each marker's root `<svg>` width/height (in tile/CSS px),
+// so they're drawn at their natural size — there is no marker-width request
+// field. The per-side glow width (`glow_width`) is still supplied per request
+// (see `Glow`). The render context is already scaled by the request's `scale`,
+// so no extra scaling is needed here.
 
 /// Styling for line and polygon features (simplestyle `stroke`/`fill`/…).
 struct LinePolygonProps {
@@ -161,15 +161,14 @@ fn make_proj() -> Proj {
 /// on top afterwards, leaving only the outer halo visible.
 ///
 /// `color` is `(r, g, b, a)` in 0.0..=1.0; `a` is the glow opacity. `glow_width`
-/// is the per-side halo width and `marker_width` the rendered marker width (both
-/// tile/CSS px). Must run before `render_lines_polygons`/`render_points` in the
+/// is the per-side halo width in tile/CSS px. Markers are drawn at their natural
+/// svg size. Must run before `render_lines_polygons`/`render_points` in the
 /// pipeline.
 pub fn render_glow(
     ctx: &Ctx,
     context: &Context,
     features: &[Feature],
     color: (f64, f64, f64, f64),
-    marker_width: f64,
     glow_width: f64,
 ) -> LayerRenderResult {
     let proj = make_proj();
@@ -210,8 +209,7 @@ pub fn render_glow(
             let y = point.y();
 
             if let Some(svg) = marker_svg.as_deref()
-                && render_marker_glow(context, svg, (x, y), &hex, marker_width, glow_width)
-                    .is_some()
+                && render_marker_glow(context, svg, (x, y), &hex, glow_width).is_some()
             {
                 return Ok(());
             }
@@ -293,17 +291,12 @@ pub fn render_lines_polygons(
 
 /// Rasterize an inline `marker-svg` (the entire self-contained marker — shape,
 /// color, opacity and glyph) and paint it so the viewBox center lands on
-/// `(x, y)`. The marker is scaled to a fixed width; height follows from its
-/// aspect ratio (pins are taller, with transparent padding below the tip so the
-/// tip ends up at center). Returns the rendered height on success, or `None`
-/// when the SVG cannot be loaded (so the caller can fall back to a default
-/// marker).
-fn render_marker_svg(
-    context: &Context,
-    svg: &str,
-    (x, y): (f64, f64),
-    marker_width: f64,
-) -> Option<f64> {
+/// `(x, y)`. The marker is drawn at its **natural size** — the root `<svg>`'s
+/// `width`/`height` (in tile/CSS px) — so the client controls marker size by
+/// baking it into the SVG; there is no separate marker-width knob. Returns the
+/// rendered `(width, height)` on success, or `None` when the SVG cannot be
+/// loaded (so the caller can fall back to a default marker).
+fn render_marker_svg(context: &Context, svg: &str, (x, y): (f64, f64)) -> Option<(f64, f64)> {
     let bytes = glib::Bytes::from_owned(svg.as_bytes().to_vec());
 
     let stream = gio::MemoryInputStream::from_bytes(&bytes);
@@ -320,16 +313,14 @@ fn render_marker_svg(
         return None;
     }
 
-    let height = marker_width * sh / sw;
-
-    let left = x - marker_width / 2.0;
-    let top = y - height / 2.0;
+    let left = x - sw / 2.0;
+    let top = y - sh / 2.0;
 
     renderer
-        .render_document(context, &Rectangle::new(left, top, marker_width, height))
+        .render_document(context, &Rectangle::new(left, top, sw, sh))
         .ok()?;
 
-    Some(height)
+    Some((sw, sh))
 }
 
 /// Render a marker SVG recolored to a solid glow-color silhouette (`hex`) and
@@ -342,7 +333,6 @@ fn render_marker_glow(
     svg: &str,
     (x, y): (f64, f64),
     hex: &str,
-    marker_width: f64,
     glow_width: f64,
 ) -> Option<()> {
     let bytes = glib::Bytes::from_owned(svg.as_bytes().to_vec());
@@ -359,13 +349,20 @@ fn render_marker_glow(
         return None;
     }
 
-    // Recolor every shape to a solid glow-color silhouette and add a same-color
-    // stroke to dilate it. The stroke width is in the SVG's own user units, so
-    // scale it so the dilation equals `glow_width` tile px once scaled down to
-    // `marker_width`. Force full opacity so the silhouette is solid regardless of
-    // the marker's own `*-opacity` (e.g. a ring drawn at `stroke-opacity`), which
-    // would otherwise make the glow weaker than the line halo.
-    let stroke_width = 2.0 * glow_width * sw / marker_width;
+    // The marker is drawn at natural size (sw px). Its shapes are authored in
+    // viewBox user units, so one user unit renders at `sw / viewBox_width` px;
+    // invert that to express the desired `glow_width`-px dilation as a stroke
+    // width in user units. Recolor every shape to a solid glow-color silhouette
+    // and stroke it to dilate. Force full opacity so the silhouette is solid
+    // regardless of the marker's own `*-opacity` (e.g. a ring drawn at
+    // `stroke-opacity`), which would otherwise make the glow weaker than the line
+    // halo.
+    let vb_width = rsvg::CairoRenderer::new(&handle)
+        .intrinsic_dimensions()
+        .vbox
+        .map_or(sw, |vb| vb.width());
+    let px_per_unit = sw / vb_width;
+    let stroke_width = 2.0 * glow_width / px_per_unit;
     let css = format!(
         "* {{ fill: {hex}; stroke: {hex}; stroke-width: {stroke_width}px; \
          stroke-linejoin: round; opacity: 1; fill-opacity: 1; stroke-opacity: 1; }}"
@@ -374,13 +371,11 @@ fn render_marker_glow(
 
     let renderer = rsvg::CairoRenderer::new(&handle);
 
-    let height = marker_width * sh / sw;
-
-    let left = x - marker_width / 2.0;
-    let top = y - height / 2.0;
+    let left = x - sw / 2.0;
+    let top = y - sh / 2.0;
 
     renderer
-        .render_document(context, &Rectangle::new(left, top, marker_width, height))
+        .render_document(context, &Rectangle::new(left, top, sw, sh))
         .ok()?;
 
     Some(())
@@ -398,20 +393,19 @@ fn rgb_hex(r: f64, g: f64, b: f64) -> String {
     format!("#{:02x}{:02x}{:02x}", to_u8(r), to_u8(g), to_u8(b))
 }
 
-/// Rendered height of a `marker-svg` (scaled to `marker_width`), derived from
-/// the root element's `width`/`height` attributes. Used to position the label
-/// above the marker without re-rasterizing.
-fn marker_svg_height(svg: &str, marker_width: f64) -> Option<f64> {
+/// Rendered height of a `marker-svg` (its natural size), read straight from the
+/// root element's `height` attribute. Used to position the label above the
+/// marker without re-rasterizing.
+fn marker_svg_height(svg: &str) -> Option<f64> {
     let el = xmltree::Element::parse(svg.as_bytes()).ok()?;
 
-    let w: f64 = el.attributes.get("width")?.parse().ok()?;
     let h: f64 = el.attributes.get("height")?.parse().ok()?;
 
-    if w <= 0.0 {
+    if h <= 0.0 {
         return None;
     }
 
-    Some(marker_width * h / w)
+    Some(h)
 }
 
 /// Append the default-marker teardrop path (tip on `(x, y)`) to the current
@@ -472,7 +466,6 @@ pub fn render_points(
     context: &Context,
     features: &[Feature],
     collision: &mut Collision,
-    marker_width: f64,
 ) -> LayerRenderResult {
     let proj = make_proj();
 
@@ -493,12 +486,12 @@ pub fn render_points(
             // (the geographic location) is the exact center of the viewBox, so
             // every shape uses the same rule: center the bitmap on (x, y).
             if let Some(svg) = marker_svg.as_deref()
-                && let Some(height) = render_marker_svg(context, svg, (x, y), marker_width)
+                && let Some((width, height)) = render_marker_svg(context, svg, (x, y))
             {
                 // Register the marker footprint so other layers respect it.
                 collision.add(Rect::new(
-                    (x - marker_width / 2.0, y - height / 2.0),
-                    (x + marker_width / 2.0, y + height / 2.0),
+                    (x - width / 2.0, y - height / 2.0),
+                    (x + width / 2.0, y + height / 2.0),
                 ));
 
                 return Ok(());
@@ -507,10 +500,7 @@ pub fn render_points(
             // Fall back to a default marker (tip on the point).
             let h = draw_default_marker(context, (x, y))?;
 
-            collision.add(Rect::new(
-                (x - marker_width / 2.0, y - h),
-                (x + marker_width / 2.0, y),
-            ));
+            collision.add(Rect::new((x - h / 2.0, y - h), (x + h / 2.0, y)));
 
             Ok(())
         })?;
@@ -596,7 +586,6 @@ pub fn render_point_labels(
     context: &Context,
     features: &[Feature],
     collision: &mut Collision,
-    marker_width: f64,
     label_style: LabelStyle,
 ) -> LayerRenderResult {
     let proj = make_proj();
@@ -625,7 +614,7 @@ pub fn render_point_labels(
         // above the point; the default marker is ~64 px tall (tip on the point).
         let half_height = marker_svg
             .as_deref()
-            .and_then(|svg| marker_svg_height(svg, marker_width))
+            .and_then(marker_svg_height)
             .map_or(32.0, |h| h / 2.0);
 
         // Anchor the label by its near edge (`valign_by_placement`) instead of
