@@ -1,8 +1,8 @@
 use crate::{
     app::server::app_state::AppState,
     render::{
-        CustomLayer, CustomLayerOrder, Decorations, ImageFormat, RenderLayer, RenderRequest,
-        RenderWorkerPool, bbox_size_in_pixels,
+        CustomLayer, CustomLayerOrder, Decorations, Glow, ImageFormat, LabelStyle, RenderLayer,
+        RenderRequest, RenderWorkerPool, bbox_size_in_pixels,
     },
 };
 use axum::{
@@ -10,13 +10,15 @@ use axum::{
     extract::{Json, Query, State},
     http::{Response, StatusCode},
 };
+use colorsys::{Rgb, RgbRatio};
+use cosmic_text::Weight;
 use geo::Rect;
 use geojson::{Feature, GeoJson};
 use rand::TryRng;
 use serde::Deserialize;
 use serde_json::json;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt::Write as _,
     path::PathBuf,
     sync::{
@@ -99,18 +101,92 @@ pub struct ExportDecorations {
     attribution: Option<String>,
 }
 
+/// Client-toggleable map layers. Each maps to one [`RenderLayer`]; the set sent
+/// in the request lists exactly which of these are enabled (membership = on).
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[serde(rename_all = "camelCase")]
+pub enum ExportLayer {
+    Shading,
+    Contours,
+    BicycleTrails,
+    HorseTrails,
+    HikingTrails,
+    SkiTrails,
+}
+
+impl ExportLayer {
+    const ALL: [Self; 6] = [
+        Self::Shading,
+        Self::Contours,
+        Self::BicycleTrails,
+        Self::HorseTrails,
+        Self::HikingTrails,
+        Self::SkiTrails,
+    ];
+
+    const fn render_layer(self) -> RenderLayer {
+        match self {
+            Self::Shading => RenderLayer::Shading,
+            Self::Contours => RenderLayer::Contours,
+            Self::BicycleTrails => RenderLayer::RoutesBicycle,
+            Self::HorseTrails => RenderLayer::RoutesHorse,
+            Self::HikingTrails => RenderLayer::RoutesHiking,
+            Self::SkiTrails => RenderLayer::RoutesSki,
+        }
+    }
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportFeatures {
-    shading: Option<bool>,
-    contours: Option<bool>,
-    bicycle_trails: Option<bool>,
-    horse_trails: Option<bool>,
-    hiking_trails: Option<bool>,
-    ski_trails: Option<bool>,
-    feature_collection: Option<serde_json::Value>,
-    feature_collection_order: Option<CustomLayerOrder>,
+    /// Toggleable layers that are enabled. Absent keeps the server defaults; a
+    /// present set explicitly turns each toggleable layer on (in set) or off.
+    layers: Option<HashSet<ExportLayer>>,
+    /// Custom `GeoJSON` overlay layer and its rendering options. Absent means no
+    /// overlay.
+    custom_layer: Option<ExportCustomLayer>,
 }
+
+/// A custom `GeoJSON` overlay plus its rendering options. The options
+/// (`feature_collection_order`, `glow_color`, `glow_width`, `label_color`,
+/// `label_weight`, `label_size`) only make sense when there are features to
+/// draw, so they live here alongside the (mandatory) `feature_collection`
+/// rather than on [`ExportFeatures`]. Marker size is baked into each feature's
+/// `marker-svg` (drawn at its natural size), so there is no marker-width field.
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportCustomLayer {
+    /// `GeoJSON` `FeatureCollection` to render as the overlay.
+    feature_collection: serde_json::Value,
+    /// Where in the layer stack to draw the overlay. Defaults to
+    /// [`CustomLayerOrder::Topmost`].
+    feature_collection_order: Option<CustomLayerOrder>,
+    /// Glow halo color for the custom features, as a CSS color string. The alpha
+    /// channel is the glow opacity (e.g. `#00000040` or `rgba(0,0,0,0.25)`).
+    /// Omitted/empty disables the glow.
+    glow_color: Option<String>,
+    /// Width (in tile/CSS pixels) the glow halo extends on each side. Defaults to
+    /// [`DEFAULT_GLOW_WIDTH`]. Only used when `glow_color` is set.
+    glow_width: Option<f64>,
+    /// Text color for feature `title` labels, as a CSS color string (e.g.
+    /// `#0000ff` or `rgb(0,0,255)`). Omitted/empty keeps the per-kind default
+    /// (blue for point labels, black for line/polygon labels).
+    label_color: Option<String>,
+    /// Font weight for feature `title` labels (e.g. `400` normal, `700` bold).
+    /// Omitted keeps the per-kind default (bold for point labels, normal for
+    /// line/polygon labels).
+    label_weight: Option<u16>,
+    /// Font size (in tile/CSS pixels) for feature `title` labels. Omitted keeps
+    /// the default ([`DEFAULT_LABEL_SIZE`]).
+    label_size: Option<f64>,
+}
+
+/// Default per-side glow halo width.
+const DEFAULT_GLOW_WIDTH: f64 = 2.0;
+
+/// Default font size (tile/CSS px) for custom-feature labels, matching the
+/// in-app overlay label size.
+const DEFAULT_LABEL_SIZE: f64 = 15.0;
 
 #[derive(Deserialize)]
 pub struct TokenQuery {
@@ -166,70 +242,85 @@ pub async fn post(
 
     let mut render = state.default_render.clone();
 
-    if let Some(features) = &request.features {
-        if let Some(shading) = features.shading {
-            if shading {
-                render.insert(RenderLayer::Shading);
-            } else {
-                render.remove(&RenderLayer::Shading);
-            }
-        }
+    if let Some(features) = &request.features
+        && let Some(layers) = &features.layers
+    {
+        for export_layer in ExportLayer::ALL {
+            let render_layer = export_layer.render_layer();
 
-        if let Some(contours) = features.contours {
-            if contours {
-                render.insert(RenderLayer::Contours);
+            if layers.contains(&export_layer) {
+                render.insert(render_layer);
             } else {
-                render.remove(&RenderLayer::Contours);
-            }
-        }
-
-        if let Some(value) = features.hiking_trails {
-            if value {
-                render.insert(RenderLayer::RoutesHiking);
-            } else {
-                render.remove(&RenderLayer::RoutesHiking);
-            }
-        }
-
-        if let Some(value) = features.horse_trails {
-            if value {
-                render.insert(RenderLayer::RoutesHorse);
-            } else {
-                render.remove(&RenderLayer::RoutesHorse);
-            }
-        }
-
-        if let Some(value) = features.bicycle_trails {
-            if value {
-                render.insert(RenderLayer::RoutesBicycle);
-            } else {
-                render.remove(&RenderLayer::RoutesBicycle);
-            }
-        }
-
-        if let Some(value) = features.ski_trails {
-            if value {
-                render.insert(RenderLayer::RoutesSki);
-            } else {
-                render.remove(&RenderLayer::RoutesSki);
+                render.remove(&render_layer);
             }
         }
     }
 
     let mut render_request = RenderRequest::new(rect, request.zoom, scale, format, render, None);
 
-    render_request.custom_layer = if let Some(export_features) = &request.features
-        && let Some(feature_collection) = &export_features.feature_collection
+    render_request.custom_layer = if let Some(custom_layer) = request
+        .features
+        .as_ref()
+        .and_then(|features| features.custom_layer.as_ref())
     {
-        match serde_json::from_value::<GeoJson>(feature_collection.clone())
+        let glow_width = custom_layer.glow_width.unwrap_or(DEFAULT_GLOW_WIDTH);
+
+        if !(glow_width.is_finite() && glow_width >= 0.0) {
+            return bad_request();
+        }
+
+        if let Some(label_size) = custom_layer.label_size
+            && !(label_size.is_finite() && label_size > 0.0)
+        {
+            return bad_request();
+        }
+
+        let glow_color = match custom_layer
+            .glow_color
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            Some(s) => match parse_glow(s) {
+                Some(color) => Some(Glow {
+                    color,
+                    width: glow_width,
+                }),
+                None => return bad_request(),
+            },
+            None => None,
+        };
+
+        let label_color = match custom_layer
+            .label_color
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            Some(s) => match parse_glow(s) {
+                Some(color) => Some((color.r(), color.g(), color.b())),
+                None => return bad_request(),
+            },
+            None => None,
+        };
+
+        let label_style = LabelStyle {
+            color: label_color,
+            weight: custom_layer.label_weight.map(Weight),
+            size: custom_layer.label_size.or(Some(DEFAULT_LABEL_SIZE)),
+        };
+
+        match serde_json::from_value::<GeoJson>(custom_layer.feature_collection.clone())
             .map_err(|_err| "error parsing geojson")
             .and_then(geojson_to_features)
         {
             Ok(features) => Some(CustomLayer {
                 features,
-                order: export_features
+                order: custom_layer
                     .feature_collection_order
                     .unwrap_or(CustomLayerOrder::Topmost),
+                glow_color,
+                label_style,
             }),
             Err(_) => return bad_request(),
         }
@@ -394,6 +485,15 @@ fn parse_format(
         "png" => Ok((ImageFormat::Png, "png", "image/png")),
         _ => Err(Box::new(bad_request())),
     }
+}
+
+/// Parse a CSS color string (hex `#rgb`/`#rrggbb`/`#rrggbbaa` or
+/// `rgb()`/`rgba()`) into an `RgbRatio`, whose alpha carries the glow opacity.
+fn parse_glow(s: &str) -> Option<RgbRatio> {
+    Rgb::from_hex_str(s)
+        .or_else(|_| s.parse::<Rgb>())
+        .ok()
+        .map(|rgb| rgb.as_ratio())
 }
 
 fn geojson_to_features(geojson: GeoJson) -> Result<Vec<Feature>, &'static str> {

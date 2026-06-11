@@ -1,5 +1,7 @@
-use crate::render::{image_format::ImageFormat, legend::LegendItemData};
+use crate::render::{colors::Color, image_format::ImageFormat, legend::LegendItemData};
 use clap::ValueEnum;
+use colorsys::RgbRatio;
+use cosmic_text::Weight;
 use enumset::EnumSetType;
 use geo::Geometry;
 use geo::Rect;
@@ -30,10 +32,40 @@ pub enum CustomLayerOrder {
     Topmost,
 }
 
+/// Glow halo drawn behind the custom features.
+#[derive(Debug, Clone)]
+pub struct Glow {
+    /// Halo color; its alpha is the opacity at which the whole glow layer is
+    /// composited.
+    pub color: RgbRatio,
+    /// Width (in tile/CSS pixels) the halo extends on each side of a line /
+    /// polygon edge or marker outline.
+    pub width: f64,
+}
+
+/// Optional styling overrides for the custom layer's text labels (the feature
+/// `title`s). Each `None` keeps the built-in default, which differs per label
+/// kind (point labels are blue and bold, line/polygon labels follow the text
+/// defaults), so the overrides are applied field-by-field rather than as a
+/// whole style.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct LabelStyle {
+    /// Text fill color. `None` keeps the per-kind default.
+    pub color: Option<Color>,
+    /// Font weight. `None` keeps the per-kind default.
+    pub weight: Option<Weight>,
+    /// Font size in tile/CSS pixels. `None` keeps the default (`15.0`).
+    pub size: Option<f64>,
+}
+
 #[derive(Debug, Clone)]
 pub struct CustomLayer {
     pub features: Vec<Feature>,
     pub order: CustomLayerOrder,
+    /// Optional glow halo. `None` disables the glow entirely.
+    pub glow_color: Option<Glow>,
+    /// Styling overrides for feature `title` labels.
+    pub label_style: LabelStyle,
 }
 
 /// Cartographic decorations drawn on top of the finished map (scale bar, north
