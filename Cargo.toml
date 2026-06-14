@@ -44,10 +44,10 @@ xmltree = "0.12.0"
 gdal = { version = "0.19.0", features = ["bindgen"] }
 geo = { version = "0.33.1", features = ["use-proj"] }
 geojson = "1.0.0"
-tokio-postgres = { version = "0.7", features = ["with-serde_json-1"] }
+tokio-postgres = { version = "0.7.18", features = ["with-serde_json-1"] }
 deadpool-postgres = "0.14"
 futures-util = "0.3"
-regex = "1.12.3"
+regex = "1.12.4"
 serde_json = "1.0.150"
 tracy-client = { version = "0.18.4", default-features = false }
 thiserror = "2.0.18"
@@ -75,4 +75,4 @@ cosmic-text = { version = "0.19.0", features = [
   "fontconfig",
   "swash",
 ], default-features = false }
-swash = "0.2.7"
+swash = "0.2.9"
