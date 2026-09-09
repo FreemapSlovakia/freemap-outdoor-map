@@ -33,6 +33,11 @@ struct Extra<'a> {
     max_zoom: u8,
     stylesheet: Option<&'a str>,
     halo: bool,
+    /// Label this POI with its bare elevation when it has no name. Only for spot
+    /// heights, whose elevation *is* their label; every other `with_ele` type shows the
+    /// elevation as a second line under a name, and labelling an unnamed one would put
+    /// a naked number on the map where a reader expects a summit. Implies `with_ele`.
+    ele_only_label: bool,
 }
 
 impl Default for Extra<'_> {
@@ -46,6 +51,7 @@ impl Default for Extra<'_> {
             max_zoom: u8::MAX,
             stylesheet: None,
             halo: true,
+            ele_only_label: false,
         }
     }
 }
@@ -454,6 +460,21 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
             replacements: build_replacements(&[(r"^[Ll]etisko\b *", "")]),
             ..Extra::default()
         }),
+        // Spot heights: summits and saddles with no name, labelled with their bare
+        // elevation. Last in the list on purpose - the rank is the position here, so
+        // these are the first thing collision drops, never crowding out a named summit
+        // or any other POI. An elevation-less summit reaches `peak_noname` too, but only
+        // from z16 (see `query`), and renders as a marker with no label at all - the
+        // label is skipped for want of anything to put in it, not by `min_text_zoom`.
+        //
+        // 10.4 = 13.0 * the 0.8 `sub_size_scale` render_labels applies to the elevation
+        // under a named summit. The elevation is the whole label here, so it lands on
+        // line 0 and is never scaled - stating the product keeps a spot height from
+        // reading as *louder* than the named summit it sits next to.
+        (14, 14, Y, Y, NaturalPoi, "peak_noname", Extra { ele_only_label: true, icon: Some("peak"), font_size: 10.4, halo: false, ..Extra::default() }),
+        (14, 14, Y, Y, NaturalPoi, "volcano_noname", Extra { ele_only_label: true, icon: Some("peak"), font_size: 10.4, halo: false, text_color: colors::MILITARY, stylesheet: Some("path { fill: #c30404 }"), ..Extra::default() }),
+        (15, 15, Y, Y, NaturalPoi, "saddle_noname", Extra { ele_only_label: true, icon: Some("saddle"), font_size: 10.4, halo: false, ..Extra::default() }),
+        (15, 15, Y, Y, NaturalPoi, "mountain_pass_noname", Extra { ele_only_label: true, icon: Some("saddle"), font_size: 10.4, halo: false, ..Extra::default() }),
     ];
 
     entries
@@ -478,6 +499,7 @@ pub static POIS: LazyLock<HashMap<&'static str, Vec<Def>>> = LazyLock::new(|| {
                 max_zoom: extra.max_zoom,
                 stylesheet: extra.stylesheet,
                 halo: extra.halo,
+                ele_only_label: extra.ele_only_label,
             },
         });
     }
@@ -555,6 +577,17 @@ pub async fn query(
 ) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let zoom = ctx.zoom;
 
+    // A spot height is labelled with nothing but its elevation, so an `ele` that is not
+    // a plain number would render as junk with no name beside it to make sense of it.
+    // Same shape as the ORDER BY at the bottom of this function.
+    const NUMERIC_ELE: &str = r"(tags->'ele') ~ '^\s*-?\d+(\.\d+)?\s*$'";
+
+    // A saddle or pass with neither a name nor a `ref` - a spot height, like the summits
+    // above. Three places in the z14 query have to agree on this: the type it is given,
+    // whether its `ele` is sanitised, and whether it is selected at all.
+    const UNNAMED_SADDLE: &str = "type IN ('saddle', 'mountain_pass') AND \
+        COALESCE(NULLIF(name, ''), tags->'ref', '') = ''";
+
     let mut selects = vec![];
 
     // TODO add hiking-only
@@ -586,6 +619,42 @@ pub async fn query(
             name <> ''
         ",
     );
+
+    let noname_peak_sql;
+
+    if zoom >= 14 {
+        // Up to z15 a spot height has to carry an elevation, since that is its whole
+        // label and there is no name beside it to make the marker worth the space. From
+        // z16 the summit is drawn even without one - the bare marker still says "there
+        // is a summit here" - and it costs nothing, because the ORDER BY below puts a
+        // NULL `ele` behind every real one, so these are the first to lose to collision.
+        let ele_cond = if zoom >= 16 {
+            String::new()
+        } else {
+            format!("AND {NUMERIC_ELE}")
+        };
+
+        noname_peak_sql = format!(
+            "SELECT
+                osm_id,
+                geometry,
+                name,
+                -- Nulled out unless it is a plain number: an `ele` like '1234 m' or
+                -- 'summit' would be the entire label, with nothing to make sense of it.
+                hstore('ele', CASE WHEN {NUMERIC_ELE} THEN tags->'ele' END) AS extra,
+                type || '_noname' AS type
+            FROM
+                osm_pois
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                type IN ('peak', 'volcano') AND
+                name = ''
+                {ele_cond}
+            "
+        );
+
+        selects.push(&noname_peak_sql);
+    }
 
     let gte_z13_sql;
 
@@ -646,6 +715,15 @@ pub async fn query(
             format!("AND type NOT IN ({})", omit_types.join(", "))
         };
 
+        // Unnamed saddles and passes are spot heights like the summits above, and follow
+        // the same rule: up to z15 they need an elevation to be worth drawing, from z16
+        // the marker alone earns its place.
+        let noname_saddle_cond = if zoom >= 16 {
+            String::new()
+        } else {
+            format!("AND (NOT ({UNNAMED_SADDLE}) OR {NUMERIC_ELE})")
+        };
+
         z14_sql = format!(
             "
         SELECT
@@ -660,7 +738,14 @@ pub async fn query(
                     THEN tags->'ref' || '. ' || name
                 ELSE COALESCE(NULLIF(name, ''), tags->'ref', '') END AS name,
             hstore(ARRAY[
-                'ele', tags->'ele',
+                -- An unnamed saddle is labelled with its elevation and nothing else, so
+                -- a value that is not a plain number is dropped rather than shown bare.
+                -- Every other type keeps whatever it is tagged with: there the elevation
+                -- is a second line under a name that already carries the feature.
+                'ele', CASE
+                    WHEN {UNNAMED_SADDLE} AND NOT ({NUMERIC_ELE}) THEN NULL
+                    ELSE tags->'ele'
+                END,
                 'access', tags->'access',
                 'hot', (type = 'hot_spring')::text,
                 'drinkable', tags->'drinking_water',
@@ -673,6 +758,8 @@ pub async fn query(
                     type = 'guidepost' AND
                     name = ''
                 THEN 'guidepost_noname'
+                WHEN {UNNAMED_SADDLE}
+                THEN type || '_noname'
                 WHEN
                     type = 'tree' AND
                     tags->'protected' <> 'no'
@@ -738,12 +825,8 @@ pub async fn query(
                 type <> 'tree' OR
                 tags->'protected' NOT IN ('', 'no') OR
                 tags->'denotation' = 'natural_monument'
-            ) AND
-            (
-                type NOT IN ('saddle', 'mountain_pass') OR
-                COALESCE(NULLIF(name, ''), tags->'ref', '') <> ''
             )
-            {w} {kst_cond}
+            {noname_saddle_cond} {w} {kst_cond}
         "
         );
 
@@ -1017,14 +1100,21 @@ pub fn render_icons(
             if def.min_text_zoom <= zoom {
                 let name = row.get_string("name")?;
 
-                if !name.is_empty() {
+                let ele = extra.get("ele").and_then(Option::clone);
+
+                // A spot height carries no name - its elevation is the whole label, so
+                // an empty name is not on its own a reason to skip labelling.
+                let has_ele =
+                    def.extra.ele_only_label && ele.as_deref().is_some_and(|e| !e.is_empty());
+
+                if !name.is_empty() || has_ele {
                     let name = replace(name, &def.extra.replacements);
 
                     to_label.push(PendingLabel {
                         point: Point::new(point.x() + dx, point.y() + dy),
                         icon_half_height: he / 2.0,
                         name: name.into_owned(),
-                        ele: extra.get("ele").and_then(Option::clone),
+                        ele,
                         bbox_idx,
                         def,
                     });
@@ -1122,6 +1212,21 @@ mod tests {
 
     /// Wider than any zoom the renderer is asked for, so every definition gets a chance.
     const ZOOMS: std::ops::RangeInclusive<u8> = 0..=24;
+
+    /// `render_labels` builds an elevation-only label as `format!("{name}\n{ele}").trim()`,
+    /// which needs `with_ele` to reach the elevation at all. Without it a nameless POI
+    /// would claim a label slot and then draw an empty string.
+    #[test]
+    fn an_elevation_only_label_can_reach_its_elevation() {
+        for (typ, defs) in POIS.iter() {
+            for def in defs {
+                assert!(
+                    !def.extra.ele_only_label || def.with_ele,
+                    "{typ} is labelled with its elevation alone but is not with_ele"
+                );
+            }
+        }
+    }
 
     #[test]
     fn no_definition_is_shadowed() {

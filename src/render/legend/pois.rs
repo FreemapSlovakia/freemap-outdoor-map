@@ -87,7 +87,10 @@ pub fn pois(
     let mut poi_groups: IndexMap<&'static str, PoiGroup> = IndexMap::new();
 
     for typ in POI_ORDER.iter() {
-        if *typ == "guidepost_noname" || typ.starts_with("peak") && typ.len() == 5 {
+        // `*_noname` types are the same feature as their named counterpart, drawn with
+        // the same icon - listing them again would only repeat the entry with no tags
+        // of their own to show.
+        if typ.ends_with("_noname") || typ.starts_with("peak") && typ.len() == 5 {
             continue;
         }
 
