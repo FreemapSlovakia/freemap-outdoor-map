@@ -1,3 +1,34 @@
+-- Access value that forbids passage. Anything unknown counts as forbidden, matching how
+-- the renderer has always read these tags.
+CREATE OR REPLACE FUNCTION access_denied(value text) RETURNS boolean
+  LANGUAGE sql IMMUTABLE PARALLEL SAFE
+AS $$
+  SELECT value NOT IN ('', 'yes', 'designated', 'official', 'permissive')
+$$;
+
+-- Restriction bitmask of a road: 1 = no bicycle, 2 = no foot. The `road_access_restrictions`
+-- layer compares a way's mask with its neighbours' to find where a restriction begins, so
+-- the rules must be expressible for any way, not just for the ones being drawn.
+CREATE OR REPLACE FUNCTION road_restriction(access text, vehicle text, bicycle text, foot text)
+  RETURNS smallint
+  LANGUAGE sql IMMUTABLE PARALLEL SAFE
+AS $$
+  SELECT (
+    CASE
+      WHEN access_denied(bicycle)
+        OR (bicycle = '' AND access_denied(vehicle))
+        OR (bicycle = '' AND vehicle = '' AND access_denied(access))
+      THEN 1 ELSE 0
+    END
+    +
+    CASE
+      WHEN access_denied(foot)
+        OR (foot = '' AND access_denied(access))
+      THEN 2 ELSE 0
+    END
+  )::smallint
+$$;
+
 CREATE TABLE IF NOT EXISTS isolations (
   osm_id BIGINT PRIMARY KEY,
   dem_ele REAL NOT NULL,

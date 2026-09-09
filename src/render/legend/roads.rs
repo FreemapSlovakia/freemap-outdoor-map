@@ -156,22 +156,25 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                 b
             })
             .add_feature("road_access_restrictions", |b| {
-                let mut no_foot = 0i32;
-                let mut no_bicycle = 0i32;
+                // Bits as `road_restriction` in sql/additional.sql builds them.
+                let mut restriction = 0i32;
 
                 for tag in tags {
-                    if tag.0 == "foot" {
-                        no_foot = 1;
+                    if tag.0 == "bicycle" {
+                        restriction |= 1;
                     }
 
-                    if tag.0 == "bicycle" {
-                        no_bicycle = 1;
+                    if tag.0 == "foot" {
+                        restriction |= 2;
                     }
                 }
 
+                // On the map the crosses mark where a restriction starts; the sample is a
+                // stretch of its own, so both its ends are such a place.
                 b.with_road(road_type)
-                    .with("no_foot", no_foot)
-                    .with("no_bicycle", no_bicycle)
+                    .with("restriction", restriction)
+                    .with("mark_fracs", vec![0.0f64, 1.0])
+                    .with("mark_bits", vec![restriction, restriction])
             })
             .build()
         }),
