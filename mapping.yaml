@@ -925,11 +925,13 @@ tables:
                 - bollard
                 - border_control
                 - bump_gate
+                - cattle_grid
                 - chain
                 - cycle_barrier
                 - debris
                 - entrance
                 - fence
+                - full-height_turnstile
                 - gate
                 - hampshire_gate
                 - height_restrictor
@@ -937,6 +939,7 @@ tables:
                 - kissing_gate
                 - lift_gate
                 - log
+                - motorcycle_barrier
                 - planter
                 - rope
                 - sally_port
