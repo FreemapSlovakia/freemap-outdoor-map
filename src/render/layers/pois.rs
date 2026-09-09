@@ -751,7 +751,8 @@ pub async fn query(
                 'drinkable', tags->'drinking_water',
                 'refitted', tags->'refitted',
                 'intermittent', COALESCE(tags->'intermittent', tags->'seasonal'),
-                'water_characteristic', tags->'water_characteristic'
+                'water_characteristic', tags->'water_characteristic',
+                'ruins', tags->'ruins'
             ]) AS extra,
             CASE
                 WHEN
@@ -1049,7 +1050,21 @@ pub fn render_icons(
 
         let point = row.get_point()?.project_to_tile(&ctx.tile_projector);
 
-        let key = def.extra.icon.unwrap_or(typ);
+        // `ruins=*` swaps the icon for the generic ruins one - the same one
+        // `historic=ruins` draws - the way `building=* + ruins=yes` becomes a ruined
+        // building in the buildings layer. Only the icon: the POI keeps its own
+        // definition, so it is still labelled at its own zoom, with its own name
+        // abbreviations and elevation, rather than being demoted to a bare `ruins`.
+        let is_ruins = extra
+            .get("ruins")
+            .and_then(Option::as_deref)
+            .is_some_and(|v| !matches!(v, "" | "no"));
+
+        let key = if is_ruins {
+            "ruins"
+        } else {
+            def.extra.icon.unwrap_or(typ)
+        };
 
         let (key, names, stylesheet) = if key == "spring" {
             spring_variant(&extra)

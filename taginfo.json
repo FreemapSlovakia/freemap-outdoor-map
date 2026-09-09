@@ -628,9 +628,9 @@
     {
       "key": "ruins",
       "value": "yes",
-      "object_types": ["area"],
-      "icon_url": "https://outdoor.tiles.freemap.sk/legend/building_ruins?mode=taginfo",
-      "description": "Indicated on buildings"
+      "object_types": ["node", "area"],
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/ruins_poi?mode=taginfo",
+      "description": "Indicated on buildings. On any other POI it replaces that POI's icon with the ruins icon, at the zoom the POI itself is drawn at."
     },
     {
       "key": "ruins:building",

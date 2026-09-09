@@ -247,6 +247,26 @@ pub fn pois(
                 )
                 .build()
         }])
+        .chain([{
+            // `ruins=*` takes over the icon of whatever POI carries it, keeping that
+            // POI's own zooms and label. Shown on a chalet because a bare `ruins=yes`
+            // has no primary tag, so it is never imported and renders nothing on its
+            // own - `historic=ruins`, the plain ruins entry, covers that spelling.
+            LegendItem::builder("ruins_poi", Category::Other, 19, opts)
+                .add_tag_set(|ts| {
+                    ts.add_tags(|tags| tags.add("tourism", "chalet").add("ruins", "yes"))
+                })
+                .zoom_range_of(poi_zooms_of("chalet"))
+                .add_poi(
+                    "chalet",
+                    HashMap::<String, Option<String>>::from([(
+                        "ruins".into(),
+                        Some("yes".into()),
+                    )]),
+                    Category::Other,
+                )
+                .build()
+        }])
         .collect()
 }
 
