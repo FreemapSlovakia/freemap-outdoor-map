@@ -1,3 +1,7 @@
-<svg height="17" width="11">
-  <path d="M 3.5,1.5 V 5.5 L 1.5,11.5 V 15.5 H 2.5 V 11.5 L 4.5,5.5 V 1.5 Z M 6.5,1.5 V 5.5 L 8.5,11.5 V 15.5 H 9.5 V 11.5 L 7.5,5.5 V 1.5 Z" />
+<svg
+   height="14"
+   width="8"
+   xmlns="http://www.w3.org/2000/svg">
+  <path
+     d="m 2,0 v 4 l -2,6 v 4 H 1 V 10 L 3,4 V 0 Z m 3,0 v 4 l 2,6 v 4 H 8 V 10 L 6,4 V 0 Z" />
 </svg>

@@ -1,53 +1,46 @@
-<svg width="15" height="19" version="1.1"
-  xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg">
+<svg width="15" height="19"
+  xmlns="http://www.w3.org/2000/svg">
   <clipPath id="clipSpring" clipPathUnits="userSpaceOnUse">
     <use href="#spring" />
   </clipPath>
-  <g clip-path="url(#clipSpring)" id="intermittent" opacity="75%">
-    <path id="stripes"
+  <g clip-path="url(#clipSpring)" opacity="75%">
+    <path
       fill="white"
       d="M 0.5,2.5
 V 3.5
 H 14.5
 V 2.5
 Z
-
 M 0.5,4.5
 V 5.5
 H 14.5
 V 4.5
 Z
-
 M 0.5,6.5
 V 7.5
 H 14.5
 V 6.5
 Z
-
 M 0.5,8.5
 V 9.5
 H 14.5
 V 8.5
 Z
-
 M 0.5,10.5
 V 11.5
 H 14.5
 V 10.5
 Z
-
 M 0.5,12.5
 V 13.5
 H 14.5
 V 12.5
 Z
-
 M 0.5,14.5
 V 15.5
 H 14.5
 V 14.5
 Z
-
 M 0.5,16.5
 V 17.5
 H 14.5

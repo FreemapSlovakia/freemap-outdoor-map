@@ -10,7 +10,7 @@ use crate::render::{
     layer_render_error::{LayerRenderError, LayerRenderResult},
     layers::{HillshadingDatasets, hillshading},
     projectable::TileProjectable,
-    svg_repo::SvgRepo,
+    svg_repo::{Options, SvgRepo},
 };
 use cairo::Context;
 
@@ -305,14 +305,24 @@ pub fn render(
 
                     context.new_path();
 
-                    let surface = svg_repo.get(typ)?;
+                    // The POI layer draws these same icons and the cache is keyed by
+                    // name alone, so both callers have to ask for the same surface:
+                    // haloed and unbounded. This layer runs first, so asking for less
+                    // here used to hand the POI layer an unhaloed icon - an obstacle's
+                    // glow depended on whether the tile happened to carry a line
+                    // obstacle too.
+                    let surface = svg_repo.get_extra(
+                        typ,
+                        Some(|| Options {
+                            names: vec![typ.to_string()],
+                            halo: true,
+                            use_extents: false,
+                            ..Default::default()
+                        }),
+                    )?;
 
-                    // NOTE: use ink_extents() rather than extents(): the same icon name
-                    // ("obstacle_tree"/"obstacle_vegetation") is also cached by the POI
-                    // layer via get_extra(.., use_extents: false), which yields an
-                    // *unbounded* recording surface. extents() returns None for an
-                    // unbounded surface, so whichever layer populates the shared cache
-                    // first decides the shape. ink_extents() works for both.
+                    // NOTE: use ink_extents() rather than extents(): the surface is an
+                    // *unbounded* recording surface, for which extents() returns None.
                     let (ox, oy, w, h) = surface.ink_extents();
 
                     let hw = ox + w / 2.0;

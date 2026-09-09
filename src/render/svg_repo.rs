@@ -44,6 +44,98 @@ impl From<&str> for Options {
     }
 }
 
+/// Width of the white glow stroked under a haloed icon, in the icon's own user units.
+const HALO_WIDTH: f64 = 3.0;
+
+/// How far the glow reaches outside the icon outline: half the stroke, since a stroke
+/// straddles the path it follows.
+const HALO_PAD: f64 = HALO_WIDTH / 2.0;
+
+/// The glow, painted under the icon. `opacity_prop` is `stroke-opacity` when the style
+/// goes on the icon's only element - there the stroke has to be faded on its own, or it
+/// would fade the icon with it - and `opacity` when it goes on a `<use>` that repaints
+/// the whole icon behind itself, where the copy as a whole is what has to fade.
+///
+/// `round` caps and joins are what make [`pad_viewport`] exact: with them the glow is
+/// the icon outline offset by `HALO_PAD` in every direction, so the rendered ink starts
+/// exactly `HALO_PAD` before the icon does. Miter joins would spike further at sharp
+/// corners, and butt caps would stop short at the end of an open subpath; either way the
+/// ink would sit off-centre against the icon and `render_icons`, which positions by ink,
+/// would land the icon off the pixel grid and blur it.
+fn halo_style(opacity_prop: &str) -> String {
+    format!(
+        "stroke:#fff;stroke-width:{HALO_WIDTH};{opacity_prop}:0.5;\
+         stroke-linecap:round;stroke-linejoin:round;paint-order:stroke"
+    )
+}
+
+/// Grows the document viewport by [`HALO_PAD`] on every side.
+///
+/// librsvg clips to the viewport, so without this an icon whose outline reaches its own
+/// canvas edge would have the glow sliced off there - and, worse, the surviving ink
+/// would no longer sit symmetrically around the icon, which is what `render_icons` uses
+/// to place it on the pixel grid. Growing the canvas here means an icon file needs no
+/// hand-added padding of its own: it can be drawn tight to its edges.
+///
+/// Icons that already carry padding are unchanged. The added room stays empty, and the
+/// callers measure ink, not canvas.
+fn pad_viewport(svg: &mut Element) {
+    let parse = |v: &str| v.trim().trim_end_matches("px").trim().parse::<f64>().ok();
+
+    let width = svg.attributes.get("width").and_then(|v| parse(v));
+    let height = svg.attributes.get("height").and_then(|v| parse(v));
+
+    let view_box = svg.attributes.get("viewBox").and_then(|vb| {
+        let nums = vb
+            .split([' ', ',', '\t', '\n'])
+            .filter(|s| !s.is_empty())
+            .map(str::parse::<f64>)
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?;
+
+        <[f64; 4]>::try_from(nums).ok()
+    });
+
+    // No viewBox means user units are px, so width/height are the viewport. With
+    // neither there is nothing to grow from - leave the document as it is rather than
+    // inventing a size that would rescale the icon.
+    let [vx, vy, vw, vh] = match (view_box, width, height) {
+        (Some(vb), _, _) => vb,
+        (None, Some(w), Some(h)) => [0.0, 0.0, w, h],
+        _ => return,
+    };
+
+    if vw <= 0.0 || vh <= 0.0 {
+        return;
+    }
+
+    svg.attributes.insert(
+        "viewBox".into(),
+        format!(
+            "{} {} {} {}",
+            vx - HALO_PAD,
+            vy - HALO_PAD,
+            vw + 2.0 * HALO_PAD,
+            vh + 2.0 * HALO_PAD
+        ),
+    );
+
+    // width/height are px and may scale the viewBox, so the padding is converted into px
+    // at that same scale - anything else resizes the icon instead of the canvas. When
+    // they are absent they default to 100%, which leaves the document with no intrinsic
+    // size for `get_extra` to render into (it falls back to 16x16); writing them from
+    // the viewBox keeps the icon at 1:1 and gives the renderer a real size. Growing the
+    // viewBox without them would shrink the icon by (vw + 2 * HALO_PAD) / vw.
+    let (w, sx) = width.map_or((vw, 1.0), |w| (w, w / vw));
+    let (h, sy) = height.map_or((vh, 1.0), |h| (h, h / vh));
+
+    svg.attributes
+        .insert("width".into(), (w + 2.0 * HALO_PAD * sx).to_string());
+
+    svg.attributes
+        .insert("height".into(), (h + 2.0 * HALO_PAD * sy).to_string());
+}
+
 impl SvgRepo {
     pub fn new(base: impl Into<PathBuf>) -> Self {
         Self {
@@ -56,6 +148,13 @@ impl SvgRepo {
         self.get_extra::<fn() -> Options>(key, None)
     }
 
+    /// Renders `key`'s icon, or returns the surface already cached under it.
+    ///
+    /// `key` alone identifies the cache entry, but the surface depends on the whole of
+    /// [`Options`] - the halo, the boundedness, the stylesheet. So a caller has to fold
+    /// into `key` everything it varies: two callers asking for the same name with
+    /// different options share one surface, and whichever renders first wins. That is
+    /// how an obstacle's glow once came and went with whatever else was on the tile.
     pub fn get_extra<T>(
         &mut self,
         key: &str,
@@ -120,17 +219,8 @@ impl SvgRepo {
                         .iter_mut()
                         .find(|ch| matches!(ch, XMLNode::Element(_)))
                     {
-                        el.attributes.insert(
-                            "style".into(),
-                            concat!(
-                                "stroke:#fff;",
-                                "stroke-width:3;",
-                                "stroke-opacity:0.5;",
-                                "stroke-linejoin:round;",
-                                "paint-order:stroke"
-                            )
-                            .into(),
-                        );
+                        el.attributes
+                            .insert("style".into(), halo_style("stroke-opacity"));
                     }
                 } else if element_count > 0 {
                     let mut element_children = Vec::new();
@@ -145,17 +235,7 @@ impl SvgRepo {
 
                     let mut u = Element::new("use");
                     u.attributes.insert("href".into(), "#main".into());
-                    u.attributes.insert(
-                        "style".into(),
-                        concat!(
-                            "stroke:#fff;",
-                            "stroke-width:3;",
-                            "opacity:0.5;",
-                            "stroke-linejoin:round;",
-                            "paint-order:stroke"
-                        )
-                        .into(),
-                    );
+                    u.attributes.insert("style".into(), halo_style("opacity"));
 
                     let mut g = Element::new("g");
                     g.attributes.insert("id".into(), "main".into());
@@ -168,6 +248,8 @@ impl SvgRepo {
                     main_svg.children.push(XMLNode::Element(u));
                     main_svg.children.push(XMLNode::Element(g));
                 }
+
+                pad_viewport(&mut main_svg);
             }
 
             let mut svg_bytes = Vec::new();

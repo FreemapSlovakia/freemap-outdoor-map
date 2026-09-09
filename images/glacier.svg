@@ -36,7 +36,7 @@
         d="M 1,0.29296875 L 0.29296875,1 L 3,3.7070313 L 5,1.7070312 L 7,3.7070313 L 9,1.7070312 L 11,3.7070313 L 13.707031,1 L 13,0.29296875 L 11,2.2929688 L 9,0.29296875 L 7,2.2929688 L 5,0.29296875 L 3,2.2929688 Z" />
     </g>
   </defs>
-  <g id="Pattern" style="clip-path: url(#clipPath);">
+  <g style="clip-path: url(#clipPath);">
     <use xmlns:ns1="http://www.w3.org/1999/xlink" ns1:href="#gSmjoiq5zg1ke" x="214.69588031811656"
       y="214.69588031811656" />
     <use xmlns:ns2="http://www.w3.org/1999/xlink" ns2:href="#gSmjoiq5zg1ka" x="8.623313383510974"
