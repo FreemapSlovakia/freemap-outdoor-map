@@ -15,9 +15,11 @@ tags:
   include:
     - abandoned
     - access
+    - assisted_trail
     - bicycle
     - covered
     - denotation
+    - diplomatic
     - disused
     - drinking_water
     - ele
@@ -28,6 +30,7 @@ tags:
     - horse
     - icao
     - intermittent
+    - ladder
     - operator
     - plant:method
     - plant:source
@@ -36,16 +39,17 @@ tags:
     - ref
     - refitted
     - ruins
+    - rungs
+    - safety_rope
     - seasonal
     - shelter_type
     - ski
+    - telescope:type
+    - tower:construction
     - tower:type
+    - vending
     - water_characteristic
     - wetland
-    - safety_rope
-    - ladder
-    - rungs
-    - assisted_trail
   include_regex:
     - ^(disused|abandoned|ruins|demolished|removed|destroyed|was):(leisure|natural|amenity|highway)
 generalized_tables:
@@ -310,12 +314,13 @@ tables:
       man_made:
         mapping:
           man_made:
-            - clearcut
+            - bridge
             - bunker_silo
+            - clearcut
             - silo # TODO remove
             - storage_tank # TODO remove
+            - telescope
             - wastewater_plant
-            - bridge
       natural:
         mapping:
           natural:
@@ -657,6 +662,7 @@ tables:
             - access
             - covered
             - denotation
+            - diplomatic
             - disused
             - drinking_water
             - ele
@@ -673,7 +679,10 @@ tables:
             - refitted
             - seasonal
             - shelter_type
+            - telescope:type
+            - tower:construction
             - tower:type
+            - vending
             - water_characteristic
     type: point_or_polygon
     filters:
@@ -704,6 +713,10 @@ tables:
               abandoned:man_made:
                 - adit
                 - mineshaft
+          advertising:
+            mapping:
+              advertising:
+                - column
           aerialway:
             mapping:
               aerialway:
@@ -1090,6 +1103,13 @@ tables:
                 - tree_group
                 - tree_stump
                 - volcano
+          office:
+              mapping:
+                  office:
+                    - coworking
+                    - diplomatic
+                    - lawyer
+                    - notary
           power:
             mapping:
               power:

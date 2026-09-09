@@ -131,6 +131,7 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (14, 15, Y, N, Poi, "monument", Extra::default()),
         (14, 15, Y, N, Poi, "archaeological_site", Extra::default()),
         (14, 15, Y, N, Poi, "tower_observation", Extra::default()),
+        (14, 15, Y, N, Poi, "tower_watchtower", Extra { icon: Some("tower_observation"), ..Extra::default() }),
         (14, 15, Y, Y, NaturalPoi, "cave_entrance", Extra {
             replacements: build_replacements(&[
                 (r"^[Jj]jaskyňa\b *", ""),
@@ -310,6 +311,8 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
             replacements: build_replacements(&[(r"^[Pp]olícia\b *", "")]),
             ..Extra::default()
         }),
+        (15, 16, N, N, Institution, "prison", Extra::default()),
+        (15, 16, N, N, Institution, "courthouse", Extra::default()),
         (15, 16, N, N, Institution, "post_office", Extra::default()),
         (15, 16, N, N, Institution, "bank", Extra::default()),
         (17, 18, N, N, Poi, "atm", Extra::default()),
@@ -705,6 +708,7 @@ pub async fn query(
                     'tower' || CASE tags->'tower:type'
                         WHEN 'communication' THEN '_communication'
                         WHEN 'observation' THEN '_observation'
+                        WHEN 'watchtower' THEN '_watchtower'
                         WHEN 'bell_tower' THEN '_bell_tower'
                         WHEN 'cooling' THEN '_cooling'
                         WHEN 'defensive' THEN '_defensive'
