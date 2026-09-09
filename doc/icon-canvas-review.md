@@ -42,21 +42,16 @@ disagree among themselves and only redrawing settles it.
 
 | icon | flat edges off the grid | worst offset | edges agree with each other? |
 |---|---|---|---|
-| `helipad.svg` | 12 of 12 | 0.500 px | vertical mixed, horizontal 0.5 px |
-| `shooting.svg` | 35 of 39 | 0.500 px | vertical mixed, horizontal mixed |
 | `archaeological_site.svg` | 8 of 12 | 0.500 px | vertical 0.5 px, horizontal 0 px |
 | `synagogue.svg` | 12 of 21 | 0.500 px | vertical mixed, horizontal mixed |
-| `bar.svg` | 2 of 4 | 0.500 px | vertical 0.5 px, horizontal 0 px |
 | `bicycle.svg` | 6 of 13 | 0.500 px | vertical mixed, horizontal mixed |
 | `water_tower.svg` | 4 of 10 | 0.500 px | vertical mixed, horizontal mixed |
 | `alpine_hut.svg` | 4 of 11 | 0.500 px | vertical mixed, horizontal 0 px |
 | `theatre.svg` | 3 of 10 | 0.500 px | vertical mixed, horizontal mixed |
 | `tower_bell_tower.svg` | 3 of 10 | 0.500 px | vertical mixed, horizontal mixed |
-| `prison.svg` | 6 of 28 | 0.500 px | vertical mixed, horizontal 0 px |
 | `biergarten.svg` | 3 of 17 | 0.500 px | vertical mixed, horizontal mixed |
 | `phone.svg` | 6 of 38 | 0.500 px | vertical mixed, horizontal mixed |
 | `wilderness_hut.svg` | 2 of 16 | 0.500 px | vertical mixed, horizontal 0 px |
-| `outdoor_seating.svg` | 4 of 35 | 0.500 px | vertical mixed, horizontal 0 px |
 | `caravan_site.svg` | 1 of 10 | 0.500 px | vertical mixed, horizontal 0 px |
 | `townhall.svg` | 2 of 21 | 0.500 px | vertical mixed, horizontal 0 px |
 | `tower_defensive.svg` | 2 of 22 | 0.500 px | vertical mixed, horizontal 0 px |
@@ -73,7 +68,6 @@ disagree among themselves and only redrawing settles it.
 | `bus_station.svg` | 12 of 14 | 0.493 px | vertical mixed, horizontal mixed |
 | `forester's_lodge.svg` | 4 of 4 | 0.490 px | vertical mixed, horizontal mixed |
 | `chalet.svg` | 11 of 14 | 0.490 px | vertical mixed, horizontal mixed |
-| `building.svg` | 11 of 17 | 0.485 px | vertical mixed, horizontal mixed |
 | `sauna.svg` | 8 of 9 | 0.481 px | vertical mixed, horizontal mixed |
 | `tree_protected.svg` | 2 of 3 | 0.479 px | vertical 0.52 px, horizontal 0 px |
 | `tree.svg` | 2 of 3 | 0.479 px | vertical 0.52 px, horizontal 0 px |
@@ -125,7 +119,6 @@ disagree among themselves and only redrawing settles it.
 | `storage_tank.svg` | 1 of 11 | 0.059 px | vertical 0 px, horizontal mixed |
 | `church.svg` | 1 of 24 | 0.028 px | vertical mixed, horizontal mixed |
 | `college.svg` | 2 of 27 | 0.021 px | vertical mixed, horizontal 0 px |
-| `beehive.svg` | 1 of 11 | 0.021 px | vertical 0 px, horizontal mixed |
 
 88 icons are fully on the grid, and 18 have no straight axis-aligned edge to judge (`attraction`, `beach_resort`, `bollard`, `dentist`, `disused_mine`, `drinkable_spring`, `fire_station`, `firepit`, `greengrocer`, `intermittent`, `mine`, `obstacle_tree`, `obstacle_vegetation`, `refitted_spring`, `sinkhole`, `stone`, `tennis`, `viewpoint`).
 
