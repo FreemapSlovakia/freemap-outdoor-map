@@ -1,4 +1,7 @@
-<svg width="13" height="16">
+<svg
+   width="10"
+   height="13"
+   xmlns="http://www.w3.org/2000/svg">
   <path
-     d="M 2.5 1.5 L 3.5 3.5 L 3.5 8.5 L 1.5 14.5 L 11.5 14.5 L 9.5 8.5 L 9.5 3.5 L 10.5 1.5 L 9.5 1.5 L 3.5 1.5 L 2.5 1.5 z " />
+     d="M 1,0 2,2 V 7 L 0,13 H 10 L 8,7 V 2 L 9,0 H 8 2 Z" />
 </svg>

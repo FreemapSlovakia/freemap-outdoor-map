@@ -1,5 +1,5 @@
-<svg version="1.0" width="64" height="64"
-  xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg">
+<svg width="64" height="64"
+  xmlns="http://www.w3.org/2000/svg">
   <path
     d="M17.886 13.098c-.832.205-1.971-.198-2.576.568-.204.912.76 1.896 1.683 1.608.954.03 2.084.38 2.9-.283-.119-.879-1.047-1.346-1.69-1.83a.656.656 0 00-.317-.063z"
     fill="none" stroke="#d6cfcf" stroke-width=".959" stroke-linecap="round"
@@ -126,21 +126,19 @@
     stroke-miterlimit="4" stroke-dasharray="none" stroke-opacity="1"
     style="stroke:#e7e7e7;stroke-opacity:1" />
   <path
-    d="M5.299 4.98c-.833.204-1.972-.2-2.576.567-.204.912.759 1.896 1.683 1.608.953.03 2.084.38 2.9-.283-.12-.879-1.048-1.346-1.69-1.83a.656.656 0 00-.317-.063z"
-    id="path3772-3" fill="none" stroke="#d6cfcf" stroke-width=".959" stroke-linecap="round"
+    d="M5.299 4.98c-.833.204-1.972-.2-2.576.567-.204.912.759 1.896 1.683 1.608.953.03 2.084.38 2.9-.283-.12-.879-1.048-1.346-1.69-1.83a.656.656 0 00-.317-.063z" fill="none" stroke="#d6cfcf" stroke-width=".959" stroke-linecap="round"
     stroke-linejoin="round" stroke-miterlimit="4" stroke-dasharray="none" stroke-opacity="1"
     style="stroke:#e7e7e7;stroke-opacity:1" />
   <path
-    d="M43.295.913c-.986.167-2.377-.18-2.959.878-.351 1.223.978 2.521 2.2 2.186 1.05.08 2.48.403 3.186-.605.081-1.194-1.166-1.876-2.04-2.414a1.073 1.073 0 00-.387-.045z"
-    id="path3736-6" fill="none" stroke="#d6cfcf" stroke-width=".959" stroke-linecap="round"
+    d="M43.295.913c-.986.167-2.377-.18-2.959.878-.351 1.223.978 2.521 2.2 2.186 1.05.08 2.48.403 3.186-.605.081-1.194-1.166-1.876-2.04-2.414a1.073 1.073 0 00-.387-.045z" fill="none" stroke="#d6cfcf" stroke-width=".959" stroke-linecap="round"
     stroke-linejoin="round" stroke-miterlimit="4" stroke-dasharray="none" stroke-opacity="1"
     style="stroke:#e7e7e7;stroke-opacity:1" />
-  <path id="path3782-7"
+  <path
     d="M60.642 40.124c-.306-.034-.386.195-.107.313.575.244 1.228-.038 1.828.155.477.12.221-.122-.028-.269-.492-.353-1.123-.109-1.693-.2z"
     fill="none" stroke="#d6cfcf" stroke-width=".959" stroke-linecap="round" stroke-linejoin="round"
     stroke-miterlimit="4" stroke-dasharray="none" stroke-opacity="1"
     style="stroke:#e7e7e7;stroke-opacity:1" />
-  <path id="path3782-5"
+  <path
     d="M61.142 1.624c-.306-.034-.386.195-.107.313.575.244 1.228-.038 1.828.155.477.12.221-.122-.028-.269-.492-.353-1.123-.109-1.693-.2z"
     fill="none" stroke="#d6cfcf" stroke-width=".959" stroke-linecap="round" stroke-linejoin="round"
     stroke-miterlimit="4" stroke-dasharray="none" stroke-opacity="1"
