@@ -31,6 +31,7 @@ tags:
     - icao
     - intermittent
     - ladder
+    - location
     - operator
     - plant:method
     - plant:source
@@ -533,7 +534,7 @@ tables:
       - name: under
         type: expression
         args:
-          expression: 'hasPrefix(tags["location"], "under") ? "1" : ""'
+          expression: 'hasPrefix(get(tags, "location") ?? "", "under") ? "1" : ""'
     filters:
       reject:
         ford:
@@ -578,7 +579,7 @@ tables:
             - dyke
             - embankment
             - pipeline
-          millitary:
+          military:
             - trench
           natural:
             - bay # also in area/node

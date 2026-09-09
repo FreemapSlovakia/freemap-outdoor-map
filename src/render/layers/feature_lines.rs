@@ -65,7 +65,16 @@ pub async fn query(
         ]);
     }
 
-    let sql = "
+    // Obstacles are not listed in `types`: their concrete values are open-ended
+    // (mapping.yaml maps unknown `obstacle=*` to `obstacle_yes`), so they are matched
+    // by prefix. Only stage 5 draws them, hence its zoom gate here.
+    let obstacles = if ctx.zoom >= 14 {
+        " OR type LIKE 'obstacle_%'"
+    } else {
+        ""
+    };
+
+    let sql = &format!("
         SELECT
             geometry,
             CASE
@@ -79,10 +88,10 @@ pub async fn query(
         FROM
             osm_feature_lines
         WHERE
-            (type = ANY($6) OR type LIKE 'obstacle_%')
+            (type = ANY($6){obstacles})
             AND
             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-    ";
+    ");
 
     client
         .query(
