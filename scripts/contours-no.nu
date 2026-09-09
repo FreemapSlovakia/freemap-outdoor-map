@@ -38,7 +38,7 @@
 #
 # Output: /mnt/osm/no/norway_contours.gpkg (layer `cont_no_dmr`, EPSG:25833).
 # Handoff to the splitter (split <=1000 pts, simplify, stream into PostGIS):
-#   DATABASE_URL="postgresql://martin@localhost/martin" \
+#   DATABASE_URL="postgresql://martin:$PGPASSWORD@localhost/martin" \
 #     /home/martin/fm/splitter/target/release/splitter-rs \
 #       --source-gpkg /mnt/osm/no/norway_contours.gpkg \
 #       --source-table cont_no_dmr --dest-table cont_no_dmr_split \

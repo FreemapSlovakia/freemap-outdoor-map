@@ -28,7 +28,7 @@
 #
 # Output: /mnt/osm/it/italy_contours.gpkg (layer `cont_it_dtm`, EPSG:6875).
 # Handoff to the splitter (split ≤1000 pts, simplify, stream into PostGIS):
-#   DATABASE_URL="postgresql://martin@localhost/martin" \
+#   DATABASE_URL="postgresql://martin:$PGPASSWORD@localhost/martin" \
 #     /home/martin/fm/splitter/target/release/splitter-rs \
 #       --source-gpkg /mnt/osm/it/italy_contours.gpkg \
 #       --source-table cont_it_dtm --dest-table cont_it_dtm_split \

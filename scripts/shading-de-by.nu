@@ -79,8 +79,8 @@
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 const SRC_VRT   = "/run/media/martin/2190983A5767510F/DGM1/Bayern/all.vrt"
-const DATA_ROOT = "/mnt/osm/de-by"               # smooth2m/, tiles/ on NVMe
-const TILES_DIR = "/mnt/osm/de-by/tiles"
+const DATA_ROOT = "/mnt/osm/de_by"               # smooth2m/, tiles/ on NVMe
+const TILES_DIR = "/mnt/osm/de_by/tiles"
 const EPSG      = "EPSG:25832"                   # ETRS89 / UTM zone 32N
 const NODATA    = "-9999"
 const ZOOM      = 17                             # MEASURED — see header
@@ -115,7 +115,7 @@ def find-drive []: nothing -> string {
 }
 
 let DRIVE   = (find-drive)
-let OUT_DIR = $"($DRIVE)/de-by"
+let OUT_DIR = $"($DRIVE)/de_by"
 let OUT_TIF = $"($OUT_DIR)/shading.tif"
 
 print $"==> drive: ($DRIVE)"

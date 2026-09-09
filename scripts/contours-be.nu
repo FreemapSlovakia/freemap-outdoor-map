@@ -52,7 +52,7 @@
 #    (splitter-rs inserts into id/height/wkb_geometry and reprojects to 3857.)
 #
 #    Then run it:
-#      DATABASE_URL="postgresql://martin@localhost/martin" \
+#      DATABASE_URL="postgresql://martin:$PGPASSWORD@localhost/martin" \
 #        /home/martin/fm/splitter/target/release/splitter-rs \
 #          --source-gpkg <18TB>/be/belgium_contours.gpkg \
 #          --source-table cont_be_dtm --dest-table cont_be_dtm_split \

@@ -32,9 +32,18 @@
 #   boundary. A cutline at the administrative border would remove it; not
 #   applied yet.
 #
-# ELEVATION RANGE. NRW spans roughly 10 m (Lower Rhine at the Dutch border) to
-#   843 m (Langenberg, Rothaargebirge), so at a 10 m interval expect ~85 levels
-#   — a third of Bayern's ~290, and closer to Belgium's 83.
+# ELEVATION RANGE. MEASURED -320 m to 840 m, i.e. ~116 levels at a 10 m
+#   interval — a third of Bayern's ~290, but half again more than the ~85 the
+#   natural terrain suggests.
+#
+#   THE NEGATIVE END IS REAL, NOT A NODATA ARTEFACT. NRW's lowest natural
+#   ground is around 10 m on the Lower Rhine; the -320 m comes from the
+#   open-cast lignite pits (Hambach, Garzweiler, Inden), which are the deepest
+#   man-made holes in Europe and are surveyed like any other terrain. Do not
+#   "fix" it with a floor. The top end is Langenberg in the Rothaargebirge at
+#   843 m, hence a highest contour of 840.
+#
+#   smallint holds this with room to spare either way.
 #
 #   THAT MATTERS FOR MEMORY: the offset-pass machinery below exists because
 #   Bayern's 290 levels over 33 Gpx got the single-pass run OOM-killed at 41 GB.
@@ -53,15 +62,20 @@
 #    smallint, rename to height_m, rename the table, CREATE INDEX — is gone,
 #    along with the chances to forget a step between countries.
 #
-#      /home/martin/fm/splitter/target/release/splitter-rs \
-#        --source-gpkg <18TB>/de-nw/nrw_contours.gpkg \
-#        --source-table cont_de_nw_dtm --dest-table contours_de_nw \
-#        --source-epsg 25832 --split-max-points 1000 \
-#        --simplify-tolerance 2 --commit-interval 1000 --drop-existing \
-#        --database-url "postgresql://martin@localhost/martin"
+#      DATABASE_URL="postgresql://martin:$PGPASSWORD@localhost/martin" \
+#        /home/martin/fm/splitter/target/release/splitter-rs \
+#          --source-gpkg <18TB>/de_nw/nrw_contours.gpkg \
+#          --source-table cont_de_nw_dtm --dest-table contours_de_nw \
+#          --source-epsg 25832 --split-max-points 1000 \
+#          --simplify-tolerance 2 --commit-interval 1000 --drop-existing
 #
-#    No password in the URL — libpq reads it from $PGPASSWORD or ~/.pgpass.
-#    This repo is public; do not paste one back in.
+#    THE SPLITTER NEEDS THE PASSWORD IN THE URL. It uses rust-postgres, which
+#    — unlike libpq — reads neither $PGPASSWORD nor ~/.pgpass, and fails with
+#    "password missing" if the URL has none. So interpolate $PGPASSWORD into
+#    the URL as above: the secret stays out of this public repo, and passing it
+#    as an environment variable rather than --database-url also keeps it out of
+#    `ps`. (psql, pg_dump and GDAL's PG driver do read $PGPASSWORD, so they
+#    need no password in their connection strings at all.)
 #
 #    NOTE: `--simplify-high-quality` and `--drop-existing` are boolean FLAGS —
 #    passing either a value fails with "unexpected argument".
@@ -81,8 +95,8 @@
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-const DATA_DIR   = "/mnt/osm/de-nw"
-const SRC_DIR    = "/mnt/osm/de-nw/smooth2m"     # 2 m tiles from shading-de-nw.nu
+const DATA_DIR   = "/mnt/osm/de_nw"
+const SRC_DIR    = "/mnt/osm/de_nw/smooth2m"     # 2 m tiles from shading-de-nw.nu
 const INTERVAL   = 10                            # contour interval, metres
 const HEIGHT_COL = "height"
 const NODATA     = "-9999"
@@ -105,8 +119,8 @@ def find-drive []: nothing -> string {
 }
 
 let DRIVE   = (find-drive)
-let DEM_TIF = $"($DRIVE)/de-nw/nrw_dem_2m.tif"      # consolidated DEM (EPSG:25832)
-let GPKG    = $"($DRIVE)/de-nw/nrw_contours.gpkg"   # splitter input (EPSG:25832)
+let DEM_TIF = $"($DRIVE)/de_nw/nrw_dem_2m.tif"      # consolidated DEM (EPSG:25832)
+let GPKG    = $"($DRIVE)/de_nw/nrw_contours.gpkg"   # splitter input (EPSG:25832)
 
 print $"==> drive: ($DRIVE)"
 

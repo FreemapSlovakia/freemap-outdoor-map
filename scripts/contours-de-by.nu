@@ -46,15 +46,20 @@
 #    — hand-CREATE a wide table, then DROP ogc_fid, DROP id, cast height to
 #    smallint, rename the column, rename the table, CREATE INDEX — is gone.
 #
-#      /home/martin/fm/splitter/target/release/splitter-rs \
-#        --source-gpkg <18TB>/de-by/bayern_contours.gpkg \
-#        --source-table cont_de_by_dtm --dest-table contours_de_by \
-#        --source-epsg 25832 --split-max-points 1000 \
-#        --simplify-tolerance 2 --commit-interval 1000 --drop-existing \
-#        --database-url "postgresql://martin@localhost/martin"
+#      DATABASE_URL="postgresql://martin:$PGPASSWORD@localhost/martin" \
+#        /home/martin/fm/splitter/target/release/splitter-rs \
+#          --source-gpkg <18TB>/de_by/bayern_contours.gpkg \
+#          --source-table cont_de_by_dtm --dest-table contours_de_by \
+#          --source-epsg 25832 --split-max-points 1000 \
+#          --simplify-tolerance 2 --commit-interval 1000 --drop-existing
 #
-#    No password in the URL — libpq reads it from $PGPASSWORD or ~/.pgpass.
-#    This repo is public; do not paste one back in.
+#    THE SPLITTER NEEDS THE PASSWORD IN THE URL. It uses rust-postgres, which
+#    — unlike libpq — reads neither $PGPASSWORD nor ~/.pgpass, and fails with
+#    "password missing" if the URL has none. So interpolate $PGPASSWORD into
+#    the URL as above: the secret stays out of this public repo, and passing it
+#    as an environment variable rather than --database-url also keeps it out of
+#    `ps`. (psql, pg_dump and GDAL's PG driver do read $PGPASSWORD, so they
+#    need no password in their connection strings at all.)
 #
 #    NOTE: `--simplify-high-quality` and `--drop-existing` are boolean FLAGS —
 #    passing either a value fails with "unexpected argument".
@@ -79,8 +84,8 @@
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-const DATA_DIR   = "/mnt/osm/de-by"
-const SRC_DIR    = "/mnt/osm/de-by/smooth2m"     # 2 m tiles from shading-de-by.nu
+const DATA_DIR   = "/mnt/osm/de_by"
+const SRC_DIR    = "/mnt/osm/de_by/smooth2m"     # 2 m tiles from shading-de-by.nu
 const INTERVAL   = 10                            # contour interval, metres
 const HEIGHT_COL = "height"
 const NODATA     = "-9999"
@@ -103,8 +108,8 @@ def find-drive []: nothing -> string {
 }
 
 let DRIVE   = (find-drive)
-let DEM_TIF = $"($DRIVE)/de-by/bayern_dem_2m.tif"      # consolidated DEM (EPSG:25832)
-let GPKG    = $"($DRIVE)/de-by/bayern_contours.gpkg"   # splitter input (EPSG:25832)
+let DEM_TIF = $"($DRIVE)/de_by/bayern_dem_2m.tif"      # consolidated DEM (EPSG:25832)
+let GPKG    = $"($DRIVE)/de_by/bayern_contours.gpkg"   # splitter input (EPSG:25832)
 
 print $"==> drive: ($DRIVE)"
 
