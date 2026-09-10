@@ -249,13 +249,14 @@ pub fn pois(
         }])
         .chain([{
             // `ruins=*` takes over the icon of whatever POI carries it, keeping that
-            // POI's own zooms and label. Shown on a chalet because a bare `ruins=yes`
+            // POI's own zooms and label. Drawn on a chalet because a bare `ruins=yes`
             // has no primary tag, so it is never imported and renders nothing on its
-            // own - `historic=ruins`, the plain ruins entry, covers that spelling.
+            // own - `historic=ruins`, the plain ruins entry, covers that spelling. The
+            // chalet is only the carrier, so it stays out of the tags: the entry is
+            // about the modifier, whatever it is attached to, the same way `private_poi`
+            // above lists `access` alone.
             LegendItem::builder("ruins_poi", Category::Other, 19, opts)
-                .add_tag_set(|ts| {
-                    ts.add_tags(|tags| tags.add("tourism", "chalet").add("ruins", "yes"))
-                })
+                .add_tag_set(|ts| ts.add_tags(|tags| tags.add("ruins", "yes")))
                 .zoom_range_of(poi_zooms_of("chalet"))
                 .add_poi(
                     "chalet",
@@ -306,6 +307,7 @@ fn build_poi_tags(
             | "supermarket"
             | "greengrocer"
             | "farm"
+            | "massage"
     ) {
         tags.push(("shop", typ));
     } else if matches!(
@@ -339,12 +341,23 @@ fn build_poi_tags(
                 tags.push(("power", "generator"));
                 tags.push(("generator:source", "wind")); // OR method = 'wind_turbine'
             }
-            "church" | "chapel" | "synagogue" | "mosque" | "cathedral" => {
+            // These reach the map only through `osm_place_of_worships`, whose `building`
+            // column is a plain string, not a `mapping_value` - so unlike most types they
+            // have no entry in mapping.yaml to fall through to, and a missing arm here
+            // leaves the item with no tags at all.
+            "church" | "chapel" | "synagogue" | "mosque" | "cathedral" | "temple" => {
                 tags.push(("building", typ));
             }
             "disused_mine" | "disused_adit" | "disused_mineshaft" => {
                 override_key = Some(&typ[8..]);
                 tags.push(("disused", "yes"));
+            }
+            // As above. Their `abandoned:man_made=*` alias does have a mapping entry, but no
+            // reader can be expected to recognise the lifecycle prefix, so say it the same
+            // way the disused pair does.
+            "abandoned_adit" | "abandoned_mineshaft" => {
+                override_key = Some(&typ[10..]);
+                tags.push(("abandoned", "yes"));
             }
             // The generic obstacle icon is the `obstacle=*` catch-all (every
             // `obstacle_%` value except tree/vegetation collapses to `obstacle` in the
@@ -383,16 +396,26 @@ impl LegendItemBuilder<'_> {
         let bg = match category {
             Category::RoadsAndPaths => "meadow",
             Category::Railway => "residential",
+            Category::Transport => "residential",
+            Category::Water => "meadow",
+            Category::Terrain => "wood",
+            Category::NaturalPoi => "wood",
             Category::Landcover => "",
             Category::Borders => "",
             Category::Accommodation => "residential",
-            Category::NaturalPoi => "wood",
             Category::GastroPoi => "commercial",
-            Category::Water => "meadow",
-            Category::Institution => "residential",
+            Category::Shop => "commercial",
             Category::Sport => "pitch",
-            Category::Poi => "residential",
-            Category::Terrain => "wood",
+            Category::Tourism => "meadow",
+            Category::Culture => "residential",
+            Category::Historic => "residential",
+            Category::Religion => "residential",
+            Category::Institution => "residential",
+            Category::Finance => "residential",
+            Category::Health => "residential",
+            Category::ManMade => "residential",
+            Category::Barrier => "meadow",
+            Category::Facility => "residential",
             Category::Other => "residential",
         };
 

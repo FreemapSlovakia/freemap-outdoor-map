@@ -139,7 +139,7 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                 b.with_polygon(true).with_name().with("tmp", true)
             })
             .build(),
-        LegendItem::builder("solar_power_plants", Category::Landcover, 17, opts)
+        LegendItem::builder("solar_power_plants", Category::ManMade, 17, opts)
             .add_tag_set(|ts| {
                 ts.add_tags(|tags| tags.add("power", "plant").add("plant:source", "solar"))
                     .add_tags(|tags| {
@@ -150,7 +150,7 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
             .min_zoom(12)
             .add_feature("solar_power_plants", |b| b.with_polygon(false))
             .build(),
-        LegendItem::builder("zoo", Category::Landcover, 17, opts)
+        LegendItem::builder("zoo", Category::Tourism, 17, opts)
             .add_tag_set(|ts| {
                 ts.add_tags(|tags| tags.add("tourism", "zoo"))
                     .add_tags(|tags| tags.add("tourism", "theme_park"))

@@ -452,7 +452,7 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                     .with("tunnel", 1i16)
             })
             .build(),
-        LegendItem::builder("water_slide", Category::Other, 17, opts)
+        LegendItem::builder("water_slide", Category::Sport, 17, opts)
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add("attraction", "water_slide")))
             .min_zoom(road_from_zoom("attraction", "water_slide"))
             .add_feature("roads", |b| {
