@@ -169,12 +169,16 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                     }
                 }
 
-                // On the map the crosses mark where a restriction starts; the sample is a
-                // stretch of its own, so both its ends are such a place.
+                // On the map a bar marks where the restriction starts and the cross beside it
+                // says which side it governs; the sample is a stretch of its own, so both its
+                // ends are such a place and the entry gets to show both symbols. The sample
+                // line runs off the canvas at both ends, so the two boundaries are placed well
+                // inside it - at the ends their marks would be drawn outside the visible box.
                 b.with_road(road_type)
                     .with("restriction", restriction)
-                    .with("mark_fracs", vec![0.0f64, 1.0])
-                    .with("mark_bits", vec![restriction, restriction])
+                    .with("mark_fracs", vec![0.3f64, 0.7])
+                    .with("mark_dirs", vec![1i32, -1])
+                    .with("mark_bounds", vec![1i32, 1])
             })
             .build()
         }),

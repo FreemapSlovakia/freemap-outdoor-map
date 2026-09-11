@@ -1,8 +1,8 @@
 <svg width="7.5" height="7.5"
   xmlns="http://www.w3.org/2000/svg">
-  <path d="M 1.25,1.25 L 6.25,6.25 M 1.25,6.25 L 6.25,1.25" fill="none" stroke="red"
+  <path d="M 1.25,1.25 L 6.25,6.25 M 1.25,6.25 L 6.25,1.25" fill="none"
     stroke-linejoin="round"
     style="opacity:0.5;stroke:#ffffff;stroke-width:2.5;stroke-miterlimit:4;stroke-opacity:1" />
-  <path d="M 1.25,1.25 L 6.25,6.25 M 1.25,6.25 L 6.25,1.25" fill="none" stroke="#ff0000"
+  <path d="M 1.25,1.25 L 6.25,6.25 M 1.25,6.25 L 6.25,1.25" fill="none" stroke="#ff7f00"
     stroke-linejoin="round" />
 </svg>
