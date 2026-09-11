@@ -729,6 +729,31 @@ pub async fn query(
             format!("AND (NOT ({UNNAMED_SADDLE}) OR {NUMERIC_ELE})")
         };
 
+        // Italian route markers (segnavia) are mapped so densely - one node per painted
+        // blaze along a trail - that drawing them buries the rest of the map. Nothing
+        // else is suppressed by country here, so the rule is spelled out rather than
+        // configured. Needs the `countries` table (see sql/countries.sql), and is added
+        // only at the zooms route markers are drawn at: below those `{w}` has already
+        // omitted the type, so the lookup would be dead weight.
+        let route_marker_cond = if POIS
+            .get("route_marker")
+            .is_some_and(|defs| defs.iter().any(|def| def.is_active_at(zoom)))
+        {
+            "AND (
+                type <> 'route_marker' OR
+                NOT EXISTS (
+                    SELECT 1
+                    FROM countries c
+                    WHERE
+                        c.country = 'it' AND
+                        c.geometry && osm_pois.geometry AND
+                        ST_Intersects(c.geometry, osm_pois.geometry)
+                )
+            )"
+        } else {
+            ""
+        };
+
         z14_sql = format!(
             "
         SELECT
@@ -832,7 +857,7 @@ pub async fn query(
                 tags->'protected' NOT IN ('', 'no') OR
                 tags->'denotation' = 'natural_monument'
             )
-            {noname_saddle_cond} {w} {kst_cond}
+            {noname_saddle_cond} {route_marker_cond} {w} {kst_cond}
         "
         );
 
