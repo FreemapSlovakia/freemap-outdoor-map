@@ -8,10 +8,9 @@
 
 use super::{
     LegendItem, LegendItemData, LegendMode, MAX_LEGEND_ZOOM, legend_items, render_request,
+    set_mapping_path_for_test,
 };
-use crate::render::{
-    layers::Shading, renderer, set_fonts_path, set_mapping_path, svg_repo::SvgRepo,
-};
+use crate::render::{layers::Shading, renderer, set_fonts_path, svg_repo::SvgRepo};
 use deadpool_postgres::{Config, Pool, Runtime};
 use tokio::runtime::Handle;
 
@@ -66,7 +65,7 @@ fn is_drawn(
 
 #[test]
 fn zoom_ranges_match_what_the_renderer_draws() {
-    set_mapping_path("mapping.yaml".into());
+    set_mapping_path_for_test();
     set_fonts_path("fonts".into());
 
     let mut svg_repo = SvgRepo::new("images");

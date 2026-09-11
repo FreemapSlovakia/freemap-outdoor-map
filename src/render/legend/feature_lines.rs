@@ -10,12 +10,12 @@ pub fn feature_lines(
     opts: BuildOpts,
 ) -> Vec<LegendItem<'static>> {
     let groups: &[(&[&str], Category)] = &[
-        (&["line"], Category::Other),
-        (&["minor_line"], Category::Other),
-        (&["cutline"], Category::Other),
-        (&["pipeline"], Category::Other),
-        (&["pipeline_under"], Category::Other),
-        (&["tree_row"], Category::Other),
+        (&["line"], Category::ManMade),
+        (&["minor_line"], Category::ManMade),
+        (&["cutline"], Category::ManMade),
+        (&["pipeline"], Category::ManMade),
+        (&["pipeline_under"], Category::ManMade),
+        (&["tree_row"], Category::NaturalPoi),
         (&["weir"], Category::Water),
         (&["dam"], Category::Water),
         (&["earth_bank"], Category::Terrain),
@@ -25,13 +25,13 @@ pub fn feature_lines(
         (&["cliff"], Category::Terrain),
         (
             &["runway", "taxiway", "parking_position", "taxilane"],
-            Category::Other,
+            Category::Transport,
         ),
-        (&["city_wall"], Category::Other),
-        (&["hedge"], Category::Other),
+        (&["city_wall"], Category::Historic),
+        (&["hedge"], Category::Barrier),
         (
             &["ditch", "fence", "retaining_wall", "wall"],
-            Category::Other,
+            Category::Barrier,
         ),
         (
             &[
@@ -48,7 +48,7 @@ pub fn feature_lines(
                 "t-bar",
                 "zip_line",
             ],
-            Category::Other,
+            Category::Transport,
         ),
     ];
 

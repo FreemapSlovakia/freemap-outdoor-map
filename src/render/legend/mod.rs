@@ -256,6 +256,13 @@ pub fn set_mapping_path(path: PathBuf) {
     assert!(MAPPING_PATH.set(path).is_ok(), "mapping path already set");
 }
 
+/// [`set_mapping_path`] for tests: the whole suite is one process, so every test that needs
+/// the mapping has to be able to ask for it without racing to be the one that sets it.
+#[cfg(test)]
+fn set_mapping_path_for_test() {
+    let _ = MAPPING_PATH.set("mapping.yaml".into());
+}
+
 pub fn mapping_path() -> &'static PathBuf {
     MAPPING_PATH
         .get()
@@ -447,6 +454,41 @@ impl PropsBuilder {
                 vec![],
             ),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{legend_metadata, set_mapping_path_for_test};
+
+    /// Every tag set on a legend item has to say something. The frontend turns each set into
+    /// a name for the reader, so an empty one renders as a nameless row beside the icon -
+    /// visible on the map's legend page, and silent everywhere else. `temple` did exactly
+    /// that: it draws the church icon, so it joins the `poi_church` item, but it had no arm
+    /// in `build_poi_tags` and nothing in mapping.yaml to fall through to.
+    #[test]
+    fn every_legend_item_names_its_tags() {
+        set_mapping_path_for_test();
+
+        let mut bad = vec![];
+
+        for meta in legend_metadata(None) {
+            if meta.tags.is_empty() {
+                bad.push(format!("{} lists no tags at all", meta.id));
+            }
+
+            for (idx, tags) in meta.tags.iter().enumerate() {
+                if tags.is_empty() {
+                    bad.push(format!("{}: tag set {idx} is empty", meta.id));
+                }
+            }
+        }
+
+        assert!(
+            bad.is_empty(),
+            "legend items showing a nameless row:\n{}",
+            bad.join("\n")
+        );
     }
 }
 
