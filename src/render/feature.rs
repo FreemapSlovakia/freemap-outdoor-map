@@ -21,6 +21,8 @@ pub enum LegendValue {
     Point(Point),
     LineString(LineString),
     Geometry(Geometry),
+    F64Array(Vec<f64>),
+    I32Array(Vec<i32>),
 }
 
 impl From<f64> for LegendValue {
@@ -77,6 +79,18 @@ impl From<Geometry> for LegendValue {
     }
 }
 
+impl From<Vec<f64>> for LegendValue {
+    fn from(value: Vec<f64>) -> Self {
+        Self::F64Array(value)
+    }
+}
+
+impl From<Vec<i32>> for LegendValue {
+    fn from(value: Vec<i32>) -> Self {
+        Self::I32Array(value)
+    }
+}
+
 impl From<HashMap<String, Option<String>>> for LegendValue {
     fn from(value: HashMap<String, Option<String>>) -> Self {
         Self::Hstore(value)
@@ -114,6 +128,8 @@ const fn legend_value_type(value: &LegendValue) -> &'static str {
         LegendValue::Point(_) => "Point",
         LegendValue::LineString(_) => "LineString",
         LegendValue::Geometry(_) => "Geometry",
+        LegendValue::F64Array(_) => "F64Array",
+        LegendValue::I32Array(_) => "I32Array",
     }
 }
 
@@ -293,6 +309,32 @@ impl Feature {
             })? {
                 LegendValue::I32(value) => Ok(*value),
                 other => Err(WrongTypeError::new(arg, "i32", legend_value_type(other)).into()),
+            },
+        }
+    }
+
+    pub(crate) fn get_f64_array(&self, arg: &str) -> Result<Vec<f64>, FeatureError> {
+        match self {
+            Self::Row(row) => Ok(row.try_get(arg)?),
+            Self::LegendData(data) => match data.get(arg).ok_or(FeatureError::MissingValue {
+                field: arg.to_string(),
+                expected: "F64Array",
+            })? {
+                LegendValue::F64Array(value) => Ok(value.clone()),
+                other => Err(WrongTypeError::new(arg, "F64Array", legend_value_type(other)).into()),
+            },
+        }
+    }
+
+    pub(crate) fn get_i32_array(&self, arg: &str) -> Result<Vec<i32>, FeatureError> {
+        match self {
+            Self::Row(row) => Ok(row.try_get(arg)?),
+            Self::LegendData(data) => match data.get(arg).ok_or(FeatureError::MissingValue {
+                field: arg.to_string(),
+                expected: "I32Array",
+            })? {
+                LegendValue::I32Array(value) => Ok(value.clone()),
+                other => Err(WrongTypeError::new(arg, "I32Array", legend_value_type(other)).into()),
             },
         }
     }
