@@ -1,5 +1,6 @@
 use crate::render::{
     collision::Collision,
+    colors,
     ctx::Ctx,
     draw::{
         font_options::FontAndLayoutOptions,
@@ -173,7 +174,7 @@ pub fn render_glow(
 ) -> LayerRenderResult {
     let proj = make_proj();
     let (r, g, b, a) = color;
-    let hex = rgb_hex(r, g, b);
+    let hex = colors::rgb_hex((r, g, b));
 
     context.push_group();
 
@@ -379,18 +380,6 @@ fn render_marker_glow(
         .ok()?;
 
     Some(())
-}
-
-/// An `(r, g, b)` color (components in 0.0..=1.0) as a `#rrggbb` hex string for
-/// use in rsvg user stylesheets.
-fn rgb_hex(r: f64, g: f64, b: f64) -> String {
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "color components are in 0.0..=1.0"
-    )]
-    let to_u8 = |c: f64| (c * 255.0).round() as u8;
-    format!("#{:02x}{:02x}{:02x}", to_u8(r), to_u8(g), to_u8(b))
 }
 
 /// Rendered height of a `marker-svg` (its natural size), read straight from the

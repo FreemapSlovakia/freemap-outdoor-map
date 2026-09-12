@@ -5,7 +5,7 @@ pub use landcover::PAINT_DEFS;
 pub use pipeline::RenderError;
 pub use pipeline::Shading;
 pub use pipeline::render;
-pub use pois::{Def, POI_ORDER, POIS};
+pub use pois::{Def, POI_ORDER, POIS, SHOP_TYPES};
 
 mod aerialway_names;
 mod blur_edges;

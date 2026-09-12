@@ -1,3 +1,4 @@
+use crate::render::colors::{Color, rgb_hex};
 use cairo::{Content, RecordingSurface, Rectangle};
 use gio::glib::{self};
 use rsvg::LoadingError;
@@ -6,7 +7,7 @@ use xmltree::{Element, EmitterConfig, XMLNode};
 
 pub struct SvgRepo {
     base: PathBuf,
-    svg_map: HashMap<String, RecordingSurface>,
+    svg_map: HashMap<CacheKey, RecordingSurface>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -16,11 +17,56 @@ pub struct SvgRepoError {
     source: Option<Box<dyn std::error::Error + Sync + Send>>,
 }
 
+/// Everything about an [`Options`] that changes the rendered surface, in a hashable
+/// form. Derived here so no caller can forget a field: the keys used to be strings the
+/// callers assembled by hand, and twice they left something out - an obstacle's glow came
+/// and went with whatever else was on the tile, and a private POI shared its surface with
+/// a public one.
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct CacheKey {
+    names: Vec<String>,
+    stylesheet: Option<String>,
+    /// `None` when there is no glow; otherwise its stroke colour and opacity in
+    /// thousandths, which is all the glow contributes to the output.
+    halo: Option<(String, u32)>,
+    use_extents: bool,
+}
+
+impl From<Options> for CacheKey {
+    fn from(options: Options) -> Self {
+        Self {
+            names: options.names,
+            stylesheet: options.stylesheet,
+            halo: options.halo.then(|| {
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    clippy::cast_sign_loss,
+                    reason = "an opacity is in 0.0..=1.0, scaled to thousandths"
+                )]
+                let opacity = (options.halo_opacity * 1000.0).round() as u32;
+
+                (
+                    options
+                        .halo_color
+                        .map_or_else(|| "#fff".to_owned(), rgb_hex),
+                    opacity,
+                )
+            }),
+            use_extents: options.use_extents,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Options {
     pub names: Vec<String>,
     pub stylesheet: Option<String>,
     pub halo: bool,
+    /// Tints the glow instead of the default white, marking a POI you may not get into.
+    pub halo_color: Option<Color>,
+    /// Stroke opacity for the glow; see [`halo_opacity_under_fade`] when the caller
+    /// fades the icon afterwards.
+    pub halo_opacity: f64,
     pub use_extents: bool,
 }
 
@@ -30,6 +76,8 @@ impl Default for Options {
             names: vec![],
             stylesheet: None,
             halo: false,
+            halo_color: None,
+            halo_opacity: HALO_OPACITY,
             use_extents: true,
         }
     }
@@ -51,6 +99,14 @@ const HALO_WIDTH: f64 = 3.0;
 /// straddles the path it follows.
 const HALO_PAD: f64 = HALO_WIDTH / 2.0;
 
+const HALO_OPACITY: f64 = 0.5;
+
+/// Stroke opacity that leaves the glow at [`HALO_OPACITY`] once the caller has painted
+/// the whole icon - glow included - at `fade`.
+pub fn halo_opacity_under_fade(fade: f64) -> f64 {
+    HALO_OPACITY / fade
+}
+
 /// The glow, painted under the icon. `opacity_prop` is `stroke-opacity` when the style
 /// goes on the icon's only element - there the stroke has to be faded on its own, or it
 /// would fade the icon with it - and `opacity` when it goes on a `<use>` that repaints
@@ -62,11 +118,28 @@ const HALO_PAD: f64 = HALO_WIDTH / 2.0;
 /// corners, and butt caps would stop short at the end of an open subpath; either way the
 /// ink would sit off-centre against the icon and `render_icons`, which positions by ink,
 /// would land the icon off the pixel grid and blur it.
-fn halo_style(opacity_prop: &str) -> String {
+fn halo_style(opacity_prop: &str, (stroke, milli): &(String, u32)) -> String {
+    let opacity = f64::from(*milli) / 1000.0;
+
     format!(
-        "stroke:#fff;stroke-width:{HALO_WIDTH};{opacity_prop}:0.5;\
+        "stroke:{stroke};stroke-width:{HALO_WIDTH};{opacity_prop}:{opacity};\
          stroke-linecap:round;stroke-linejoin:round;paint-order:stroke"
     )
+}
+
+/// Halo declarations merged with the element's own `style`, halo last.
+///
+/// A single-element icon shares this attribute with the halo. Dropping the icon's half
+/// turned `tree` black; letting it win outright collapsed the glow on icons that declare
+/// a `stroke-width` of their own (`station`, `mosque`). The halo sets only stroke
+/// properties and the icon's colour is a `fill`, so last wins is right for both.
+fn merge_halo_style(own: Option<&str>, halo: &(String, u32)) -> String {
+    let halo = halo_style("stroke-opacity", halo);
+
+    match own.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(own) => format!("{own};{halo}"),
+        None => halo,
+    }
 }
 
 /// Grows the document viewport by [`HALO_PAD`] on every side.
@@ -144,36 +217,28 @@ impl SvgRepo {
         }
     }
 
-    pub fn get(&mut self, key: &str) -> Result<&RecordingSurface, SvgRepoError> {
-        self.get_extra::<fn() -> Options>(key, None)
+    pub fn get(&mut self, name: &str) -> Result<&RecordingSurface, SvgRepoError> {
+        self.get_with(name.into())
     }
 
-    /// Renders `key`'s icon, or returns the surface already cached under it.
+    /// Renders `options`' icon, or returns the surface already cached for it.
     ///
-    /// `key` alone identifies the cache entry, but the surface depends on the whole of
-    /// [`Options`] - the halo, the boundedness, the stylesheet. So a caller has to fold
-    /// into `key` everything it varies: two callers asking for the same name with
-    /// different options share one surface, and whichever renders first wins. That is
-    /// how an obstacle's glow once came and went with whatever else was on the tile.
-    pub fn get_extra<T>(
-        &mut self,
-        key: &str,
-        get_options: Option<T>,
-    ) -> Result<&RecordingSurface, SvgRepoError>
-    where
-        T: FnOnce() -> Options,
-    {
+    /// The cache is keyed on the options themselves, so two callers asking for the same
+    /// name with different halos or stylesheets get their own surfaces.
+    pub fn get_with(&mut self, options: Options) -> Result<&RecordingSurface, SvgRepoError> {
+        // Taken by value and moved into the key, so a lookup costs no allocation: the key
+        // carries everything the render needs, so nothing is cloned on a cache hit.
+        let key = CacheKey::from(options);
+
+        // Only for error messages.
+        let what = || key.names.join(" + ");
+
         let svg_map = &mut self.svg_map;
 
-        if !svg_map.contains_key(key) {
-            let options = get_options.map_or_else(|| Options {
-                    names: vec![key.to_string()],
-                    ..Default::default()
-                }, |get_options| get_options());
-
+        if !svg_map.contains_key(&key) {
             let mut main_svg: Option<Element> = None;
 
-            for ref name in options.names {
+            for name in &key.names {
                 let full_path = self.base.join(format!("{name}.svg"));
 
                 let input = read_to_string(full_path).map_err(|err| SvgRepoError {
@@ -206,7 +271,7 @@ impl SvgRepo {
                 source: None,
             })?;
 
-            if options.halo {
+            if let Some(halo) = &key.halo {
                 let element_count = main_svg
                     .children
                     .iter()
@@ -219,8 +284,10 @@ impl SvgRepo {
                         .iter_mut()
                         .find(|ch| matches!(ch, XMLNode::Element(_)))
                     {
+                        let own = el.attributes.get("style").cloned();
+
                         el.attributes
-                            .insert("style".into(), halo_style("stroke-opacity"));
+                            .insert("style".into(), merge_halo_style(own.as_deref(), halo));
                     }
                 } else if element_count > 0 {
                     let mut element_children = Vec::new();
@@ -235,7 +302,8 @@ impl SvgRepo {
 
                     let mut u = Element::new("use");
                     u.attributes.insert("href".into(), "#main".into());
-                    u.attributes.insert("style".into(), halo_style("opacity"));
+                    u.attributes
+                        .insert("style".into(), halo_style("opacity", halo));
 
                     let mut g = Element::new("g");
                     g.attributes.insert("id".into(), "main".into());
@@ -257,7 +325,7 @@ impl SvgRepo {
             main_svg
                 .write_with_config(&mut svg_bytes, EmitterConfig::new().perform_indent(true))
                 .map_err(|err| SvgRepoError {
-                    msg: format!("Error formatting XML ({key})"),
+                    msg: format!("Error formatting XML ({})", what()),
                     source: Some(err.into()),
                 })?;
 
@@ -272,7 +340,7 @@ impl SvgRepo {
             let stream = gio::MemoryInputStream::from_bytes(&bytes);
 
             let map_loading_error = |err: LoadingError| SvgRepoError {
-                msg: format!("Error loading SVG ({key})"),
+                msg: format!("Error loading SVG ({})", what()),
                 source: Some(err.into()),
             };
 
@@ -284,14 +352,14 @@ impl SvgRepo {
                 )
                 .map_err(map_loading_error)?;
 
-            if let Some(stylesheet) = options.stylesheet {
+            if let Some(stylesheet) = &key.stylesheet {
                 handle
-                    .set_stylesheet(&stylesheet)
+                    .set_stylesheet(stylesheet)
                     .map_err(map_loading_error)?;
             }
 
             let map_cairo_error = |err: cairo::Error| SvgRepoError {
-                msg: format!("Cairo error ({key})"),
+                msg: format!("Cairo error ({})", what()),
                 source: Some(err.into()),
             };
 
@@ -301,11 +369,7 @@ impl SvgRepo {
             let rect = Rectangle::new(0.0, 0.0, dim.0, dim.1);
             let surface = RecordingSurface::create(
                 Content::ColorAlpha,
-                if options.use_extents {
-                    Some(rect)
-                } else {
-                    None
-                },
+                if key.use_extents { Some(rect) } else { None },
             )
             .map_err(map_cairo_error)?;
             let context = cairo::Context::new(&surface).map_err(map_cairo_error)?;
@@ -313,13 +377,68 @@ impl SvgRepo {
             renderer
                 .render_document(&context, &rect)
                 .map_err(|err| SvgRepoError {
-                    msg: format!("Rendering error ({key})"),
+                    msg: format!("Rendering error ({})", what()),
                     source: Some(err.into()),
                 })?;
 
-            svg_map.insert(key.to_string(), surface);
+            // Cloned only here, on a miss - once per key for the life of the worker.
+            svg_map.insert(key.clone(), surface);
         }
 
-        Ok(svg_map.get(key).expect("svg from map"))
+        Ok(self.svg_map.get(&key).expect("svg from map"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{HALO_OPACITY, merge_halo_style};
+
+    /// The plain white glow, in the canonical form the cache key stores.
+    fn white() -> (String, u32) {
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a test constant in 0.0..=1.0"
+        )]
+        let milli = (HALO_OPACITY * 1000.0) as u32;
+
+        ("#fff".to_owned(), milli)
+    }
+
+    /// Losing the icon's `fill` hands it to the category tint - which is how `tree`
+    /// stopped being green - while losing the halo's `stroke-width` to an icon that
+    /// declares its own collapses the glow to a hairline.
+    #[test]
+    fn merging_the_halo_keeps_both_halves() {
+        let merged = merge_halo_style(Some("fill:#107010;stroke-width:1"), &white());
+
+        assert!(
+            merged.contains("fill:#107010"),
+            "icon's own fill dropped: {merged}"
+        );
+        assert!(
+            merged.rfind("stroke-width:3") > merged.rfind("stroke-width:1"),
+            "the halo's own width must win: {merged}"
+        );
+    }
+
+    #[test]
+    fn merging_the_halo_onto_nothing_is_just_the_halo() {
+        let plain = super::halo_style("stroke-opacity", &white());
+
+        assert_eq!(merge_halo_style(None, &white()), plain);
+        assert_eq!(merge_halo_style(Some("  "), &white()), plain);
+    }
+
+    /// The tinted glow marks a POI as private, so it has to differ from the plain one.
+    #[test]
+    fn a_tinted_halo_differs_from_the_plain_one() {
+        let tinted = merge_halo_style(None, &("#ff8080".to_owned(), 500));
+
+        assert_ne!(
+            tinted,
+            merge_halo_style(None, &white()),
+            "a tinted glow must differ from the plain white one"
+        );
     }
 }

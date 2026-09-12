@@ -1,3 +1,4 @@
+use crate::render::colors;
 use serde::Serialize;
 
 /// The group a rendered feature is listed under in the map legend.
@@ -79,4 +80,58 @@ pub enum Category {
     /// hunting stands, game feeding places), buildings, rendering hints, and the entries
     /// that demonstrate a modifier rather than a feature.
     Other,
+}
+
+impl Category {
+    /// Whether a POI you may not get into is worth dimming.
+    ///
+    /// The restriction always shows as a glow; this is about whether it also empties the
+    /// POI of value. A private playground or car park is dead weight, but a landmark is
+    /// exactly as useful for navigating by - and a private gate more so, since the
+    /// restriction is the whole reason it is drawn.
+    pub const fn fades_when_restricted(self) -> bool {
+        use Category::{
+            Accommodation, Barrier, Borders, Culture, Facility, Finance, GastroPoi, Health,
+            Historic, Institution, Landcover, ManMade, NaturalPoi, Other, Railway, Religion,
+            RoadsAndPaths, Shop, Sport, Terrain, Tourism, Transport, Water,
+        };
+
+        match self {
+            // Accommodation counts as a landmark: `access=private` on lodging usually
+            // means the grounds, not that you cannot book, and a named chalet is one.
+            NaturalPoi | Terrain | Barrier | ManMade | Water | Historic | Religion
+            | RoadsAndPaths | Accommodation | Landcover | Borders => false,
+            Shop | GastroPoi | Sport | Health | Facility | Culture | Institution | Finance
+            | Transport | Tourism | Railway | Other => true,
+        }
+    }
+
+    /// Default colour for this category's POI icons; `Extra::color` overrides it per type.
+    ///
+    /// Roughly 20 `Shop` entries, plus `police`/`fire_station`/`atm`, override to black
+    /// because a walker actually uses them - so those legend headings do list icons in
+    /// two colours. If that split hardens, it wants to be a category, not 23 overrides.
+    pub const fn icon_color(self) -> colors::Color {
+        use Category::{
+            Accommodation, Barrier, Borders, Culture, Facility, Finance, GastroPoi, Health,
+            Historic, Institution, Landcover, ManMade, NaturalPoi, Other, Railway, Religion,
+            RoadsAndPaths, Shop, Sport, Terrain, Tourism, Transport, Water,
+        };
+
+        match self {
+            Water => colors::POI_WATER,
+            GastroPoi => colors::POI_GASTRO,
+            Health => colors::POI_HEALTH,
+            Sport => colors::POI_SPORT,
+            Terrain => colors::POI_OBSTACLE,
+            Accommodation => colors::POI_ACCOMMODATION,
+            Shop | Institution | Finance => colors::POI_MUTED,
+            // Black is the map's most prominent ink, so it is the default: what a reader
+            // navigates by, plus the groups not yet judged on a real tile.
+            RoadsAndPaths | Railway | Transport | NaturalPoi | Landcover | Borders | Tourism
+            | Culture | Historic | Religion | ManMade | Barrier | Facility | Other => {
+                colors::POI_BLACK
+            }
+        }
+    }
 }

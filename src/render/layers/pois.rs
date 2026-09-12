@@ -11,27 +11,29 @@ use crate::render::{
     layer_render_error::{LayerRenderError, LayerRenderResult},
     projectable::TileProjectable,
     regex_replacer::{Replacement, build_replacements, replace},
-    svg_repo::{Options, SvgRepo},
+    svg_repo::{self, Options, SvgRepo},
 };
 use cairo::Context;
 use core::f64;
 use cosmic_text::{Style, Weight};
 use geo::{Point, Rect};
-use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::{
     collections::{HashMap, HashSet},
     sync::LazyLock,
 };
 
+#[derive(Clone)]
 struct Extra<'a> {
     replacements: Vec<Replacement<'a>>,
     icon: Option<&'a str>,
     font_size: f64,
     weight: Weight,
-    text_color: Color,
+    text_color: Option<Color>,
     max_zoom: u8,
-    stylesheet: Option<&'a str>,
+    /// Overrides the category colour, for the odd type that must break its category's
+    /// rule - the red volcano, the village shop drawn black among the grey ones.
+    color: Option<Color>,
     halo: bool,
     /// Label this POI with its bare elevation when it has no name. Only for spot
     /// heights, whose elevation *is* their label; every other `with_ele` type shows the
@@ -47,9 +49,9 @@ impl Default for Extra<'_> {
             icon: None,
             font_size: 12.0,
             weight: Weight::NORMAL,
-            text_color: colors::BLACK,
+            text_color: None,
             max_zoom: u8::MAX,
-            stylesheet: None,
+            color: None,
             halo: true,
             ele_only_label: false,
         }
@@ -75,9 +77,22 @@ impl Def {
         (self.min_zoom, self.extra.max_zoom)
     }
 
-    pub(crate) fn icon_key<'a>(&'a self, typ: &'a str) -> &'a str {
-        self.extra.icon.unwrap_or(typ)
+    /// The definition's own colour if it has one, else its category's.
+    pub(crate) fn color(&self) -> Color {
+        color_of(self.category, &self.extra)
     }
+
+    pub(crate) fn icon_key<'a>(&'a self, typ: &'a str) -> &'a str {
+        icon_key_of(&self.extra, typ)
+    }
+}
+
+fn color_of(category: Category, extra: &Extra) -> Color {
+    extra.color.unwrap_or_else(|| category.icon_color())
+}
+
+fn icon_key_of<'a>(extra: &'a Extra<'a>, typ: &'a str) -> &'a str {
+    extra.icon.unwrap_or(typ)
 }
 
 type PoiEntry = (u8, u8, bool, bool, Category, &'static str, Extra<'static>);
@@ -120,8 +135,8 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
 
     use Category::{
         Accommodation, Barrier, Culture, Facility, Finance, GastroPoi, Health, Historic,
-        Institution, ManMade, NaturalPoi, Other, Railway, Religion, RoadsAndPaths, Shop, Sport, Terrain,
-        Tourism, Transport, Water,
+        Institution, ManMade, NaturalPoi, Other, Railway, Religion, RoadsAndPaths, Shop, Sport,
+        Terrain, Tourism, Transport, Water,
     };
 
     // The order of these entries IS the collision priority: the earlier a type appears,
@@ -133,6 +148,13 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
     //
     // Types listed together must stay adjacent: `render_icons` picks the first definition
     // matching the zoom, so a narrower `max_zoom` variant has to precede the general one.
+    // Cancels the muted grey a shop/civic category would otherwise give: this is
+    // something a walker actually uses.
+    let black = || Extra {
+        color: Some(colors::POI_BLACK),
+        ..Extra::default()
+    };
+
     #[rustfmt::skip]
     let entries = vec![
         (14, 15, Y, N, Historic, "monument", Extra::default()),
@@ -224,10 +246,12 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         }),
         (15, 16, N, N, GastroPoi, "pub", Extra::default()),
         (15, 16, N, N, GastroPoi, "biergarten", Extra::default()),
-        (15, 16, N, N, Shop, "farm", Extra { icon: Some("greengrocer"), ..Extra::default()}),
-        (15, 16, N, N, Shop, "greengrocer", Extra::default()),
-        (15, 16, N, N, Shop, "convenience", Extra::default()),
-        (15, 16, N, N, Shop, "supermarket", Extra::default()),
+        // Black, not the shop grey: this is where a hiker eats. `greengrocer` must match
+        // `farm` whatever else changes - they draw one icon.
+        (15, 16, N, N, Shop, "farm", Extra { icon: Some("greengrocer"), color: Some(colors::POI_BLACK), ..Extra::default()}),
+        (15, 16, N, N, Shop, "greengrocer", black()),
+        (15, 16, N, N, Shop, "convenience", black()),
+        (15, 16, N, N, Shop, "supermarket", black()),
         (15, 16, N, N, Transport, "fuel", Extra::default()),
         (15, 16, N, N, GastroPoi, "fast_food", Extra::default()),
         (15, 16, N, N, GastroPoi, "cafe", Extra {
@@ -235,14 +259,14 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
             ..Extra::default()
         }),
         (15, 16, N, N, GastroPoi, "bar", Extra::default()),
-        (15, 16, N, N, Shop, "pastry", Extra { icon: Some("confectionery"), ..Extra::default() }),
-        (15, 16, N, N, Shop, "confectionery", Extra::default()),
+        (15, 16, N, N, Shop, "pastry", Extra { icon: Some("confectionery"), ..black() }),
+        (15, 16, N, N, Shop, "confectionery", black()),
         (16, 17, N, N, GastroPoi, "ice_cream", Extra::default()),
         (15, 16, N, N, Health, "pharmacy", Extra {
             replacements: build_replacements(&[(r"^[Ll]ekáreň\b *", "")]),
             ..Extra::default()
         }),
-        (17, 18, N, N, Health, "dentist", Extra::default()),
+        (18, 19, N, N, Health, "dentist", Extra::default()),
         (17, 18, N, N, Health, "doctors", Extra::default()),
         (17, 18, N, N, Health, "clinic", Extra { icon: Some("doctors"), ..Extra::default() }),
         (17, 18, N, N, Health, "veterinary", Extra::default()),
@@ -270,21 +294,21 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
                 (r"^[Vv]odopád\b *", ""),
                 (r"\b[Vv]odopád$", "vdp."),
             ]),
-            text_color: colors::WATER_LABEL,
+            text_color: Some(colors::WATER_LABEL),
             ..Extra::default()
         }),
-        (15, 16, N, N, Water, "dam", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
-        (16, 17, N, N, Water, "weir", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
+        (15, 16, N, N, Water, "dam", Extra { text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
+        (16, 17, N, N, Water, "weir", Extra { text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
         (16, NN, N, N, Water, "ford", Extra::default()),
         // Passability, like the ford above: these say whether you get through at all,
         // which outranks anything merely worth looking at.
         (14, NN, N, N, Terrain, "obstacle_tree", Extra::default()),
         (14, NN, N, N, Terrain, "obstacle_vegetation", Extra::default()),
         (14, NN, N, N, Terrain, "obstacle", Extra::default()),
-        (14, 15, Y, Y, Water, "spring", Extra { replacements: spring_replacements.clone(), text_color: colors::WATER_LABEL, ..Extra::default() }),
-        (14, 15, N, N, Water, "drinking_water", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
-        (14, 15, N, N, Water, "water_point", Extra { text_color: colors::WATER_LABEL, icon: Some("drinking_water"), ..Extra::default() }),
-        (14, 15, N, N, Water, "water_well", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
+        (14, 15, Y, Y, Water, "spring", Extra { replacements: spring_replacements.clone(), text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
+        (14, 15, N, N, Water, "drinking_water", Extra { text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
+        (14, 15, N, N, Water, "water_point", Extra { text_color: Some(colors::WATER_LABEL), icon: Some("drinking_water"), ..Extra::default() }),
+        (14, 15, N, N, Water, "water_well", Extra { text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
         (15, 16, N, N, ManMade, "generator_wind", Extra::default()),
         (14, 15, Y, N, ManMade, "adit", Extra { icon: Some("mine"), ..Extra::default() }),
         (14, 15, Y, N, ManMade, "mineshaft", Extra { icon: Some("mine"), ..Extra::default() }),
@@ -316,17 +340,17 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         }),
         (15, 16, N, N, Institution, "fire_station", Extra {
             replacements: build_replacements(&[(r"^([Hh]asičská zbrojnica|[Pp]ožiarná stanica)\b *", "")]),
-            ..Extra::default()
+            color: Some(colors::POI_BLACK), ..Extra::default()
         }),
         (15, 16, N, N, Institution, "police", Extra {
             replacements: build_replacements(&[(r"^[Pp]olícia\b *", "")]),
-            ..Extra::default()
+            color: Some(colors::POI_BLACK), ..Extra::default()
         }),
         (15, 16, N, N, Institution, "prison", Extra::default()),
         (15, 16, N, N, Institution, "courthouse", Extra::default()),
         (15, 16, N, N, Institution, "post_office", Extra::default()),
         (15, 16, N, N, Finance, "bank", Extra::default()),
-        (17, 18, N, N, Finance, "atm", Extra::default()),
+        (17, 18, N, N, Finance, "atm", black()),
         (16, 17, N, N, Finance, "bureau_de_change", Extra::default()),
         (14, 15, N, N, Sport, "horse_racing", Extra { icon: Some("horse_riding"), ..Extra::default() }), // TODO use different icon
         (14, 15, N, N, Sport, "horse_riding", Extra::default()),
@@ -350,16 +374,16 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (15, 16, N, N, Transport, "ferry_terminal", Extra::default()),
         (15, 16, Y, N, Transport, "public_transport", Extra::default()),
         (15, 16, N, N, Religion, "tower_bell_tower", Extra::default()),
-        (15, 15, N, Y, NaturalPoi, "tree_protected", Extra { text_color: colors::TREE, ..Extra::default() }),
-        (15, 16, N, N, Shop, "bicycle", Extra::default()),
+        (15, 15, N, Y, NaturalPoi, "tree_protected", Extra { color: Some(colors::POI_TREE), text_color: Some(colors::TREE), ..Extra::default() }),
+        (15, 16, N, N, Shop, "bicycle", black()),
         (16, NN, N, N, Facility, "toilets", Extra::default()),
         // A nameless board icon says nothing (it could be a nature panel, a notice board, a
         // timetable case), so the label must arrive with the icon - keep both at the same zoom.
         (17, 17, N, N, Tourism, "board", Extra::default()),
         (17, 18, N, N, Tourism, "map", Extra::default()),
         (16, 17, N, N, Culture, "artwork", Extra::default()),
-        (16, 17, N, N, Water, "fountain", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
-        // TODO (14, 14, N, N, "recycling", Extra { text_color: colors::AREA_LABEL, ..Extra::default() }), // { icon: null } // has no icon yet - render as area name
+        (16, 17, N, N, Water, "fountain", Extra { text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
+        // TODO (14, 14, N, N, "recycling", Extra { text_color: Some(colors::AREA_LABEL), ..Extra::default() }), // { icon: null } // has no icon yet - render as area name
         (16, 17, N, N, Sport, "playground", Extra {
             replacements: build_replacements(&[(r"^[Dd]etské ihrisko\b", "")]),
             ..Extra::default()
@@ -379,7 +403,7 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (15, 16, N, N, ManMade, "water_tower", Extra::default()),
         (14, 15, N, N, Tourism, "attraction", Extra::default()),
 
-        (15, 16, N, N, Shop, "marketplace", Extra::default()),
+        (15, 16, N, N, Shop, "marketplace", black()),
         (15, 16, N, N, Sport, "public_bath", Extra::default()),
         (15, 16, N, N, Sport, "fishing", Extra::default()),
         (15, 16, N, N, Transport, "helipad", Extra::default()),
@@ -404,31 +428,30 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         // query never emits, so both sank to the bottom instead of ranking here.
         (15, NN, N, N, ManMade, "tower", Extra::default()),
         (15, NN, N, N, ManMade, "mast", Extra::default()),
-        // hex, not hsl(): older librsvg versions (e.g. on the production server) silently drop hsl() in user stylesheets, leaving the icon black
-        (10, 10, Y, Y, NaturalPoi, "volcano", Extra { icon: Some("peak"), font_size: 13.0, halo: false, text_color: colors::MILITARY, stylesheet: Some("path { fill: #c30404 }"), ..Extra::default() }),
+        (10, 10, Y, Y, NaturalPoi, "volcano", Extra { icon: Some("peak"), font_size: 13.0, halo: false, text_color: Some(colors::MILITARY), color: Some(colors::POI_VOLCANO), ..Extra::default() }),
         (10, 10, Y, Y, NaturalPoi, "peak1", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
         (11, 11, Y, Y, NaturalPoi, "peak2", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
         (12, 12, Y, Y, NaturalPoi, "peak3", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
         (13, 13, Y, Y, NaturalPoi, "peak", Extra { font_size: 13.0, halo: false, ..Extra::default() }),
         (15, 15, Y, Y, NaturalPoi, "saddle", Extra { font_size: 13.0, halo: false, ..Extra::default() }),
         (15, 15, Y, Y, NaturalPoi, "mountain_pass", Extra { icon: Some("saddle"), font_size: 13.0, halo: false, ..Extra::default() }),
-        (16, 17, N, N, Water, "water_works", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
-        (16, 17, N, N, Water, "reservoir_covered", Extra { icon: Some("water_works"), text_color: colors::WATER_LABEL, ..Extra::default() }),
-        (16, 17, N, N, Water, "pumping_station", Extra { icon: Some("water_works"), text_color: colors::WATER_LABEL, ..Extra::default() }),
-        (16, 17, N, N, Water, "wastewater_plant", Extra { icon: Some("water_works"), text_color: colors::WATER_LABEL, ..Extra::default() }),
+        (16, 17, N, N, Water, "water_works", Extra { text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
+        (16, 17, N, N, Water, "reservoir_covered", Extra { icon: Some("water_works"), text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
+        (16, 17, N, N, Water, "pumping_station", Extra { icon: Some("water_works"), text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
+        (16, 17, N, N, Water, "wastewater_plant", Extra { icon: Some("water_works"), text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
         (16, 17, N, N, ManMade, "storage_tank", Extra::default()),
         (16, 17, N, N, ManMade, "silo", Extra { icon: Some("storage_tank"), ..Extra::default() }),
         (16, NN, N, N, Facility, "firepit", Extra::default()),
         (16, NN, N, N, Facility, "outdoor_seating", Extra::default()),
         (16, NN, N, N, Facility, "picnic_table", Extra::default()),
         (16, 17, N, N, Facility, "bbq", Extra::default()),
-        (17, 19, N, N, Transport, "parking", Extra { font_size: 10.0, text_color: colors::AREA_LABEL, ..Extra::default() }), // { font: { haloOpacity: 0.5 } },
+        (17, 19, N, N, Transport, "parking", Extra { font_size: 10.0, text_color: Some(colors::AREA_LABEL), ..Extra::default() }), // { font: { haloOpacity: 0.5 } },
         (18, NN, N, N, Facility, "bench", Extra::default()),
         (17, 18, N, N, Other, "beehive", Extra::default()),
         (17, 18, N, N, Other, "apiary", Extra { icon: Some("beehive"), ..Extra::default() }),
         (17, 18, N, N, Historic, "boundary_stone", Extra::default()),
         (17, 18, N, N, Historic, "marker", Extra { icon: Some("boundary_stone"), ..Extra::default() }),
-        (16, NN, N, N, Water, "watering_place", Extra { text_color: colors::WATER_LABEL, ..Extra::default() }),
+        (16, NN, N, N, Water, "watering_place", Extra { text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
         (17, NN, N, N, Barrier, "lift_gate", Extra::default()),
         (17, NN, N, N, Barrier, "swing_gate", Extra { icon: Some("lift_gate"), ..Extra::default() }),
         (17, NN, N, N, Barrier, "motorcycle_barrier", Extra::default()),
@@ -449,7 +472,7 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (15, 16, N, N, Historic, "ruins", Extra::default()),
         (16, 17, N, N, Other, "building", Extra::default()),
         (18, 19, N, N, Historic, "building_ruins", Extra { icon: Some("ruins"), ..Extra::default() }),
-        (15, 15, N, Y, NaturalPoi, "tree", Extra::default()),
+        (15, 15, N, Y, NaturalPoi, "tree", Extra { color: Some(colors::POI_TREE), text_color: Some(colors::TREE), ..Extra::default() }),
         (18, NN, N, N, Barrier, "gate", Extra::default()),
         (15, NN, Y, N, RoadsAndPaths, "guidepost_noname", Extra { icon: Some("guidepost_x"), ..Extra::default() }),
         (16, NN, Y, N, RoadsAndPaths, "route_marker", Extra { icon: Some("guidepost_x"), ..Extra::default() }),
@@ -465,6 +488,97 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
             replacements: build_replacements(&[(r"^[Ll]etisko\b *", "")]),
             ..Extra::default()
         }),
+
+        // Shops and services, from OpenStreetMap Carto's symbols. Carto draws nearly all
+        // from z18; here they sit one or two zooms deeper, tiered by worth to an outdoor
+        // reader, and rank last so a jeweller never takes a pixel from a spring.
+        //
+        // `min_text_zoom` is `min_zoom + 1` except in the deepest tier, where there is no
+        // zoom left to wait for and a nameless shop icon says almost nothing.
+
+        // Resupply, repair and landmark stores.
+        (18, 19, N, N, Shop, "bakery", black()),
+        (18, 19, N, N, Shop, "butcher", black()),
+        (18, 19, N, N, Shop, "chemist", Extra::default()),
+        (18, 19, N, N, Shop, "alcohol", Extra::default()),
+        (18, 19, N, N, Shop, "wine", Extra { icon: Some("alcohol"), ..Extra::default() }),
+        (18, 19, N, N, Shop, "beverages", black()),
+        (18, 19, N, N, Shop, "newsagent", Extra::default()),
+        (18, 19, N, N, Shop, "kiosk", Extra { icon: Some("newsagent"), ..Extra::default() }),
+        (18, 19, N, N, Shop, "deli", black()),
+        (18, 19, N, N, Shop, "department_store", Extra::default()),
+        (18, 19, N, N, Shop, "outdoor", black()),
+        (18, 19, N, N, Shop, "sports", black()),
+        (18, 19, N, N, Shop, "doityourself", black()),
+        (18, 19, N, N, Shop, "hardware", Extra { icon: Some("doityourself"), ..black() }),
+        (18, 19, N, N, Shop, "car_repair", Extra::default()),
+
+        // Ordinary high-street shops.
+        (19, 20, N, N, Shop, "clothes", Extra::default()),
+        (19, 20, N, N, Shop, "fashion", Extra { icon: Some("clothes"), ..Extra::default() }),
+        (19, 20, N, N, Shop, "shoes", Extra::default()),
+        (19, 20, N, N, Shop, "hairdresser", Extra::default()),
+        (19, 20, N, N, Shop, "beauty", Extra::default()),
+        (19, 20, N, N, Shop, "perfumery", Extra::default()),
+        (19, 20, N, N, Shop, "cosmetics", Extra { icon: Some("perfumery"), ..Extra::default() }),
+        (19, 20, N, N, Shop, "optician", Extra::default()),
+        (19, 20, N, N, Shop, "books", Extra::default()),
+        (19, 20, N, N, Shop, "gift", black()),
+        (19, 20, N, N, Shop, "toys", Extra::default()),
+        (19, 20, N, N, Shop, "stationery", Extra::default()),
+        (19, 20, N, N, Shop, "pet", Extra::default()),
+        (19, 20, N, N, Shop, "florist", Extra::default()),
+        (19, 20, N, N, Shop, "dairy", black()),
+        (19, 20, N, N, Shop, "seafood", black()),
+        (19, 20, N, N, Shop, "fishmonger", Extra { icon: Some("seafood"), ..black() }),
+        (19, 20, N, N, Shop, "coffee", Extra::default()),
+        (19, 20, N, N, Shop, "tea", Extra::default()),
+        (19, 20, N, N, Shop, "tobacco", Extra::default()),
+        (19, 20, N, N, Shop, "electronics", Extra::default()),
+        (19, 20, N, N, Shop, "computer", Extra::default()),
+        (19, 20, N, N, Shop, "mobile_phone", Extra::default()),
+        (19, 20, N, N, Shop, "photo", Extra::default()),
+        (19, 20, N, N, Shop, "photo_studio", Extra { icon: Some("photo"), ..Extra::default() }),
+        (19, 20, N, N, Shop, "photography", Extra { icon: Some("photo"), ..Extra::default() }),
+        (19, 20, N, N, Shop, "travel_agency", Extra::default()),
+        (19, 20, N, N, Shop, "ticket", Extra::default()),
+        (19, 20, N, N, Shop, "variety_store", Extra::default()),
+        (19, 20, N, N, Shop, "laundry", Extra::default()),
+        (19, 20, N, N, Shop, "dry_cleaning", Extra { icon: Some("laundry"), ..Extra::default() }),
+        (19, 20, N, N, Shop, "garden_centre", Extra::default()),
+        (19, 20, N, N, Shop, "car", Extra::default()),
+        (19, 20, N, N, Shop, "motorcycle", Extra::default()),
+        (19, 20, N, N, Shop, "car_wash", Extra::default()),
+
+        // The rest, held to the deepest zoom.
+        (20, 20, N, N, Shop, "furniture", Extra::default()),
+        (20, 20, N, N, Shop, "interior_decoration", Extra::default()),
+        (20, 20, N, N, Shop, "carpet", Extra::default()),
+        (20, 20, N, N, Shop, "fabric", Extra::default()),
+        (20, 20, N, N, Shop, "bed", Extra::default()),
+        (20, 20, N, N, Shop, "houseware", Extra::default()),
+        (20, 20, N, N, Shop, "paint", Extra::default()),
+        (20, 20, N, N, Shop, "art", Extra::default()),
+        (20, 20, N, N, Shop, "bag", Extra::default()),
+        (20, 20, N, N, Shop, "jewelry", Extra::default()),
+        (20, 20, N, N, Shop, "music", Extra::default()),
+        (20, 20, N, N, Shop, "musical_instrument", Extra::default()),
+        (20, 20, N, N, Shop, "hifi", Extra::default()),
+        (20, 20, N, N, Shop, "video", Extra::default()),
+        (20, 20, N, N, Shop, "video_games", Extra::default()),
+        (20, 20, N, N, Shop, "bookmaker", Extra::default()),
+        (20, 20, N, N, Shop, "charity", Extra::default()),
+        (20, 20, N, N, Shop, "second_hand", Extra::default()),
+        (20, 20, N, N, Shop, "copyshop", Extra::default()),
+        (20, 20, N, N, Shop, "hearing_aids", Extra::default()),
+        (20, 20, N, N, Shop, "medical_supply", Extra::default()),
+        (20, 20, N, N, Shop, "car_parts", Extra::default()),
+        (20, 20, N, N, Shop, "tyres", Extra::default()),
+        (20, 20, N, N, Shop, "motorcycle_repair", Extra::default()),
+        (20, 20, N, N, Shop, "vehicle_inspection", Extra::default()),
+        (20, 20, N, N, Shop, "trade", Extra::default()),
+        (20, 20, N, N, Shop, "wholesale", Extra { icon: Some("trade"), ..Extra::default() }),
+
         // Spot heights: summits and saddles with no name, labelled with their bare
         // elevation. Last in the list on purpose - the rank is the position here, so
         // these are the first thing collision drops, never crowding out a named summit
@@ -477,12 +591,32 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         // line 0 and is never scaled - stating the product keeps a spot height from
         // reading as *louder* than the named summit it sits next to.
         (14, 14, Y, Y, NaturalPoi, "peak_noname", Extra { ele_only_label: true, icon: Some("peak"), font_size: 10.4, halo: false, ..Extra::default() }),
-        (14, 14, Y, Y, NaturalPoi, "volcano_noname", Extra { ele_only_label: true, icon: Some("peak"), font_size: 10.4, halo: false, text_color: colors::MILITARY, stylesheet: Some("path { fill: #c30404 }"), ..Extra::default() }),
+        (14, 14, Y, Y, NaturalPoi, "volcano_noname", Extra { ele_only_label: true, icon: Some("peak"), font_size: 10.4, halo: false, text_color: Some(colors::MILITARY), color: Some(colors::POI_VOLCANO), ..Extra::default() }),
         (15, 15, Y, Y, NaturalPoi, "saddle_noname", Extra { ele_only_label: true, icon: Some("saddle"), font_size: 10.4, halo: false, ..Extra::default() }),
         (15, 15, Y, Y, NaturalPoi, "mountain_pass_noname", Extra { ele_only_label: true, icon: Some("saddle"), font_size: 10.4, halo: false, ..Extra::default() }),
     ];
 
     entries
+});
+
+/// The `shop=*` values the POI layer draws, i.e. what the `osm_shops` query may select.
+/// `mapping.yaml` imports `shop: __any__`, so the table holds every shop in the extract
+/// and this is what narrows it; the definition in [`POI_ENTRIES`] still decides the zoom.
+pub static SHOP_TYPES: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
+    // `Shop` is the legend grouping, which is not quite the set of `shop=*` tags: these
+    // three are amenities that arrive via `osm_pois`, and `shop=massage` is filed under
+    // Sport because that is where a reader looks for it.
+    const FROM_OSM_POIS: [&str; 3] = ["marketplace", "car_wash", "vehicle_inspection"];
+    const ALSO: [&str; 1] = ["massage"];
+
+    POI_ENTRIES
+        .iter()
+        .filter(|(_, _, _, _, category, typ, _)| {
+            *category == Category::Shop && !FROM_OSM_POIS.contains(typ)
+        })
+        .map(|(_, _, _, _, _, typ, _)| *typ)
+        .chain(ALSO)
+        .collect()
 });
 
 pub static POIS: LazyLock<HashMap<&'static str, Vec<Def>>> = LazyLock::new(|| {
@@ -495,17 +629,7 @@ pub static POIS: LazyLock<HashMap<&'static str, Vec<Def>>> = LazyLock::new(|| {
             with_ele: *with_ele,
             natural: *natural,
             category: *category,
-            extra: Extra {
-                replacements: extra.replacements.clone(),
-                icon: extra.icon,
-                font_size: extra.font_size,
-                weight: extra.weight,
-                text_color: extra.text_color,
-                max_zoom: extra.max_zoom,
-                stylesheet: extra.stylesheet,
-                halo: extra.halo,
-                ele_only_label: extra.ele_only_label,
-            },
+            extra: extra.clone(),
         });
     }
 
@@ -542,6 +666,15 @@ fn build_poi_z_order_case(column: &str) -> String {
     case.push_str(" END");
 
     case
+}
+
+/// Built once: the `CASE` is the same text for every tile.
+static POI_Z_ORDER_CASE: LazyLock<String> = LazyLock::new(|| build_poi_z_order_case("type"));
+
+/// Whether any definition of `typ` is drawn at `zoom`.
+fn drawn_at(typ: &str, zoom: u8) -> bool {
+    POIS.get(typ)
+        .is_some_and(|defs| defs.iter().any(|def| def.is_active_at(zoom)))
 }
 
 const RADII: [f64; 4] = [2.0, 4.0, 6.0, 8.0];
@@ -741,10 +874,7 @@ pub async fn query(
         // lookup would be dead weight.
         const IT_ROUTE_MARKER_MIN_ZOOM: u8 = 20;
 
-        let route_marker_cond = if zoom < IT_ROUTE_MARKER_MIN_ZOOM
-            && POIS
-                .get("route_marker")
-                .is_some_and(|defs| defs.iter().any(|def| def.is_active_at(zoom)))
+        let route_marker_cond = if zoom < IT_ROUTE_MARKER_MIN_ZOOM && drawn_at("route_marker", zoom)
         {
             "AND (
                 type <> 'route_marker' OR
@@ -904,6 +1034,8 @@ pub async fn query(
         );
     }
 
+    let shops_sql;
+
     if zoom >= 15 {
         selects.push(
             "
@@ -921,7 +1053,17 @@ pub async fn query(
         ",
         );
 
-        selects.push("
+        // Narrowed to the types drawn at this zoom, which keeps the deepest tier of
+        // shops - most of them - out of the z15 result set entirely.
+        let shop_types = SHOP_TYPES
+            .iter()
+            .filter(|typ| drawn_at(typ, zoom))
+            .map(|typ| format!("'{typ}'"))
+            .collect::<Vec<_>>();
+
+        if !shop_types.is_empty() {
+            shops_sql = format!(
+                "
             SELECT
                 osm_id,
                 geometry,
@@ -932,10 +1074,13 @@ pub async fn query(
                 osm_shops
             WHERE
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-                type IN (
-                    'convenience', 'confectionery', 'pastry', 'bicycle', 'supermarket', 'greengrocer', 'farm', 'massage'
-                )
-        ");
+                type IN ({})
+        ",
+                shop_types.join(", ")
+            );
+
+            selects.push(&shops_sql);
+        }
 
         selects.push(
             "
@@ -954,7 +1099,7 @@ pub async fn query(
         );
     }
 
-    let z_order_case = build_poi_z_order_case("type");
+    let z_order_case = &*POI_Z_ORDER_CASE;
 
     let sql = format!(
         r"
@@ -987,38 +1132,38 @@ pub(super) struct PendingLabel {
     name: String,
     ele: Option<String>,
     bbox_idx: usize,
+    alpha: f64,
+    color: Color,
+    halo_color: Option<Color>,
     def: &'static Def,
 }
 
 pub(super) type ToLabel = Vec<PendingLabel>;
 
-/// Builds the cache key, legend names and stylesheet for a `spring` POI, whose icon
-/// varies with several `extra` tags (mineral/refitted/hot/intermittent/drinkable)
-/// rather than coming from a single static definition.
-fn spring_variant(
-    extra: &HashMap<String, Option<String>>,
-) -> (Cow<'static, str>, Vec<String>, Option<String>) {
+/// The icon files and stylesheet for a `spring` POI, whose icon varies with several
+/// `extra` tags (mineral/refitted/hot/intermittent/drinkable) rather than coming from a
+/// single static definition.
+fn spring_variant(extra: &HashMap<String, Option<String>>) -> (Vec<String>, Option<String>) {
     let mut stylesheet = String::new();
 
     let is_mineral = extra
         .get("water_characteristic")
         .is_some_and(|v| v.is_some() && v.as_deref() != Some(""));
 
-    let mut key = (if is_mineral {
-        "mineral-spring"
-    } else {
-        "spring"
-    })
-    .to_string();
-
-    let mut names = vec![key.clone()];
+    let mut names = vec![
+        (if is_mineral {
+            "mineral-spring"
+        } else {
+            "spring"
+        })
+        .to_string(),
+    ];
 
     if !is_mineral
         && extra
             .get("refitted")
             .is_some_and(|r| r.as_deref() == Some("yes"))
     {
-        key.push_str("|refitted");
         names.push("refitted_spring".into());
     }
 
@@ -1026,18 +1171,15 @@ fn spring_variant(
         .get("hot")
         .is_some_and(|r| r.as_deref() == Some("true"))
     {
-        key.push_str("|hot");
-
         "#e11919"
     } else {
-        "#0064ff"
+        &colors::rgb_hex(colors::POI_WATER)
     };
 
     if extra
         .get("intermittent")
         .is_some_and(|r| r.as_deref() == Some("yes"))
     {
-        key.push_str("|tmp");
         names.push("intermittent".into());
     }
 
@@ -1045,19 +1187,17 @@ fn spring_variant(
 
     match extra.get("drinkable").and_then(Option::as_deref) {
         Some("yes" | "treated") => {
-            key.push_str("|drinkable");
             names.push("drinkable_spring".into());
             stylesheet.push_str(r"#drinkable { fill: #00ff00 } ");
         }
         Some("no") => {
-            key.push_str("|not_drinkable");
             names.push("drinkable_spring".into());
             stylesheet.push_str(r"#drinkable { fill: #ff0000 } ");
         }
         _ => {}
     }
 
-    (Cow::Owned(key), names, Some(stylesheet))
+    (names, Some(stylesheet))
 }
 
 pub fn render_icons(
@@ -1097,39 +1237,48 @@ pub fn render_icons(
             .and_then(Option::as_deref)
             .is_some_and(|v| !matches!(v, "" | "no"));
 
-        let key = if is_ruins {
-            "ruins"
+        let key = if is_ruins { "ruins" } else { def.icon_key(typ) };
+
+        // The colour follows the swapped icon: a ruined chalet drawn in the accommodation
+        // violet would put the same glyph on one tile in two colours, and the legend only
+        // ever shows the Historic one.
+        let color = if is_ruins {
+            Category::Historic.icon_color()
         } else {
-            def.extra.icon.unwrap_or(typ)
+            def.color()
         };
 
-        let (key, names, stylesheet) = if key == "spring" {
+        let restricted = extra
+            .get("access")
+            .is_some_and(|access| matches!(access.as_deref(), Some("private" | "no")));
+
+        let halo_color = (restricted && def.extra.halo).then_some(colors::ACCESS_RESTRICTED);
+
+        let fade = if restricted && def.category.fades_when_restricted() {
+            0.66
+        } else {
+            1.0
+        };
+
+        let (names, stylesheet) = if key == "spring" {
             spring_variant(&extra)
         } else {
-            let stylesheet = def.extra.stylesheet.map(str::to_string);
+            let fill = colors::rgb_hex(color);
 
-            // Fold the stylesheet into the cache key so styled variants (e.g. the
-            // red volcano) don't collide with the unstyled icon of the same name
-            // (plain "peak"), whose surface is cached on first render regardless of
-            // stylesheet — see SvgRepo::get_extra.
-            let cache_key = stylesheet
-                .as_ref()
-                .map_or(Cow::Borrowed(key), |ss| Cow::Owned(format!("{key}|{ss}")));
-
-            (cache_key, vec![key.to_string()], stylesheet)
+            (
+                vec![key.to_string()],
+                Some(format!("path {{ fill: {fill} }}")),
+            )
         };
 
-        let surface = svg_repo.get_extra(
-            &key,
-            Some({
-                || Options {
-                    names,
-                    stylesheet,
-                    halo: def.extra.halo,
-                    use_extents: false,
-                }
-            }),
-        )?;
+        let surface = svg_repo.get_with(Options {
+            names,
+            stylesheet,
+            halo: def.extra.halo,
+            halo_opacity: svg_repo::halo_opacity_under_fade(fade),
+            halo_color,
+            use_extents: false,
+        })?;
 
         let (x, y, w, he) = surface.ink_extents();
 
@@ -1168,6 +1317,9 @@ pub fn render_icons(
                         name: name.into_owned(),
                         ele,
                         bbox_idx,
+                        alpha: fade,
+                        color,
+                        halo_color,
                         def,
                     });
                 }
@@ -1177,17 +1329,7 @@ pub fn render_icons(
 
             context.set_source_surface(surface, corner_x - x, corner_y - y)?;
 
-            context.paint_with_alpha(
-                if typ != "cave_entrance"
-                    && extra
-                        .get("access")
-                        .is_some_and(|access| matches!(access.as_deref(), Some("private" | "no")))
-                {
-                    0.33
-                } else {
-                    1.0
-                },
-            )?;
+            context.paint_with_alpha(fade)?;
 
             break 'outer;
         }
@@ -1204,12 +1346,17 @@ pub fn render_labels(
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("pois::render_labels");
 
+    let defaults = TextOptions::default();
+
     for PendingLabel {
         point,
         icon_half_height: d,
         name,
         ele,
         bbox_idx,
+        alpha,
+        color,
+        halo_color,
         def,
     } in to_label
     {
@@ -1224,7 +1371,16 @@ pub fn render_labels(
                 weight: def.extra.weight,
                 ..Default::default()
             },
-            color: def.extra.text_color,
+            // Labels take the icon's colour, so a POI reads as one unit.
+            color: def.extra.text_color.unwrap_or(color),
+            alpha,
+            // Same red aura as the icon, so a restricted POI reads as one unit - but at
+            // the icon's opacity, not the default: white is invisible at 0.75 and red is
+            // a highlighter pen.
+            halo_color: halo_color.unwrap_or(defaults.halo_color),
+            halo_opacity: halo_color.map_or(defaults.halo_opacity, |_| {
+                svg_repo::halo_opacity_under_fade(alpha)
+            }),
             valign_by_placement: true,
             placements: &[
                 (0.0, -d - 3.0),
@@ -1259,7 +1415,8 @@ pub fn render_labels(
 
 #[cfg(test)]
 mod tests {
-    use super::{Category, POI_ENTRIES, POIS, build_poi_z_order_case};
+    use super::{Category, POI_ENTRIES, POIS, build_poi_z_order_case, color_of, icon_key_of};
+    use crate::render::colors;
     use std::collections::{HashMap, HashSet};
 
     /// Wider than any zoom the renderer is asked for, so every definition gets a chance.
@@ -1331,7 +1488,7 @@ mod tests {
         let mut by_icon: HashMap<&str, (&str, Category)> = HashMap::new();
 
         for (_, _, _, _, category, typ, extra) in POI_ENTRIES.iter() {
-            let icon = extra.icon.unwrap_or(typ);
+            let icon = icon_key_of(extra, typ);
 
             let (first_typ, first_category) = by_icon.entry(icon).or_insert((typ, *category));
 
@@ -1341,6 +1498,198 @@ mod tests {
                  categories, so the legend lists them under whichever ranks first"
             );
         }
+    }
+
+    #[test]
+    fn every_definition_loads_its_icon() {
+        use crate::render::svg_repo::{Options, SvgRepo};
+
+        let mut repo = SvgRepo::new("images");
+        let mut bad = vec![];
+
+        for (_, _, _, _, _, typ, extra) in POI_ENTRIES.iter() {
+            let key = icon_key_of(extra, typ);
+
+            if repo
+                .get_with(Options {
+                    names: vec![key.to_string()],
+                    halo: true,
+                    ..Default::default()
+                })
+                .is_err()
+            {
+                bad.push(key.to_string());
+            }
+        }
+
+        assert!(bad.is_empty(), "icons that failed to load: {bad:?}");
+    }
+
+    /// The tint overrides a `fill="…"` attribute but loses to an inline `style="fill:…"`,
+    /// so an icon with colours of its own keeps them only in `style`. Black attributes are
+    /// fine - those are what the tint replaces.
+    #[test]
+    fn an_icon_with_colours_of_its_own_states_them_in_style() {
+        fn is_black(fill: &str) -> bool {
+            let hex = fill.trim().trim_start_matches('#');
+
+            let expanded = match hex.len() {
+                3 => hex.chars().flat_map(|c| [c, c]).collect::<String>(),
+                6 => hex.to_owned(),
+                _ => return false,
+            };
+
+            (0..3).all(|i| {
+                u8::from_str_radix(&expanded[i * 2..i * 2 + 2], 16).is_ok_and(|v| v <= 0x14)
+            })
+        }
+
+        /// The fill an element declares, by `style` (which the tint cannot override) or
+        /// by attribute (which it can). Returns whether `style` was the source.
+        fn declared_fill(el: &xmltree::Element) -> (Option<&str>, bool) {
+            let styled = el.attributes.get("style").and_then(|s| {
+                s.split(';')
+                    .filter_map(|d| d.split_once(':'))
+                    .find(|(k, _)| k.trim() == "fill")
+                    .map(|(_, v)| v.trim())
+            });
+
+            styled.map_or_else(
+                || (el.attributes.get("fill").map(String::as_str), false),
+                |fill| (Some(fill), true),
+            )
+        }
+
+        let mut bad = vec![];
+
+        for (_, _, _, _, category, typ, extra) in POI_ENTRIES.iter() {
+            let key = icon_key_of(extra, typ);
+
+            // A missing file is `every_definition_loads_its_icon`'s to report, not this one.
+            let Ok(svg) = std::fs::read_to_string(format!("images/{key}.svg")) else {
+                continue;
+            };
+
+            let Ok(root) = xmltree::Element::parse(svg.as_bytes()) else {
+                continue;
+            };
+
+            let tint = colors::rgb_hex(color_of(*category, extra));
+
+            let mut walk = vec![(&root, None::<&str>)];
+
+            while let Some((el, inherited)) = walk.pop() {
+                let (own, own_styled) = declared_fill(el);
+                let fill = own.or(inherited);
+
+                for child in el.children.iter().filter_map(xmltree::XMLNode::as_element) {
+                    walk.push((child, fill));
+                }
+
+                // The tint's selector only reaches <path>, and only a `style` on the path
+                // itself outranks it - a fill inherited from an ancestor does not.
+                if el.name.split(':').next_back() != Some("path") || own_styled {
+                    continue;
+                }
+
+                let Some(fill) = fill else {
+                    continue;
+                };
+
+                if fill.eq_ignore_ascii_case(&tint) || is_black(fill) {
+                    continue;
+                }
+
+                bad.push(format!(
+                    "{key}.svg draws a path in {fill}, which the {category:?} tint ({tint}) \
+                     would repaint - state it as style=\"fill:{fill}\" on the path"
+                ));
+            }
+        }
+
+        assert!(
+            bad.is_empty(),
+            "icons losing their own colours:\n{}",
+            bad.join("\n")
+        );
+    }
+    #[test]
+    fn types_sharing_an_icon_share_a_colour() {
+        let mut by_icon: HashMap<&str, (&str, String)> = HashMap::new();
+
+        for (_, _, _, _, category, typ, extra) in POI_ENTRIES.iter() {
+            // Mirrors `legend::pois`, which gives `volcano` a legend entry of its own
+            // rather than folding it into the `peak` icon's, and skips `*_noname`
+            // entirely. Those are the types allowed to draw a shared icon in their own
+            // colour, because the legend shows them separately.
+            if *typ == "volcano" || typ.ends_with("_noname") {
+                continue;
+            }
+
+            let icon = icon_key_of(extra, typ);
+
+            let color = colors::rgb_hex(color_of(*category, extra));
+
+            let (first_typ, first_color) =
+                by_icon.entry(icon).or_insert_with(|| (typ, color.clone()));
+
+            assert_eq!(
+                *first_color, color,
+                "{typ} draws the {icon} icon in {color} but {first_typ} draws it in \
+                 {first_color} - the same glyph would appear on the map in two colours"
+            );
+        }
+    }
+
+    /// An icon drawn by the POI layer and by another layer must be asked for with the
+    /// same tint in both places. The POI layer always supplies one, and the icon files
+    /// carry no colour of their own, so a caller using the bare `get("name")` form draws
+    /// that glyph in black - which is how obstacle markers along a line came out black
+    /// beside red ones on a node.
+    ///
+    /// Scans the layer sources rather than listing the names, so a new `get("…")` is
+    /// covered without anyone remembering to add it here.
+    #[test]
+    fn icons_shared_with_another_layer_are_tinted_there_too() {
+        let poi_icons: HashSet<&str> = POI_ENTRIES
+            .iter()
+            .map(|(_, _, _, _, _, typ, extra)| icon_key_of(extra, typ))
+            .collect();
+
+        let mut bad = vec![];
+
+        for entry in std::fs::read_dir("src/render/layers").expect("layers dir") {
+            let path = entry.expect("dir entry").path();
+
+            if path.extension().is_none_or(|e| e != "rs")
+                || path.file_name().is_some_and(|n| n == "pois.rs")
+            {
+                continue;
+            }
+
+            let src = std::fs::read_to_string(&path).expect("read layer");
+
+            // The convenience form, which passes no stylesheet.
+            for (_, rest) in src
+                .match_indices("svg_repo.get(\"")
+                .map(|(i, m)| (i, &src[i + m.len()..]))
+            {
+                let Some(name) = rest.split('"').next() else {
+                    continue;
+                };
+
+                if poi_icons.contains(name) {
+                    bad.push(format!(
+                        "{} asks for {name:?} with svg_repo.get(), which supplies no tint, \
+                         but the POI layer draws the same icon tinted - pass the same \
+                         colour here via get_with(Options {{ stylesheet, .. }})",
+                        path.display()
+                    ));
+                }
+            }
+        }
+
+        assert!(bad.is_empty(), "untinted shared icons:\n{}", bad.join("\n"));
     }
 
     #[test]

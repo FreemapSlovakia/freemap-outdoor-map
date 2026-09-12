@@ -1,5 +1,5 @@
 use crate::render::{
-    layers::{Category, Def, POI_ORDER, POIS},
+    layers::{Category, Def, POI_ORDER, POIS, SHOP_TYPES},
     legend::{
         BuildOpts, LegendItem, LegendItemBuilder, MAX_LEGEND_ZOOM, build_tags_map, leak_str,
         mapping::{self, MappingEntry},
@@ -9,6 +9,9 @@ use geo::Point;
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 use std::ops::RangeInclusive;
+
+/// Sample zoom when the legend is requested without one.
+const PREFERRED_POI_ZOOM: u8 = 19;
 
 pub fn pois(
     mapping_root: &mapping::MappingRoot,
@@ -98,9 +101,9 @@ pub fn pois(
             continue;
         };
 
-        // The icon is picked at zoom 19 so that item ids stay the same at every zoom, even
-        // where a type switches to a different icon at low zoom (guideposts do).
-        let Some(def) = defs.iter().find(|def| def.is_active_at(19)) else {
+        // Deepest zoom, so item ids stay the same at every zoom and a type drawn only at
+        // MAX_LEGEND_ZOOM (the lowest-priority shops) still matches a definition.
+        let Some(def) = defs.iter().find(|def| def.is_active_at(MAX_LEGEND_ZOOM)) else {
             continue;
         };
 
@@ -156,28 +159,37 @@ pub fn pois(
                 zooms,
             } = group;
 
-            LegendItem::builder(format!("poi_{visual_key}").leak(), category, 19, opts)
-                .zoom_range(*zooms.start(), *zooms.end())
-                .add_tag_set(|mut ts| {
-                    for tag_set in &tags {
-                        ts = ts.add_tags(|mut tb| {
-                            for (k, v) in tag_set {
-                                tb = tb.add(k, v);
-                            }
-                            tb
-                        });
-                    }
+            // Must land inside the item's own range or the swatch renders empty, as the
+            // deepest tier of shops would. Clamping leaves every other item where it was.
+            let preferred_zoom = PREFERRED_POI_ZOOM.clamp(*zooms.start(), *zooms.end());
 
-                    if visual_key == "spring" {
-                        ts = ts
-                            .add_tags(|t| t.add("natural", "geyser"))
-                            .add_tags(|t| t.add("man_made", "spring_box"));
-                    }
+            LegendItem::builder(
+                format!("poi_{visual_key}").leak(),
+                category,
+                preferred_zoom,
+                opts,
+            )
+            .zoom_range(*zooms.start(), *zooms.end())
+            .add_tag_set(|mut ts| {
+                for tag_set in &tags {
+                    ts = ts.add_tags(|mut tb| {
+                        for (k, v) in tag_set {
+                            tb = tb.add(k, v);
+                        }
+                        tb
+                    });
+                }
 
-                    ts
-                })
-                .add_poi(repr_typ, HashMap::new(), category)
-                .build()
+                if visual_key == "spring" {
+                    ts = ts
+                        .add_tags(|t| t.add("natural", "geyser"))
+                        .add_tags(|t| t.add("man_made", "spring_box"));
+                }
+
+                ts
+            })
+            .add_poi(repr_typ, HashMap::new(), category)
+            .build()
         })
         .chain(
             [
@@ -195,7 +207,7 @@ pub fn pois(
                 LegendItem::builder(
                     format!("poi_spring_{tag_key}_{tag_value}").leak(),
                     Category::Water,
-                    19,
+                    PREFERRED_POI_ZOOM,
                     opts,
                 )
                 .add_tag_set(|mut ts| {
@@ -298,17 +310,9 @@ fn build_poi_tags(
 ) -> IndexMap<&'static str, &'static str> {
     let mut tags = vec![];
 
-    if matches!(
-        typ,
-        "convenience"
-            | "confectionery"
-            | "pastry"
-            | "bicycle"
-            | "supermarket"
-            | "greengrocer"
-            | "farm"
-            | "massage"
-    ) {
+    // `mapping.yaml` maps `shop: __any__`, so these types carry no tag of their own for
+    // `mapping_entries` to find and the legend would show a nameless row.
+    if SHOP_TYPES.contains(&typ) {
         tags.push(("shop", typ));
     } else if matches!(
         typ,

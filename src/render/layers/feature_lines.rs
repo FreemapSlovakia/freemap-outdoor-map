@@ -1,5 +1,6 @@
 use crate::render::{
     Feature,
+    categories::Category,
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{
@@ -305,21 +306,20 @@ pub fn render(
 
                     context.new_path();
 
-                    // The POI layer draws these same icons and the cache is keyed by
-                    // name alone, so both callers have to ask for the same surface:
-                    // haloed and unbounded. This layer runs first, so asking for less
-                    // here used to hand the POI layer an unhaloed icon - an obstacle's
-                    // glow depended on whether the tile happened to carry a line
-                    // obstacle too.
-                    let surface = svg_repo.get_extra(
-                        typ,
-                        Some(|| Options {
-                            names: vec![typ.to_string()],
-                            halo: true,
-                            use_extents: false,
-                            ..Default::default()
-                        }),
-                    )?;
+                    // The POI layer draws these same icons, and the files carry no
+                    // colour of their own - so the tint has to be asked for here too, or
+                    // a line obstacle draws black beside a red node obstacle on one tile.
+                    // Taken from the category both layers share, so they cannot drift.
+                    let surface = svg_repo.get_with(Options {
+                        names: vec![typ.to_string()],
+                        stylesheet: Some(format!(
+                            "path {{ fill: {} }}",
+                            colors::rgb_hex(Category::Terrain.icon_color())
+                        )),
+                        halo: true,
+                        use_extents: false,
+                        ..Default::default()
+                    })?;
 
                     // NOTE: use ink_extents() rather than extents(): the surface is an
                     // *unbounded* recording surface, for which extents() returns None.
@@ -404,4 +404,29 @@ pub fn render(
     }
 
     Ok(())
+}
+#[cfg(test)]
+mod tests {
+    use crate::render::{categories::Category, colors, layers::POIS};
+
+    /// The obstacle icons are drawn by this layer for lines and by the POI layer for
+    /// nodes, and carry no colour of their own - so both callers must ask for the same
+    /// tint. They drew black here and red there once the colour moved out of the SVGs.
+    #[test]
+    fn line_obstacles_are_tinted_like_the_poi_ones() {
+        for typ in ["obstacle", "obstacle_tree", "obstacle_vegetation"] {
+            let def = POIS
+                .get(typ)
+                .and_then(|defs| defs.first())
+                .unwrap_or_else(|| panic!("{typ} has no definition"));
+
+            assert_eq!(
+                colors::rgb_hex(def.color()),
+                colors::rgb_hex(Category::Terrain.icon_color()),
+                "{typ}: this layer tints from Category::Terrain, so the POI layer's \
+                 colour for it must come from there too - an `Extra::color` override \
+                 here would make one layer draw it in a different colour"
+            );
+        }
+    }
 }

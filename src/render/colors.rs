@@ -160,6 +160,50 @@ const fn parse_color(color: &str) -> Color {
     panic!("unknown color format")
 }
 
+/// POI icon tints, chosen per category by `Category::icon_color`.
+///
+/// Hex only: these go into a librsvg user stylesheet via [`rgb_hex`], and older librsvg
+/// (the production server's included) silently drops `hsl()` there, leaving icons black.
+///
+/// Almost nothing is tinted. Colouring every category turned a town tile into a
+/// patchwork, and gastronomy alone is about a third of a city centre's POIs, so a warm
+/// tint there already fills it.
+pub const POI_BLACK: Color = BLACK;
+/// Hex, not [`WATER_LABEL`]'s hsl: that rounds to `#0065ff`, one off the blue the water
+/// icons carry in their own `fill`, so the tint would repaint them all for nothing.
+pub const POI_WATER: Color = parse_color("#0064ff");
+/// Dark because sport POIs sit on green landcover, where a lighter green vanishes.
+pub const POI_SPORT: Color = parse_color("hsl(125, 55%, 24%)");
+/// Violet rather than navy, which shares a hue family with [`POI_WATER`].
+pub const POI_ACCOMMODATION: Color = parse_color("hsl(252, 42%, 38%)");
+/// Town-only POIs. Above ~45% lightness these wash out against built-up grey.
+pub const POI_MUTED: Color = parse_color("hsl(0, 0%, 30%)");
+pub const POI_GASTRO: Color = parse_color("hsl(24, 65%, 28%)");
+pub const POI_HEALTH: Color = parse_color("hsl(0, 72%, 42%)");
+/// Things across a path that you have to get round.
+pub const POI_OBSTACLE: Color = parse_color("#ff0000");
+/// The green the tree icons are drawn in; [`TREE`] is the brighter green that labels
+/// them, shared with the landcover trees.
+pub const POI_TREE: Color = parse_color("#107010");
+pub const POI_VOLCANO: Color = parse_color("#c30404");
+/// Glow on a POI you may not get into. A light red - the full `#ff0000` of
+/// `images/no_foot_bicycle.svg` shouted once it was stroked this wide.
+pub const ACCESS_RESTRICTED: Color = parse_color("#ff8080");
+
+/// Hex is the only form safe in an rsvg user stylesheet - see the POI tints above.
+pub fn rgb_hex(color: Color) -> String {
+    let (r, g, b) = color;
+
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "color components are in 0.0..=1.0"
+    )]
+    let to_u8 = |c: f64| (c * 255.0).round() as u8;
+
+    format!("#{:02x}{:02x}{:02x}", to_u8(r), to_u8(g), to_u8(b))
+}
+
 pub const ADMIN_BORDER: Color = parse_color("hsl(278, 100%, 50%)");
 pub const AEROWAY: Color = parse_color("hsl(260, 10%, 50%)");
 pub const ALLOTMENTS: Color = parse_color("hsl(50, 45%, 88%)");
@@ -198,6 +242,7 @@ pub const PITCH: Color = parse_color("hsl(110, 35%, 75%)");
 pub const POWER_LINE: Color = parse_color("hsl(0, 0%, 0%)");
 pub const POWER_LINE_MINOR: Color = parse_color("hsl(0, 0%, 50%)");
 pub const PROTECTED: Color = parse_color("hsl(120, 75%, 25%)");
+pub const TREE: Color = parse_color("hsl(120, 100%, 31%)");
 pub const SPECIAL_PARK: Color = parse_color("hsl(330, 75%, 25%)");
 pub const GLACIER: Color = parse_color("hsl(216, 65%, 90%)");
 pub const QUARRY: Color = parse_color("hsl(0, 0%, 78%)");
@@ -225,7 +270,6 @@ pub const BLACK: Color = parse_color("hsl(0, 0%, 0%)");
 pub const WHITE: Color = parse_color("hsl(0, 100%, 100%)");
 pub const SOLAR_BG: Color = parse_color("hsl(250, 63%, 60%)");
 pub const SOLAR_FG: Color = parse_color("hsl(250, 57%, 76%)");
-pub const TREE: Color = parse_color("hsl(120, 100%, 31%)");
 pub const DAM_LINE: Color = parse_color("hsl(0, 0%, 40%)");
 pub const SOLAR_PLANT_BORDER: Color = parse_color("hsl(250, 60%, 50%)");
 
