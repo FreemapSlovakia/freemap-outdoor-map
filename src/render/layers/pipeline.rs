@@ -470,6 +470,15 @@ pub fn render(
         |rows, _params| layers::water_areas::render(&ctx, context, rows),
     );
 
+    if zoom >= 14 {
+        prefetcher.add(
+            "pier_areas",
+            None,
+            |ctx, conn| async move { layers::pier_areas::query(&ctx, &conn).await }.boxed(),
+            |rows, _params| layers::pier_areas::render(&ctx, context, rows),
+        );
+    }
+
     if zoom >= 15 {
         prefetcher.add(
             "bridge_areas",

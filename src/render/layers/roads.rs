@@ -347,7 +347,9 @@ pub fn render(
         let trail_visibility = 0.666f64.powf(row.get_i32("trail_visibility")? as f64);
 
         match (zoom, class, typ) {
-            (14.., _, "pier") => {
+            // A closed pier is an area; `pier_areas` fills it from `osm_landcovers`, where
+            // imposm puts it as well.
+            (14.., _, "pier") if !geom.is_closed() => {
                 apply_highway_defaults(2.0);
                 context.set_source_color(colors::PIER);
                 draw()?;

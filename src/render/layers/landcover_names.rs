@@ -54,7 +54,7 @@ pub async fn query(
                 osm_landcovers
             WHERE
                 type NOT IN ('zoo', 'theme_park', 'winter_sports', 'national_park',
-                    'protected_area', 'nature_reserve', 'aquaculture') AND
+                    'protected_area', 'nature_reserve', 'aquaculture', 'pier') AND
                 area >= $6 AND
                 (name <> '' OR tags ? 'ref') AND
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)

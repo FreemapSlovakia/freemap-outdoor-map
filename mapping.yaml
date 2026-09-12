@@ -318,6 +318,7 @@ tables:
             - bridge
             - bunker_silo
             - clearcut
+            - pier
             - silo # TODO remove
             - storage_tank # TODO remove
             - telescope

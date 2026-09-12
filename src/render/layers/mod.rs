@@ -33,6 +33,7 @@ mod landcover_z_order;
 mod locality_names;
 mod military_areas;
 mod national_park_names;
+mod pier_areas;
 mod pipeline;
 pub mod place_names;
 mod pois;
