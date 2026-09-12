@@ -30,26 +30,43 @@ Create new postgres database and initialize it as DB superuser with [initial.sql
 sudo -u postgres psql < sql/initial.sql
 ```
 
-## Land polygons
+## Land polygons (coastlines)
+
+Coastlines do not come from OSM via imposm — `mapping.yaml` has no `natural=coastline`.
+They come from [osmdata.openstreetmap.de](https://osmdata.openstreetmap.de/)'s
+pre-assembled land-polygons shapefile, rebuilt from the planet daily, which is already a
+valid polygon set (the raw coastline ways are not). Re-import it with
+[scripts/reimport-land-polygons.nu](./scripts/reimport-land-polygons.nu):
 
 ```sh
-wget https://osmdata.openstreetmap.de/download/land-polygons-complete-3857.zip
+nu scripts/reimport-land-polygons.nu
+```
 
-unzip land-polygons-complete-3857.zip
+It downloads and extracts the shapefile, loads it into `land_polygons_raw` with `ogr2ogr`,
+then runs [sql/land-polygons.sql](./sql/land-polygons.sql) to derive the four per-zoom
+tables the renderer reads (`land_z5_7`, `land_z8_10`, `land_z11_13`, `land_z14_plus` — see
+`src/render/layers/sea.rs`). On fm5 this measured 9 s to download, 36 s to load and ~40 min
+to rebuild — so budget ~45 min, ~3 GB of scratch space for the shapefile and ~7 GB free in
+the tablespace. The download is resumable and the whole thing is safe to re-run.
 
-ogr2ogr \
-  -f PostgreSQL \
-  PG:"host=localhost dbname=osm_db user=osm_user password=pw" \
-  land-polygons-complete-3857 \
-  -nln land_polygons_raw \
-  -lco GEOMETRY_NAME=geom \
-  -lco FID=osm_id \
-  -lco SPATIAL_INDEX=GIST \
-  -t_srs EPSG:3857 \
-  -nlt PROMOTE_TO_MULTI \
-  -overwrite
+**Rendering keeps serving throughout, and no restart is needed afterwards.** `land_polygons_raw`
+is build input only, never queried at runtime, and the SQL builds `land_z*_new` and swaps all
+four in by rename in one short transaction at the end — so the `ACCESS EXCLUSIVE` lock lasts
+milliseconds instead of the tens of minutes an in-place `DROP`/`CREATE` would hold it for.
+The cost is holding both generations of the tables (~3 GB extra) until the swap. If only the
+swap fails (it uses a 5 s `lock_timeout` rather than queueing behind a slow reader), the built
+`land_z*_new` tables survive — re-run with `--sql-only`, or apply the swap block by hand.
 
-psql < sql/land-polygons.sql
+On a host where the database roles use peer authentication and the tables are owned by another
+unix user, run the script as yourself and let `--db-user` hand `psql` and `ogr2ogr` over via
+`sudo`; the SQL goes in on stdin, so only the shapefile has to be readable by that user. On fm5:
+
+```sh
+scp scripts/reimport-land-polygons.nu sql/land-polygons.sql fm5:land-polygons-reimport/
+
+ssh fm5 '~/.cargo/bin/nu land-polygons-reimport/reimport-land-polygons.nu \
+           --db-user freemap --database freemap \
+           --sql land-polygons-reimport/land-polygons.sql'
 ```
 
 ## Peak isolations
