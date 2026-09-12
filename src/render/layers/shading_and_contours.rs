@@ -2,7 +2,10 @@ use crate::render::{
     ContourCountries, Feature, HillshadingHierarchy,
     ctx::Ctx,
     layer_render_error::LayerRenderResult,
-    layers::{bridge_areas, contours, hillshading, hillshading_datasets::HillshadingDatasets},
+    layers::{
+        bridge_areas, contours, dry_land::DryLand, hillshading,
+        hillshading_datasets::HillshadingDatasets,
+    },
 };
 use cairo::{Context, Format, ImageSurface, SurfacePattern};
 use std::collections::{HashMap, HashSet};
@@ -13,6 +16,8 @@ pub struct ShadingParams<'a> {
     pub hierarchy: &'a HillshadingHierarchy,
     pub contour_countries: Option<&'a ContourCountries>,
     pub do_shading: bool,
+    /// What the tile has been clipped to, so contour labels can keep off the water.
+    pub dry_land: Option<&'a DryLand>,
 }
 
 pub fn render(
@@ -29,6 +34,7 @@ pub fn render(
         hierarchy,
         contour_countries,
         do_shading,
+        dry_land,
     } = params;
 
     let fade_alpha = 1.0f64.min(1.0 - (ctx.zoom as f64 - 7.0).ln() / 5.0);
@@ -193,7 +199,7 @@ pub fn render(
             }
 
             context.push_group();
-            contours::render(ctx, context, rows)?;
+            contours::render(ctx, context, rows, dry_land)?;
             context.pop_group_to_source()?;
             context.mask(&mask_pattern)?;
         }
@@ -238,7 +244,7 @@ pub fn render(
             }
 
             context.push_group();
-            contours::render(ctx, context, rows)?;
+            contours::render(ctx, context, rows, dry_land)?;
             context.pop_group_to_source()?;
             context.mask(&mask_pattern)?;
         }

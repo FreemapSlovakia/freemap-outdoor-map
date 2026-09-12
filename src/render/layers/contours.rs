@@ -6,13 +6,16 @@ use crate::render::{
         font_options::FontAndLayoutOptions,
         smooth_line::path_smooth_bezier_spline,
         text_on_line::{
-            Align, Distribution, Repeat, TextOnLineOptions, Upright, draw_text_on_line,
+            Align, Distribution, PlacementFilter, Repeat, TextOnLineOptions, Upright,
+            draw_text_on_line,
         },
     },
     layer_render_error::LayerRenderResult,
+    layers::dry_land::DryLand,
     projectable::TileProjectable,
 };
 use cairo::Context;
+use geo::Rect;
 
 pub async fn query(
     ctx: &Ctx,
@@ -72,7 +75,12 @@ pub async fn query(
     client.query(&sql, &params.as_params()).await
 }
 
-pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    dry_land: Option<&DryLand>,
+) -> LayerRenderResult {
     let _span = tracy_client::span!("contours::render");
 
     let zoom = ctx.zoom;
@@ -80,6 +88,14 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
     if zoom < 12 {
         return Ok(());
     }
+
+    // The lines themselves are cut by the clip, invisibly, since it follows the drawn
+    // shoreline. A label straddling it would be cut mid-glyph, so it is moved instead.
+    let on_dry_land = dry_land.map(|dry_land| move |bbox: &Rect<f64>| dry_land.allows_label(bbox));
+
+    let placement_filter = on_dry_land
+        .as_ref()
+        .map(|on_dry_land| PlacementFilter(on_dry_land));
 
     context.save()?;
 
@@ -114,6 +130,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
                 None,
                 &TextOnLineOptions {
                     flo: FontAndLayoutOptions::default(),
+                    placement_filter,
                     upright: Upright::Left,
                     color: colors::CONTOUR,
                     distribution: Distribution::Align {

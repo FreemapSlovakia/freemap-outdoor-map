@@ -18,6 +18,7 @@ mod contours;
 mod country_names;
 mod custom;
 mod decorations;
+mod dry_land;
 mod embankments;
 mod feature_lines;
 mod fixmes;

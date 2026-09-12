@@ -13,13 +13,32 @@ use cosmic_text::{
     fontdb::{ID as FontId, Weight as FdbWeight},
 };
 use geo::Vector2DOps;
-use geo::{Coord, Distance, Euclidean, InterpolatePoint, LineString, Rect};
+use geo::{Coord, Distance, Euclidean, InterpolatePoint, Intersects, LineString, Rect};
 use std::f64::consts::{PI, TAU};
 
+/// Vetoes a label whose glyphs would land somewhere the layer cannot draw — over the sea,
+/// for contours. A vetoed label slides along the line and is tried again, so it ends up
+/// further inland rather than sliced by the mask that would otherwise have cut it.
+#[derive(Copy, Clone)]
+pub struct PlacementFilter<'a>(pub &'a dyn Fn(&Rect<f64>) -> bool);
+
+impl PlacementFilter<'_> {
+    fn allows(self, bbox: &Rect<f64>) -> bool {
+        (self.0)(bbox)
+    }
+}
+
+impl std::fmt::Debug for PlacementFilter<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("PlacementFilter")
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
-pub struct TextOnLineOptions {
+pub struct TextOnLineOptions<'a> {
     pub upright: Upright,
     pub distribution: Distribution,
+    pub placement_filter: Option<PlacementFilter<'a>>,
     pub alpha: f64,
     pub offset: f64,
     /// Keep the offset on the same side of the original baseline even when flipping for upright text.
@@ -33,10 +52,11 @@ pub struct TextOnLineOptions {
     pub flo: FontAndLayoutOptions,
 }
 
-impl Default for TextOnLineOptions {
+impl Default for TextOnLineOptions<'_> {
     fn default() -> Self {
         Self {
             upright: Upright::Auto,
+            placement_filter: None,
             distribution: Distribution::Align {
                 align: Align::Center,
                 repeat: Repeat::None,
@@ -837,6 +857,13 @@ pub fn draw_text_on_line(
     let mut placements: Vec<Vec<(ClusterInfo, Coord, f64)>> = Vec::new();
     let mut rendered = false;
 
+    // Glyph boxes already placed on this line. Only a label that has slid — past a bend,
+    // a collision, or ground it may not sit on — is tested against them: it can travel the
+    // best part of a repeat step and land on top of the next one, and a repeated label
+    // defers its collision boxes, so nothing else would catch that. Labels that stay on
+    // their own offset keep the spacing they were given.
+    let mut taken: Vec<Rect<f64>> = Vec::new();
+
     // For each label repeat, walk glyphs along the line while keeping edge-alignment and curvature limits.
     'outer: for label_start in offsets {
         let mut label_start_try = label_start;
@@ -1033,12 +1060,27 @@ pub fn draw_text_on_line(
                 }
             }
 
-            if let Some(col) = collision.as_deref()
-                && let Some((idx, _)) = glyph_bboxes
-                    .iter()
-                    .enumerate()
-                    .find(|(_, bb)| col.collides(bb))
-            {
+            #[allow(clippy::float_cmp)] // exact identity check: untouched unless a retry moved it
+            let slid = label_start_try != label_start;
+
+            let blocked = options
+                .placement_filter
+                .and_then(|filter| glyph_bboxes.iter().position(|bb| !filter.allows(bb)))
+                .or_else(|| {
+                    slid.then(|| {
+                        glyph_bboxes
+                            .iter()
+                            .position(|bb| taken.iter().any(|placed| placed.intersects(bb)))
+                    })
+                    .flatten()
+                })
+                .or_else(|| {
+                    collision
+                        .as_deref()
+                        .and_then(|col| glyph_bboxes.iter().position(|bb| col.collides(bb)))
+                });
+
+            if let Some(idx) = blocked {
                 if retries > 0 {
                     retries -= 1;
                     let skip = (options.halo_width + options.flo.size).max(1.0);
@@ -1062,6 +1104,8 @@ pub fn draw_text_on_line(
 
                 continue 'outer;
             }
+
+            taken.extend(glyph_bboxes.iter().copied());
 
             if repeat.defer_collision {
                 new_collision_bboxes.extend(glyph_bboxes);

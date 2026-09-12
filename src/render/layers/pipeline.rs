@@ -401,14 +401,20 @@ pub fn render(
 
     let mut prefetcher = Prefetcher::new(pool, handle, ctx.clone());
 
-    if request.legend.is_none() {
-        prefetcher.add(
-            "sea",
-            None,
-            |ctx, conn| async move { layers::sea::query(&ctx, &conn).await }.boxed(),
-            |rows, _params| layers::sea::render(&ctx, context, rows),
-        );
-    }
+    // The land polygons are fetched once and used twice: for the sea fill here, and
+    // later to keep hillshading and contours on dry land (see `dry_land::begin`).
+    let land_slot = if request.legend.is_none() {
+        let slot = prefetcher
+            .shared_query(|ctx, conn| async move { layers::sea::query(&ctx, &conn).await }.boxed());
+
+        prefetcher.add_shared("sea", "sea", slot.as_ref(), |rows, _params| {
+            layers::sea::render(&ctx, context, rows)
+        });
+
+        slot
+    } else {
+        None
+    };
 
     // Landcovers are drawn in two stages: the fills here, and the ski resort boundaries
     // much later, above the lines (cutlines in particular) that would cover them.
@@ -451,10 +457,16 @@ pub fn render(
         |rows, params| layers::water_lines::render(&ctx, context, rows, params.svg_repo),
     );
 
-    prefetcher.add(
+    // Fetched once and used twice, like the land polygons: for the fill here, and to
+    // punch the water out of the dry-land mask further down.
+    let water_slot = prefetcher.shared_query(|ctx, conn| {
+        async move { layers::water_areas::query(&ctx, &conn).await }.boxed()
+    });
+
+    prefetcher.add_shared(
         "water_areas",
-        None,
-        |ctx, conn| async move { layers::water_areas::query(&ctx, &conn).await }.boxed(),
+        "water_areas",
+        water_slot.as_ref(),
         |rows, _params| layers::water_areas::render(&ctx, context, rows),
     );
 
@@ -547,6 +559,37 @@ pub fn render(
         let results: Arc<Mutex<HashMap<Option<&'static str>, Vec<Feature>>>> =
             Arc::new(Mutex::new(HashMap::new()));
 
+        let ctx_ref = &ctx;
+
+        // Keep shading and contours on dry land: a DEM reports elevations offshore and
+        // under lakes alike, which shades the water and draws a 0 m contour across it.
+        // Set up here and taken down after the stage, so no other layer is affected.
+        let dry_land: Rc<RefCell<Option<layers::dry_land::DryLand>>> = Rc::new(RefCell::new(None));
+
+        if let Some(slot) = land_slot.as_ref() {
+            let dry_land = dry_land.clone();
+
+            // Water is read from the slot the fill above already awaited.
+            let water_slot = water_slot.clone();
+
+            prefetcher.add_shared("dry_land", "sea", Some(slot), move |land_rows, _params| {
+                // Borrowed from the slot the fill above already awaited; should that stage
+                // ever be gated away, the tile keeps its land clip and cuts no water.
+                let water_rows = water_slot.as_ref().map(|slot| slot.features.borrow());
+
+                let water_rows = water_rows
+                    .as_deref()
+                    .and_then(Option::as_deref)
+                    .unwrap_or_default();
+
+                *dry_land.borrow_mut() = Some(layers::dry_land::begin(
+                    ctx_ref, context, land_rows, water_rows,
+                )?);
+
+                Ok(())
+            });
+        }
+
         if zoom >= 15 {
             let acc = results.clone();
 
@@ -622,8 +665,18 @@ pub fn render(
 
         let ctx_for_closure = ctx.clone();
 
+        let dry_land_for_stage = dry_land.clone();
+
         prefetcher.push(move |params| {
             let Some(hsd) = params.hsd else { return Ok(()) };
+
+            let dry_land = dry_land_for_stage.borrow();
+            let dry_land = dry_land.as_ref();
+
+            // All sea: everything below would be clipped away, so don't even load the DEMs.
+            if dry_land.is_some_and(|dry_land| !dry_land.has_land()) {
+                return Ok(());
+            }
 
             let ctx = &ctx_for_closure;
 
@@ -666,9 +719,18 @@ pub fn render(
                     hierarchy: &hierarchy,
                     contour_countries: contour_countries_for_render.as_ref(),
                     do_shading,
+                    dry_land,
                 },
             )
             .with_layer("shading_and_contours")?;
+
+            Ok(())
+        });
+
+        prefetcher.push(move |_params| {
+            if let Some(dry_land) = dry_land.borrow().as_ref() {
+                layers::dry_land::end(ctx_ref, context, dry_land).with_layer("dry_land")?;
+            }
 
             Ok(())
         });

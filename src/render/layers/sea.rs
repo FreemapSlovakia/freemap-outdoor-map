@@ -4,9 +4,11 @@ use crate::render::{
     ctx::Ctx,
     draw::path_geom::path_geometry,
     layer_render_error::LayerRenderResult,
+    layers::dry_land,
     projectable::TileProjectable,
 };
 use cairo::Context;
+use geo::Geometry;
 
 pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let table = match ctx.zoom {
@@ -26,27 +28,24 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
             FROM
                 {table}
             WHERE
-                geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
         ");
 
     client.query(
         &sql,
-        &ctx.bbox_query_params(Some(2.0))
+        &ctx.bbox_query_params(Some(dry_land::KNOWN_MARGIN_PX))
             .push((20.0 - ctx.zoom as f64).exp2() / 25.0)
             .as_params(),
     ).await
 }
 
-pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
-    let _span = tracy_client::span!("sea::render");
-
-    context.save()?;
-
-    context.set_source_color(colors::WATER);
-    context.paint()?;
-
-    context.set_source_color(colors::WHITE);
-
+/// Projects the land geometry of `rows` — skipping the empty ones, as a tile far
+/// out at sea has none — and hands each piece to `consume`.
+pub(super) fn for_each_land(
+    ctx: &Ctx,
+    rows: &[Feature],
+    mut consume: impl FnMut(&Geometry) -> LayerRenderResult,
+) -> LayerRenderResult {
     for row in rows {
         let geom = match row.get_geometry() {
             Ok(geom) => geom.project_to_tile(&ctx.tile_projector),
@@ -56,10 +55,29 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
             },
         };
 
-        path_geometry(context, &geom);
+        consume(&geom)?;
+    }
+
+    Ok(())
+}
+
+pub fn render(ctx: &Ctx, context: &Context, rows: &[Feature]) -> LayerRenderResult {
+    let _span = tracy_client::span!("sea::render");
+
+    context.save()?;
+
+    context.set_source_color(colors::WATER);
+    context.paint()?;
+
+    context.set_source_color(colors::WHITE);
+
+    for_each_land(ctx, rows, |geom| {
+        path_geometry(context, geom);
 
         context.fill()?;
-    }
+
+        Ok(())
+    })?;
 
     context.restore()?;
 

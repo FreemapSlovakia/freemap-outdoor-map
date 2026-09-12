@@ -4,9 +4,11 @@ use crate::render::{
     ctx::Ctx,
     draw::{hatch::hatch_geometry, path_geom::path_geometry},
     layer_render_error::LayerRenderResult,
+    layers::dry_land,
     projectable::TileProjectable,
 };
 use cairo::Context;
+use geo::Geometry;
 
 pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let table_suffix = match ctx.zoom {
@@ -23,13 +25,32 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
             FROM
                 osm_waterareas{table_suffix}
             WHERE
-                geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
         ");
 
-    client.query(&sql, &ctx.bbox_query_params(None).as_params()).await
+    client.query(&sql, &ctx.bbox_query_params(Some(dry_land::KNOWN_MARGIN_PX)).as_params()).await
 }
 
-pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
+/// Projects the permanent water of `rows` — what [`dry_land`] cuts away — and hands
+/// each polygon to `consume`. Intermittent and seasonal beds are left out: they are dry
+/// most of the time and carry real terrain.
+pub(super) fn for_each_permanent(
+    ctx: &Ctx,
+    rows: &[Feature],
+    mut consume: impl FnMut(&Geometry) -> LayerRenderResult,
+) -> LayerRenderResult {
+    for row in rows {
+        if row.get_bool("tmp")? {
+            continue;
+        }
+
+        consume(&row.get_geometry()?.project_to_tile(&ctx.tile_projector))?;
+    }
+
+    Ok(())
+}
+
+pub fn render(ctx: &Ctx, context: &Context, rows: &[Feature]) -> LayerRenderResult {
     let _span = tracy_client::span!("water_areas::render");
 
     let zoom = ctx.zoom;
