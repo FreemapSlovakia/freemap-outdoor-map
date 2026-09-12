@@ -10,9 +10,11 @@ RestartSec=1
 User=freemap
 LimitNOFILE=200000
 EnvironmentFile=/etc/freemap-outdoor-map.env
+#ExecStart=/usr/bin/heaptrack /home/freemap/.cargo/bin/freemap-outdoor-map
 ExecStart=/home/freemap/.cargo/bin/freemap-outdoor-map
-# there seems to be some memory leak so restart the service every day
-RuntimeMaxSec=14400
+WorkingDirectory=/home/freemap
+TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target
+
