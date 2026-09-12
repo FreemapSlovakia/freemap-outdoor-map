@@ -9,6 +9,18 @@ use crate::render::{
 };
 use cairo::Context;
 
+/// The waterway types [`render`] draws, as an SQL list. Both this layer and the name
+/// labels filter on it, so a name can never be left over water with no line under it, and
+/// rows that would only be thrown away never cross the wire.
+///
+/// `tidal_channel` is deliberately absent. Tidal channels migrate, OSM geometry for them
+/// is captured once and rarely revisited, and a mudflat walker navigating by a channel
+/// that has moved is in real danger: in the Watt, better to carry less information than
+/// information that cannot be kept current. `fairway`, `flowline` and `link` are absent
+/// for the plainer reason that nothing here knows how to draw them.
+pub(super) const DRAWN_TYPES: &str = "('canal', 'canoe_pass', 'ditch', 'drain', \
+     'fish_pass', 'pressurised', 'rapids', 'river', 'stream')";
+
 pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     // ST_Simplify returns NULL for closed lines collapsing under the tolerance, hence the COALESCE
     let geom_query = match ctx.zoom {
@@ -34,7 +46,8 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
         FROM
             {table}
         WHERE
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+            type IN {DRAWN_TYPES}
     ");
 
     client.query(&sql, &ctx.bbox_query_params(Some(8.0)).as_params()).await
@@ -80,8 +93,8 @@ pub fn render(
                 ("river" | "canal", 10..=11) => (2.2, 0.0),
                 ("river" | "canal", 12..) => (2.2, 0.5),
                 (
-                    "canoe_pass" | "ditch" | "drain" | "fish_pass" | "rapids" | "ressurised"
-                    | "stream" | "tidal_channel",
+                    "canoe_pass" | "ditch" | "drain" | "fish_pass" | "pressurised" | "rapids"
+                    | "stream",
                     12..,
                 ) => (if zoom == 12 { 1.0 } else { 1.2 }, 0.5),
 

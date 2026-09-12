@@ -493,8 +493,8 @@ tables:
         - fish_pass
         - flowline
         - link
+        - pressurised
         - rapids
-        - ressurised
         - river
         - stream
         - tidal_channel

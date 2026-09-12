@@ -9,6 +9,7 @@ use crate::render::{
         text_on_line::{Align, Distribution, Repeat, TextOnLineOptions, draw_text_on_line},
     },
     layer_render_error::LayerRenderResult,
+    layers::water_lines,
     projectable::TileProjectable,
     regex_replacer::{Replacement, replace},
 };
@@ -25,10 +26,12 @@ static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
 });
 
 pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+    // Only types that are actually drawn: a name whose line is missing would float over
+    // the water with nothing under it.
     let w = if ctx.zoom < 14 {
-        "AND type = 'river'"
+        "AND type = 'river'".to_owned()
     } else {
-        ""
+        format!("AND type IN {}", water_lines::DRAWN_TYPES)
     };
 
     let sql = format!(

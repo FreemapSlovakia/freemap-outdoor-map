@@ -55,7 +55,6 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
             "ditch",
             "drain",
             "rapids",
-            "tidal_channel",
             "pressurised",
             "canoe_pass",
             "fish_pass",

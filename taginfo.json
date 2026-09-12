@@ -3006,13 +3006,6 @@
     },
     {
       "key": "waterway",
-      "value": "tidal_channel",
-      "object_types": ["way"],
-      "description": "Rendered from zoom 12. Label (name) from zoom 12.",
-      "icon_url": "https://outdoor.tiles.freemap.sk/legend/river_stream?mode=taginfo"
-    },
-    {
-      "key": "waterway",
       "value": "pressurised",
       "object_types": ["way"],
       "description": "Rendered from zoom 12. Label (name) from zoom 12.",
