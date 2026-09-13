@@ -542,8 +542,9 @@ pub fn render(
         prefetcher.add(
             "road_access_restrictions",
             None,
-            |ctx, conn| {
-                async move { layers::road_access_restrictions::query(&ctx, &conn).await }.boxed()
+            |ctx, mut conn| {
+                async move { layers::road_access_restrictions::query(&ctx, &mut conn).await }
+                    .boxed()
             },
             |rows, params| {
                 layers::road_access_restrictions::render(&ctx, context, rows, params.svg_repo)
