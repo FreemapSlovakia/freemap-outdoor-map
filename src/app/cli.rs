@@ -159,6 +159,14 @@ pub struct Cli {
     #[arg(long, env = "MAPRENDER_POOL_MAX_SIZE")]
     pub pool_max_size: u32,
 
+    /// Replace idle database connections older than this many seconds; 0 disables.
+    #[arg(
+        long,
+        env = "MAPRENDER_POOL_MAX_CONNECTION_AGE_SECS",
+        default_value_t = 600
+    )]
+    pub pool_max_connection_age_secs: u64,
+
     /// Maximum supported zoom for serving tiles.
     #[arg(long, env = "MAPRENDER_MAX_ZOOM", default_value_t = 20)]
     pub max_zoom: u8,

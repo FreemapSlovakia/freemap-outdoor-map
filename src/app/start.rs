@@ -17,6 +17,7 @@ use std::{
     io::BufReader,
     path::Path,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 #[cfg(unix)]
 use tokio::signal::unix::{SignalKind, signal as unix_signal};
@@ -62,6 +63,15 @@ pub fn start() {
             )
             .expect("build db pool")
         };
+
+        if cli.pool_max_connection_age_secs > 0 {
+            spawn_connection_recycler(
+                &handle,
+                pool.clone(),
+                Duration::from_secs(cli.pool_max_connection_age_secs),
+                (cli.pool_max_size as usize / 10).max(1),
+            );
+        }
 
         // Fail here rather than on every z8+ tile: without the table the place query errors.
         if cli.place_type_overrides.is_some() {
@@ -178,6 +188,35 @@ pub fn start() {
     println!("Stopping render worker pool.");
     render_worker_pool.shutdown();
     println!("Render worker pool stopped.");
+}
+
+/// tokio-postgres never shrinks a connection's read buffer, so an idle pooled
+/// connection keeps the memory of the largest result it ever received.
+fn spawn_connection_recycler(
+    handle: &tokio::runtime::Handle,
+    pool: deadpool_postgres::Pool,
+    max_age: Duration,
+    per_tick: usize,
+) {
+    handle.spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_mins(1));
+
+        loop {
+            tick.tick().await;
+
+            // Capped so connections opened together at startup are not all replaced at once.
+            let mut budget = per_tick;
+
+            let _ = pool.retain(|_, metrics| {
+                if budget == 0 || metrics.age() < max_age {
+                    return true;
+                }
+
+                budget -= 1;
+                false
+            });
+        }
+    });
 }
 
 fn build_tile_variants(cli: &Cli) -> Result<Vec<TileVariantOptions>, String> {
