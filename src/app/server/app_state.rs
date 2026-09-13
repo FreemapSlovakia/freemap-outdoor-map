@@ -20,6 +20,7 @@ pub struct AppState {
     pub(crate) default_render: HashSet<RenderLayer>,
     pub(crate) tile_worker: Option<TileProcessingWorker>,
     pub(crate) serve_cached: bool,
+    pub(crate) min_zoom: u8,
     pub(crate) max_zoom: u8,
     pub(crate) allowed_scales: Vec<f64>,
 }

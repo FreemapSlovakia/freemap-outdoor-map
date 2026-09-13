@@ -169,6 +169,7 @@ pub fn start() {
         shutdown_tx.subscribe(),
         ServerOptions {
             serve_cached: cli.serve_cached,
+            min_zoom: cli.min_zoom,
             max_zoom: cli.max_zoom,
             allowed_scales: cli.allowed_scales,
             max_concurrent_connections: cli.max_concurrent_connections,

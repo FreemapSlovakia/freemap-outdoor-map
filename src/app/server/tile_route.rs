@@ -97,7 +97,7 @@ pub async fn serve_tile(
             .expect("body should be built");
     };
 
-    if coord.zoom > state.max_zoom {
+    if coord.zoom < state.min_zoom || coord.zoom > state.max_zoom {
         return Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::empty())

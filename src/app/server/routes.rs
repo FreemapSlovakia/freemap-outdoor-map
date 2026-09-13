@@ -27,6 +27,7 @@ use tower_http::cors::{Any, CorsLayer};
 
 pub struct ServerOptions {
     pub serve_cached: bool,
+    pub min_zoom: u8,
     pub max_zoom: u8,
     pub allowed_scales: Vec<f64>,
     pub max_concurrent_connections: usize,
@@ -78,6 +79,7 @@ pub async fn start_server(
         default_render,
         tile_worker,
         serve_cached: options.serve_cached,
+        min_zoom: options.min_zoom,
         max_zoom: options.max_zoom,
         allowed_scales: options.allowed_scales.clone(),
     };

@@ -175,6 +175,10 @@ pub struct Cli {
     )]
     pub pool_max_connection_age_secs: u64,
 
+    /// Minimum supported zoom for serving tiles.
+    #[arg(long, env = "MAPRENDER_MIN_ZOOM", default_value_t = 5)]
+    pub min_zoom: u8,
+
     /// Maximum supported zoom for serving tiles.
     #[arg(long, env = "MAPRENDER_MAX_ZOOM", default_value_t = 20)]
     pub max_zoom: u8,
@@ -296,6 +300,13 @@ impl Cli {
 
         if unique_path_count != variants_len {
             return Err("tile URL paths must be unique".into());
+        }
+
+        if self.min_zoom > self.max_zoom {
+            return Err(format!(
+                "min-zoom {} is greater than max-zoom {}",
+                self.min_zoom, self.max_zoom
+            ));
         }
 
         self.tile_variant_inputs()?;
