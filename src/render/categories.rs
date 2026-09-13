@@ -83,13 +83,17 @@ pub enum Category {
 }
 
 impl Category {
-    /// Whether a POI you may not get into is worth dimming.
+    /// Whether this group is only worth drawing when you can actually reach or use it.
     ///
-    /// The restriction always shows as a glow; this is about whether it also empties the
-    /// POI of value. A private playground or car park is dead weight, but a landmark is
-    /// exactly as useful for navigating by - and a private gate more so, since the
-    /// restriction is the whole reason it is drawn.
-    pub const fn fades_when_restricted(self) -> bool {
+    /// A POI you cannot get into always shows the glow; this decides the two effects that
+    /// depend on the POI still being worth the trip - it is dimmed, and held back two
+    /// zooms. A private playground or car park is dead weight, but a landmark is exactly
+    /// as useful for navigating by, and a private gate more so, since the restriction is
+    /// the whole reason it is drawn.
+    ///
+    /// `Extra::needs_access` overrides this per type: `Water` holds both landmarks
+    /// (a waterfall) and utilities (a well), and they part company here.
+    pub const fn needs_access(self) -> bool {
         use Category::{
             Accommodation, Barrier, Borders, Culture, Facility, Finance, GastroPoi, Health,
             Historic, Institution, Landcover, ManMade, NaturalPoi, Other, Railway, Religion,

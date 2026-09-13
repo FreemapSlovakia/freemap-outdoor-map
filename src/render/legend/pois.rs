@@ -1,5 +1,5 @@
 use crate::render::{
-    layers::{Category, Def, POI_ORDER, POIS, SHOP_TYPES},
+    layers::{Category, Def, INACCESSIBLE_ZOOM_DELAY, POI_ORDER, POIS, SHOP_TYPES},
     legend::{
         BuildOpts, LegendItem, LegendItemBuilder, MAX_LEGEND_ZOOM, build_tags_map, leak_str,
         mapping::{self, MappingEntry},
@@ -230,7 +230,11 @@ pub fn pois(
 
                     ts
                 })
-                .zoom_range_of(poi_zooms_of("spring"))
+                .zoom_range_of(if (prop_name, prop_value) == ("drinkable", "no") {
+                    poi_zooms_inaccessible("spring")
+                } else {
+                    poi_zooms_of("spring")
+                })
                 .add_poi(
                     "spring",
                     HashMap::<String, Option<String>>::from([(
@@ -248,7 +252,7 @@ pub fn pois(
                     ts.add_tags(|tags| tags.add("access", "private"))
                         .add_tags(|tags| tags.add("access", "no"))
                 })
-                .zoom_range_of(poi_zooms_of("picnic_shelter"))
+                .zoom_range_of(poi_zooms_inaccessible("picnic_shelter"))
                 .add_poi(
                     "picnic_shelter",
                     HashMap::<String, Option<String>>::from([(
@@ -296,6 +300,13 @@ fn poi_zooms(defs: &[Def]) -> RangeInclusive<u8> {
         });
 
     min_zoom.max(POI_ICONS_FROM_ZOOM)..=max_zoom.min(MAX_LEGEND_ZOOM)
+}
+
+/// [`poi_zooms_of`], held back the way a POI you cannot reach or use is.
+fn poi_zooms_inaccessible(typ: &str) -> RangeInclusive<u8> {
+    let zooms = poi_zooms_of(typ);
+
+    (*zooms.start() + INACCESSIBLE_ZOOM_DELAY)..=*zooms.end()
 }
 
 /// [`poi_zooms`] for a single POI type.

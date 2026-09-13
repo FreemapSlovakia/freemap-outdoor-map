@@ -34,6 +34,9 @@ struct Extra<'a> {
     /// Overrides the category colour, for the odd type that must break its category's
     /// rule - the red volcano, the village shop drawn black among the grey ones.
     color: Option<Color>,
+    /// Overrides [`Category::needs_access`]. `Water` mixes landmarks with utilities: a
+    /// waterfall is worth drawing whether or not you can reach it, a well is not.
+    needs_access: Option<bool>,
     halo: bool,
     /// Label this POI with its bare elevation when it has no name. Only for spot
     /// heights, whose elevation *is* their label; every other `with_ele` type shows the
@@ -52,6 +55,7 @@ impl Default for Extra<'_> {
             text_color: None,
             max_zoom: u8::MAX,
             color: None,
+            needs_access: None,
             halo: true,
             ele_only_label: false,
         }
@@ -80,6 +84,14 @@ impl Def {
     /// The definition's own colour if it has one, else its category's.
     pub(crate) fn color(&self) -> Color {
         color_of(self.category, &self.extra)
+    }
+
+    /// Whether this POI is only worth drawing when you can reach or use it.
+    const fn needs_access(&self) -> bool {
+        match self.extra.needs_access {
+            Some(needs) => needs,
+            None => self.category.needs_access(),
+        }
     }
 
     pub(crate) fn icon_key<'a>(&'a self, typ: &'a str) -> &'a str {
@@ -305,10 +317,10 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (14, NN, N, N, Terrain, "obstacle_tree", Extra::default()),
         (14, NN, N, N, Terrain, "obstacle_vegetation", Extra::default()),
         (14, NN, N, N, Terrain, "obstacle", Extra::default()),
-        (14, 15, Y, Y, Water, "spring", Extra { replacements: spring_replacements.clone(), text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
-        (14, 15, N, N, Water, "drinking_water", Extra { text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
-        (14, 15, N, N, Water, "water_point", Extra { text_color: Some(colors::WATER_LABEL), icon: Some("drinking_water"), ..Extra::default() }),
-        (14, 15, N, N, Water, "water_well", Extra { text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
+        (14, 15, Y, Y, Water, "spring", Extra { needs_access: Some(true), replacements: spring_replacements.clone(), text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
+        (14, 15, N, N, Water, "drinking_water", Extra { needs_access: Some(true), text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
+        (14, 15, N, N, Water, "water_point", Extra { needs_access: Some(true), text_color: Some(colors::WATER_LABEL), icon: Some("drinking_water"), ..Extra::default() }),
+        (14, 15, N, N, Water, "water_well", Extra { needs_access: Some(true), text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
         (15, 16, N, N, ManMade, "generator_wind", Extra::default()),
         (14, 15, Y, N, ManMade, "adit", Extra { icon: Some("mine"), ..Extra::default() }),
         (14, 15, Y, N, ManMade, "mineshaft", Extra { icon: Some("mine"), ..Extra::default() }),
@@ -382,7 +394,7 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (17, 17, N, N, Tourism, "board", Extra::default()),
         (17, 18, N, N, Tourism, "map", Extra::default()),
         (16, 17, N, N, Culture, "artwork", Extra::default()),
-        (16, 17, N, N, Water, "fountain", Extra { text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
+        (16, 17, N, N, Water, "fountain", Extra { needs_access: Some(true), text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
         // TODO (14, 14, N, N, "recycling", Extra { text_color: Some(colors::AREA_LABEL), ..Extra::default() }), // { icon: null } // has no icon yet - render as area name
         (16, 17, N, N, Sport, "playground", Extra {
             replacements: build_replacements(&[(r"^[Dd]etské ihrisko\b", "")]),
@@ -451,7 +463,7 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (17, 18, N, N, Other, "apiary", Extra { icon: Some("beehive"), ..Extra::default() }),
         (17, 18, N, N, Historic, "boundary_stone", Extra::default()),
         (17, 18, N, N, Historic, "marker", Extra { icon: Some("boundary_stone"), ..Extra::default() }),
-        (16, NN, N, N, Water, "watering_place", Extra { text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
+        (16, NN, N, N, Water, "watering_place", Extra { needs_access: Some(true), text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
         (17, NN, N, N, Barrier, "lift_gate", Extra::default()),
         (17, NN, N, N, Barrier, "swing_gate", Extra { icon: Some("lift_gate"), ..Extra::default() }),
         (17, NN, N, N, Barrier, "motorcycle_barrier", Extra::default()),
@@ -676,6 +688,10 @@ fn drawn_at(typ: &str, zoom: u8) -> bool {
     POIS.get(typ)
         .is_some_and(|defs| defs.iter().any(|def| def.is_active_at(zoom)))
 }
+
+/// Zooms a POI is held back by when its tags say you cannot reach or use it - see
+/// `Def::needs_access`. The legend restates this, so it is public.
+pub const INACCESSIBLE_ZOOM_DELAY: u8 = 2;
 
 const RADII: [f64; 4] = [2.0, 4.0, 6.0, 8.0];
 
@@ -1254,11 +1270,28 @@ pub fn render_icons(
 
         let halo_color = (restricted && def.extra.halo).then_some(colors::ACCESS_RESTRICTED);
 
-        let fade = if restricted && def.category.fades_when_restricted() {
-            0.66
+        // A well you may not reach, or may not drink from, is not worth the walk - so it
+        // is held back two zooms as well as dimmed. `drinking_water=no` only delays: the
+        // spring icon already carries a red marker saying so, and the glow would claim
+        // something else, that you may not get in at all.
+        // Only where drinking is the point: `drinking_water=no` is the normal tag on an
+        // ornamental fountain or an animal trough, which are worth drawing regardless.
+        let undrinkable = matches!(
+            typ,
+            "spring" | "drinking_water" | "water_point" | "water_well"
+        ) && extra
+            .get("drinkable")
+            .is_some_and(|v| v.as_deref() == Some("no"));
+
+        let (fade, delay) = if def.needs_access() && (restricted || undrinkable) {
+            (if restricted { 0.66 } else { 1.0 }, INACCESSIBLE_ZOOM_DELAY)
         } else {
-            1.0
+            (1.0, 0)
         };
+
+        if zoom < def.min_zoom + delay {
+            continue;
+        }
 
         let (names, stylesheet) = if key == "spring" {
             spring_variant(&extra)
@@ -1298,7 +1331,7 @@ pub fn render_icons(
 
             let bbox_idx = collision.add(bbox);
 
-            if def.min_text_zoom <= zoom {
+            if def.min_text_zoom + delay <= zoom {
                 let name = row.get_string("name")?;
 
                 let ele = extra.get("ele").and_then(Option::clone);
