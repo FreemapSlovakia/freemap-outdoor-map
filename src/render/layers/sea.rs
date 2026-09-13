@@ -3,12 +3,13 @@ use crate::render::{
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::path_geom::path_geometry,
-    layer_render_error::LayerRenderResult,
+    layer_render_error::{LayerRenderError, LayerRenderResult},
     projectable::TileProjectable,
 };
 use cairo::Context;
+use geo::Geometry;
 
-pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client, margin_px: f64) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let table = match ctx.zoom {
         ..=7 => "land_z5_7",
         8..=10 => "land_z8_10",
@@ -26,26 +27,19 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
             FROM
                 {table}
             WHERE
-                geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
         ");
 
     client.query(
         &sql,
-        &ctx.bbox_query_params(Some(2.0))
+        &ctx.bbox_query_params(Some(margin_px))
             .push((20.0 - ctx.zoom as f64).exp2() / 25.0)
             .as_params(),
     ).await
 }
 
-pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
-    let _span = tracy_client::span!("sea::render");
-
-    context.save()?;
-
-    context.set_source_color(colors::WATER);
-    context.paint()?;
-
-    context.set_source_color(colors::WHITE);
+pub fn project(ctx: &Ctx, rows: &[Feature]) -> Result<Vec<Geometry>, LayerRenderError> {
+    let mut land = Vec::with_capacity(rows.len());
 
     for row in rows {
         let geom = match row.get_geometry() {
@@ -56,7 +50,24 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
             },
         };
 
-        path_geometry(context, &geom);
+        land.push(geom);
+    }
+
+    Ok(land)
+}
+
+pub fn render(context: &Context, land: &[Geometry]) -> LayerRenderResult {
+    let _span = tracy_client::span!("sea::render");
+
+    context.save()?;
+
+    context.set_source_color(colors::WATER);
+    context.paint()?;
+
+    context.set_source_color(colors::WHITE);
+
+    for geom in land {
+        path_geometry(context, geom);
 
         context.fill()?;
     }

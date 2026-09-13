@@ -403,12 +403,36 @@ pub fn render(
 
     let mut prefetcher = Prefetcher::new(pool, handle, ctx.clone());
 
+    // Built from the land and water the sea and water fills project anyway.
+    let dry_land: Rc<RefCell<Option<layers::dry_land::DryLand>>> = Rc::default();
+
+    let label_margin = do_contours && zoom >= layers::contours::LABEL_MIN_ZOOM;
+
     if request.legend.is_none() {
+        let margin = if label_margin {
+            layers::dry_land::LABEL_MARGIN_PX
+        } else {
+            2.0
+        };
+
+        let dry_land = dry_land.clone();
+        let ctx_ref = &ctx;
+
         prefetcher.add(
             "sea",
             None,
-            |ctx, conn| async move { layers::sea::query(&ctx, &conn).await }.boxed(),
-            |rows, _params| layers::sea::render(&ctx, context, rows),
+            move |ctx, conn| async move { layers::sea::query(&ctx, &conn, margin).await }.boxed(),
+            move |rows, _params| {
+                let land = layers::sea::project(ctx_ref, &rows)?;
+
+                layers::sea::render(context, &land)?;
+
+                if (do_shading || do_contours) && zoom >= layers::dry_land::MIN_ZOOM {
+                    *dry_land.borrow_mut() = Some(layers::dry_land::DryLand::new(land));
+                }
+
+                Ok(())
+            },
         );
     }
 
@@ -455,11 +479,30 @@ pub fn render(
         |rows, params| layers::water_lines::render(&ctx, context, rows, params.svg_repo),
     );
 
+    let water_margin = if label_margin {
+        layers::dry_land::LABEL_MARGIN_PX
+    } else {
+        0.0
+    };
+
+    let dry_land_for_water = dry_land.clone();
+    let ctx_ref = &ctx;
+
     prefetcher.add(
         "water_areas",
         None,
-        |ctx, conn| async move { layers::water_areas::query(&ctx, &conn).await }.boxed(),
-        |rows, _params| layers::water_areas::render(&ctx, context, rows),
+        move |ctx, conn| {
+            async move { layers::water_areas::query(&ctx, &conn, water_margin).await }.boxed()
+        },
+        move |rows, _params| {
+            let permanent = layers::water_areas::render(ctx_ref, context, &rows)?;
+
+            if let Some(dry_land) = dry_land_for_water.borrow_mut().as_mut() {
+                dry_land.set_water(permanent);
+            }
+
+            Ok(())
+        },
     );
 
     if zoom >= 14 {
@@ -638,6 +681,14 @@ pub fn render(
         prefetcher.push(move |params| {
             let Some(hsd) = params.hsd else { return Ok(()) };
 
+            let dry_land = dry_land.borrow();
+            let dry_land = dry_land.as_ref();
+
+            // All sea: everything would be masked away, so don't even load the DEMs.
+            if dry_land.is_some_and(|dry_land| !dry_land.has_land()) {
+                return Ok(());
+            }
+
             let ctx = &ctx_for_closure;
 
             let mut results = Arc::try_unwrap(results)
@@ -669,18 +720,26 @@ pub fn render(
                         rows
                     });
 
-            layers::shading_and_contours::render(
-                ctx,
-                context,
-                bridge_rows,
-                contour_rows,
-                layers::shading_and_contours::ShadingParams {
-                    datasets: hsd,
-                    hierarchy: &hierarchy,
-                    contour_countries: contour_countries_for_render.as_ref(),
-                    do_shading,
-                },
-            )
+            let render = || {
+                layers::shading_and_contours::render(
+                    ctx,
+                    context,
+                    bridge_rows,
+                    contour_rows,
+                    layers::shading_and_contours::ShadingParams {
+                        datasets: hsd,
+                        hierarchy: &hierarchy,
+                        contour_countries: contour_countries_for_render.as_ref(),
+                        do_shading,
+                        dry_land,
+                    },
+                )
+            };
+
+            match dry_land {
+                Some(dry_land) => dry_land.masked(ctx, context, render),
+                None => render(),
+            }
             .with_layer("shading_and_contours")?;
 
             Ok(())

@@ -16,10 +16,15 @@ use geo::Vector2DOps;
 use geo::{Coord, Distance, Euclidean, InterpolatePoint, LineString, Rect};
 use std::f64::consts::{PI, TAU};
 
-#[derive(Copy, Clone, Debug)]
-pub struct TextOnLineOptions {
+/// Vetoes a placement. The repeat is dropped rather than slid, so the decision rests on the
+/// label's own box, which neighbouring tiles agree on.
+pub type PlacementFilter<'a> = &'a dyn Fn(&Rect<f64>) -> bool;
+
+#[derive(Copy, Clone)]
+pub struct TextOnLineOptions<'a> {
     pub upright: Upright,
     pub distribution: Distribution,
+    pub placement_filter: Option<PlacementFilter<'a>>,
     pub alpha: f64,
     pub offset: f64,
     /// Keep the offset on the same side of the original baseline even when flipping for upright text.
@@ -33,10 +38,11 @@ pub struct TextOnLineOptions {
     pub flo: FontAndLayoutOptions,
 }
 
-impl Default for TextOnLineOptions {
+impl Default for TextOnLineOptions<'_> {
     fn default() -> Self {
         Self {
             upright: Upright::Auto,
+            placement_filter: None,
             distribution: Distribution::Align {
                 align: Align::Center,
                 repeat: Repeat::None,
@@ -1031,6 +1037,13 @@ pub fn draw_text_on_line(
                 if idx + 1 < clusters.len() {
                     cursor += concave_spacing + label_extra_spacing_between_glyphs;
                 }
+            }
+
+            if options
+                .placement_filter
+                .is_some_and(|allows| glyph_bboxes.iter().any(|bb| !allows(bb)))
+            {
+                continue 'outer;
             }
 
             if let Some(col) = collision.as_deref()

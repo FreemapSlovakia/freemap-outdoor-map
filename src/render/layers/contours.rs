@@ -6,13 +6,20 @@ use crate::render::{
         font_options::FontAndLayoutOptions,
         smooth_line::path_smooth_bezier_spline,
         text_on_line::{
-            Align, Distribution, Repeat, TextOnLineOptions, Upright, draw_text_on_line,
+            Align, Distribution, PlacementFilter, Repeat, TextOnLineOptions, Upright,
+            draw_text_on_line,
         },
     },
     layer_render_error::LayerRenderResult,
+    layers::dry_land::DryLand,
     projectable::TileProjectable,
 };
 use cairo::Context;
+use geo::Rect;
+
+pub const MIN_ZOOM: u8 = 12;
+
+pub const LABEL_MIN_ZOOM: u8 = 13;
 
 pub async fn query(
     ctx: &Ctx,
@@ -72,14 +79,24 @@ pub async fn query(
     client.query(&sql, &params.as_params()).await
 }
 
-pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: Vec<Feature>,
+    dry_land: Option<&DryLand>,
+) -> LayerRenderResult {
     let _span = tracy_client::span!("contours::render");
 
     let zoom = ctx.zoom;
 
-    if zoom < 12 {
+    if zoom < MIN_ZOOM {
         return Ok(());
     }
+
+    // Dropped rather than cut mid-glyph by the dry-land mask.
+    let on_dry_land = dry_land.map(|dry_land| move |bbox: &Rect<f64>| dry_land.allows_label(bbox));
+
+    let placement_filter = on_dry_land.as_ref().map(|allows| allows as PlacementFilter);
 
     context.save()?;
 
@@ -89,7 +106,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
         let width = row.get_f64("width")?;
 
         let labels = match zoom {
-            13..=14 => height % 100 == 0,
+            LABEL_MIN_ZOOM..=14 => height % 100 == 0,
             15.. => height % 50 == 0,
             _ => false,
         };
@@ -114,6 +131,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
                 None,
                 &TextOnLineOptions {
                     flo: FontAndLayoutOptions::default(),
+                    placement_filter,
                     upright: Upright::Left,
                     color: colors::CONTOUR,
                     distribution: Distribution::Align {

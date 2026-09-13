@@ -3,12 +3,13 @@ use crate::render::{
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{hatch::hatch_geometry, path_geom::path_geometry},
-    layer_render_error::LayerRenderResult,
+    layer_render_error::LayerRenderError,
     projectable::TileProjectable,
 };
 use cairo::Context;
+use geo::Geometry;
 
-pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client, margin_px: f64) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let table_suffix = match ctx.zoom {
         ..=9 => "_gen0",
         10..=11 => "_gen1",
@@ -23,13 +24,19 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
             FROM
                 osm_waterareas{table_suffix}
             WHERE
-                geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857)
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
         ");
 
-    client.query(&sql, &ctx.bbox_query_params(None).as_params()).await
+    client.query(&sql, &ctx.bbox_query_params(Some(margin_px)).as_params()).await
 }
 
-pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
+/// Also returns the permanent water it projected. Intermittent and seasonal beds are left
+/// out: mostly dry, they carry real terrain.
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    rows: &[Feature],
+) -> Result<Vec<Geometry>, LayerRenderError> {
     let _span = tracy_client::span!("water_areas::render");
 
     let zoom = ctx.zoom;
@@ -37,6 +44,8 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
     let tile_projector = &ctx.tile_projector;
 
     context.save()?;
+
+    let mut permanent = Vec::new();
 
     for row in rows {
         let geom = row.get_geometry()?;
@@ -70,10 +79,12 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
             path_geometry(context, &projected);
 
             context.fill()?;
+
+            permanent.push(projected);
         }
     }
 
     context.restore()?;
 
-    Ok(())
+    Ok(permanent)
 }
