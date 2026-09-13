@@ -95,6 +95,7 @@ pub fn start() {
             hillshading_hierarchy: cli.hillshading_hierarchy,
             contour_countries: cli.contour_countries,
             feature_line_mask_countries: cli.feature_line_mask_countries,
+            hillshading_max_open_per_country: cli.hillshading_max_open_per_country,
             place_type_overrides: cli.place_type_overrides.map(Arc::new),
         });
 

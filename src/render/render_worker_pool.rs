@@ -49,29 +49,31 @@ impl RenderWorkerPool {
         let rx = Arc::new(Mutex::new(rx));
         let mut workers = Vec::with_capacity(worker_count);
 
+        let hillshading_datasets = config
+            .hillshading_base_path
+            .as_ref()
+            .zip(config.hillshading_hierarchy.as_ref())
+            .map(|(hillshading_base_path, hierarchy)| {
+                Arc::new(load_hillshading_datasets(
+                    hillshading_base_path,
+                    hierarchy,
+                    config.feature_line_mask_countries.as_ref(),
+                    config.hillshading_max_open_per_country,
+                ))
+            });
+
         for worker_id in 0..worker_count {
             let rx = rx.clone();
             let pool = pool.clone();
             let handle = handle.clone();
             let config = config.clone();
+            let hillshading_datasets = hillshading_datasets.clone();
 
             let jh = std::thread::Builder::new()
                 .name(format!("render-worker-{worker_id}"))
                 .spawn(move || {
                     let mut svg_repo =
                         SvgRepo::new(config.svg_base_path.as_ref().to_path_buf());
-
-                    let mut hillshading_datasets = config
-                        .hillshading_base_path
-                        .as_ref()
-                        .zip(config.hillshading_hierarchy.as_ref())
-                        .map(|(hillshading_base_path, hierarchy)| {
-                            load_hillshading_datasets(
-                                hillshading_base_path,
-                                hierarchy,
-                                config.feature_line_mask_countries.as_ref(),
-                            )
-                        });
 
                     loop {
                         let task = {
@@ -91,7 +93,7 @@ impl RenderWorkerPool {
                                 feature_line_mask_countries: config
                                     .feature_line_mask_countries
                                     .as_ref(),
-                                datasets: hillshading_datasets.as_mut(),
+                                datasets: hillshading_datasets.as_deref(),
                             },
                             config.place_type_overrides.clone(),
                             pool.clone(),

@@ -68,7 +68,7 @@ impl<T> WithLayer<T> for Result<T, LayerRenderError> {
 struct Params<'p, 'ctx> {
     collision: &'p mut Collision<'ctx>,
     svg_repo: &'p mut SvgRepo,
-    hsd: Option<&'p mut HillshadingDatasets>,
+    hsd: Option<&'p HillshadingDatasets>,
 }
 
 /// Renders a layer from its (already fetched) features.
@@ -256,15 +256,15 @@ impl<'a> Prefetcher<'a> {
     fn run(
         self,
         svg_repo: &mut SvgRepo,
-        mut hsd: Option<&mut HillshadingDatasets>,
+        hsd: Option<&HillshadingDatasets>,
         collision: &mut Collision,
     ) -> Result<(), RenderError> {
         self.handle.block_on(async move {
             for layer in self.layers {
                 let params = Params {
-                    svg_repo,
-                    hsd: hsd.as_deref_mut(),
                     collision,
+                    svg_repo,
+                    hsd,
                 };
 
                 match layer {
@@ -332,14 +332,14 @@ pub struct Shading<'a> {
     pub hierarchy: Option<&'a HillshadingHierarchy>,
     pub contour_countries: Option<&'a ContourCountries>,
     pub feature_line_mask_countries: Option<&'a FeatureLineMaskCountries>,
-    pub datasets: Option<&'a mut HillshadingDatasets>,
+    pub datasets: Option<&'a HillshadingDatasets>,
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn render(
     surface: &Surface,
     request: &RenderRequest,
-    mut shading: Shading,
+    shading: Shading,
     place_type_overrides: Option<Arc<PlaceTypeOverrides>>,
     pool: Pool,
     handle: Handle,
@@ -1305,7 +1305,7 @@ pub fn render(
 
     let collision = &mut Collision::new(Some(context));
 
-    prefetcher.run(svg_repo, shading.datasets.as_deref_mut(), collision)?;
+    prefetcher.run(svg_repo, shading.datasets, collision)?;
 
     // Decorations (scale bar, north arrow, attribution) are drawn last so they
     // sit on top of everything, and never on legend renders.

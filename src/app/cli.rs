@@ -103,6 +103,14 @@ pub struct Cli {
     #[arg(long, env = "MAPRENDER_HILLSHADING_HIERARCHY")]
     pub hillshading_hierarchy: Option<HillshadingHierarchy>,
 
+    /// Maximum open handles per hillshading dataset, shared by all render workers.
+    #[arg(
+        long,
+        env = "MAPRENDER_HILLSHADING_MAX_OPEN_PER_COUNTRY",
+        default_value_t = 8
+    )]
+    pub hillshading_max_open_per_country: usize,
+
     /// Country contour sources. Comma-separated country codes; the token `_` includes
     /// the global fallback source. If unset, no contours are rendered.
     #[arg(long, env = "MAPRENDER_CONTOUR_COUNTRIES")]

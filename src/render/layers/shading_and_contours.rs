@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 
 /// Hillshading / contour data sources and toggles for [`render`].
 pub struct ShadingParams<'a> {
-    pub datasets: &'a mut HillshadingDatasets,
+    pub datasets: &'a HillshadingDatasets,
     pub hierarchy: &'a HillshadingHierarchy,
     pub contour_countries: Option<&'a ContourCountries>,
     pub do_shading: bool,

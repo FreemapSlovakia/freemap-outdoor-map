@@ -104,7 +104,7 @@ pub async fn query(
 
 /// Hillshading inputs used to hide feature lines that the shading already conveys.
 pub struct HillshadingMask<'a> {
-    pub datasets: &'a mut HillshadingDatasets,
+    pub datasets: &'a HillshadingDatasets,
     /// Countries whose hillshading masks cut the lines out.
     pub countries: &'a [String],
 }

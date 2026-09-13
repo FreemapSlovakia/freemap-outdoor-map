@@ -540,5 +540,6 @@ pub struct RenderConfig {
     pub hillshading_hierarchy: Option<HillshadingHierarchy>,
     pub contour_countries: Option<ContourCountries>,
     pub feature_line_mask_countries: Option<FeatureLineMaskCountries>,
+    pub hillshading_max_open_per_country: usize,
     pub place_type_overrides: Option<Arc<PlaceTypeOverrides>>,
 }

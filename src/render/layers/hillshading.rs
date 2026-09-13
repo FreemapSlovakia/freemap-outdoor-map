@@ -339,20 +339,14 @@ fn read_rgba_from_gdal(
 pub fn load_surface(
     ctx: &Ctx,
     country: &str,
-    shading_data: &mut HillshadingDatasets,
+    shading_data: &HillshadingDatasets,
     mode: Mode,
 ) -> Result<Option<ImageSurface>, LayerRenderError> {
-    let Some(hillshading_dataset) = shading_data.get(country) else {
+    let Some(dataset) = shading_data.get(country) else {
         return Ok(None);
     };
 
-    let surface = read_rgba_from_gdal(hillshading_dataset, ctx, mode)?;
-
-    if surface.is_some() {
-        shading_data.record_use(country);
-    }
-
-    Ok(surface)
+    read_rgba_from_gdal(&dataset, ctx, mode)
 }
 
 pub fn paint_surface(
