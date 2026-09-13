@@ -376,14 +376,36 @@ fn render_request(
 
 impl PropsBuilder {
     pub fn with_line_string(self, reverse: bool) -> Self {
-        let mut coords = if self.for_taginfo {
+        let mut coords = self.line_ends().to_vec();
+
+        if reverse {
+            coords.reverse();
+        }
+
+        self.with("geometry", LineString::new(coords))
+    }
+
+    /// The part of the [`Self::with_line_string`] line between fractions `from` and `to` of it.
+    pub fn with_line_string_part(self, from: f64, to: f64) -> Self {
+        let [a, b] = self.line_ends();
+
+        let at = |t: f64| Coord {
+            x: t.mul_add(b.x - a.x, a.x),
+            y: t.mul_add(b.y - a.y, a.y),
+        };
+
+        self.with("geometry", LineString::new(vec![at(from), at(to)]))
+    }
+
+    fn line_ends(&self) -> [Coord; 2] {
+        if self.for_taginfo {
             let px = 10.0 * to_px(self.zoom);
 
-            vec![Coord { x: px, y: 0.0 }, Coord { x: -px, y: 0.0 }]
+            [Coord { x: px, y: 0.0 }, Coord { x: -px, y: 0.0 }]
         } else {
             let factor = (17.0 - self.zoom as f64).exp2();
 
-            vec![
+            [
                 Coord {
                     x: 80.0 * factor,
                     y: 20.0 * factor,
@@ -393,13 +415,7 @@ impl PropsBuilder {
                     y: -20.0 * factor,
                 },
             ]
-        };
-
-        if reverse {
-            coords.reverse();
         }
-
-        self.with("geometry", LineString::new(coords))
     }
 
     pub fn with_polygon(self, skew: bool) -> Self {
