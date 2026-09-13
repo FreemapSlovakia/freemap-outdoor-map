@@ -541,5 +541,6 @@ pub struct RenderConfig {
     pub contour_countries: Option<ContourCountries>,
     pub feature_line_mask_countries: Option<FeatureLineMaskCountries>,
     pub hillshading_max_open_per_country: usize,
+    pub pool_stats_interval: std::time::Duration,
     pub place_type_overrides: Option<Arc<PlaceTypeOverrides>>,
 }

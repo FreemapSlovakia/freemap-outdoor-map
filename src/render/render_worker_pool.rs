@@ -1,5 +1,5 @@
 use crate::render::{
-    self, RenderConfig, RenderRequest,
+    self, RenderConfig, RenderRequest, db_pool_stats,
     layers::{Shading, load_hillshading_datasets},
     renderer::RenderError,
     svg_repo::SvgRepo,
@@ -61,6 +61,28 @@ impl RenderWorkerPool {
                     config.hillshading_max_open_per_country,
                 ))
             });
+
+        if !config.pool_stats_interval.is_zero() {
+            let interval = config.pool_stats_interval;
+            let datasets = hillshading_datasets.clone();
+            let pool = pool.clone();
+
+            // Its own thread, so the statistics keep coming even when every worker hangs.
+            std::thread::Builder::new()
+                .name("pool-stats".into())
+                .spawn(move || {
+                    loop {
+                        std::thread::sleep(interval);
+
+                        if let Some(datasets) = &datasets {
+                            datasets.log_stats(interval);
+                        }
+
+                        db_pool_stats::log_stats(&pool, interval);
+                    }
+                })
+                .expect("pool stats thread spawn");
+        }
 
         for worker_id in 0..worker_count {
             let rx = rx.clone();

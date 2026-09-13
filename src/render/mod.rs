@@ -18,6 +18,7 @@ mod collision;
 mod colors;
 mod coverage;
 mod ctx;
+mod db_pool_stats;
 mod draw;
 mod feature;
 mod image_format;

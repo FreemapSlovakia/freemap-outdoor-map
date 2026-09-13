@@ -346,7 +346,44 @@ pub fn load_surface(
         return Ok(None);
     };
 
-    read_rgba_from_gdal(&dataset, ctx, mode)
+    let what = match mode {
+        Mode::Mask => "mask",
+        Mode::Shading => "shading",
+    };
+
+    let started = std::time::Instant::now();
+
+    let surface = read_rgba_from_gdal(&dataset, ctx, mode);
+
+    let took = started.elapsed();
+
+    if took >= SLOW_READ {
+        let (x, y) = tile_at_center(ctx);
+
+        eprintln!(
+            "hillshading {country}: {what} read took {:.1}s at {}/{x}/{y} scale {}",
+            took.as_secs_f64(),
+            ctx.zoom,
+            ctx.scale
+        );
+    }
+
+    surface
+}
+
+/// A single raster read this slow is logged with its tile, so a hanging tile can be reproduced.
+const SLOW_READ: std::time::Duration = std::time::Duration::from_secs(5);
+
+fn tile_at_center(ctx: &Ctx) -> (u32, u32) {
+    const HALF_WORLD: f64 = 20_037_508.342_789_244;
+
+    let center = ctx.bbox.center();
+    let n = f64::from(1u32 << ctx.zoom);
+
+    (
+        ((center.x + HALF_WORLD) / (2.0 * HALF_WORLD) * n).floor() as u32,
+        ((HALF_WORLD - center.y) / (2.0 * HALF_WORLD) * n).floor() as u32,
+    )
 }
 
 pub fn paint_surface(

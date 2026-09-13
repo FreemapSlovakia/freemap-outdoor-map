@@ -9,6 +9,7 @@ use crate::render::{
     Feature, ImageFormat,
     collision::Collision,
     ctx::Ctx,
+    db_pool_stats,
     layer_render_error::{LayerRenderError, LayerRenderResult},
     layers,
     layers::hillshading_datasets::HillshadingDatasets,
@@ -169,7 +170,7 @@ impl<'a> Prefetcher<'a> {
         let ctx = self.ctx.clone();
 
         let jh = self.handle.spawn(async move {
-            let conn = pool.get().await.map_err(LayerRenderError::from)?;
+            let conn = db_pool_stats::get(&pool, name).await.map_err(LayerRenderError::from)?;
             let rows = query_fn(ctx, conn).await.map_err(LayerRenderError::from)?;
             Ok::<Vec<Feature>, LayerRenderError>(rows.into_iter().map(Feature::from).collect())
         });
@@ -185,6 +186,7 @@ impl<'a> Prefetcher<'a> {
     /// Returns `None` in legend mode (no DB query is run; stages fall back to legend data).
     fn shared_query(
         &self,
+        name: &'static str,
         query_fn: impl FnOnce(
             Arc<Ctx>,
             deadpool_postgres::Object,
@@ -200,7 +202,7 @@ impl<'a> Prefetcher<'a> {
         let ctx = self.ctx.clone();
 
         let jh = self.handle.spawn(async move {
-            let conn = pool.get().await.map_err(LayerRenderError::from)?;
+            let conn = db_pool_stats::get(&pool, name).await.map_err(LayerRenderError::from)?;
             let rows = query_fn(ctx, conn).await.map_err(LayerRenderError::from)?;
             Ok::<Vec<Feature>, LayerRenderError>(rows.into_iter().map(Feature::from).collect())
         });
@@ -412,7 +414,7 @@ pub fn render(
 
     // Landcovers are drawn in two stages: the fills here, and the ski resort boundaries
     // much later, above the lines (cutlines in particular) that would cover them.
-    let landcover_slot = prefetcher.shared_query(|ctx, conn| {
+    let landcover_slot = prefetcher.shared_query("landcovers", |ctx, conn| {
         async move { layers::landcover::query(&ctx, &conn).await }.boxed()
     });
 
@@ -428,7 +430,9 @@ pub fn render(
     // borrow the cached rows. The lowest stage gate is zoom 11 (stage 3).
     let feature_lines_slot = if zoom >= 11 {
         prefetcher
-            .shared_query(|ctx, conn| async move { layers::feature_lines::query(&ctx, &conn).await }.boxed())
+            .shared_query("feature_lines", |ctx, conn| {
+                async move { layers::feature_lines::query(&ctx, &conn).await }.boxed()
+            })
     } else {
         None
     };

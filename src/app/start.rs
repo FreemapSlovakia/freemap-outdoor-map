@@ -96,6 +96,7 @@ pub fn start() {
             contour_countries: cli.contour_countries,
             feature_line_mask_countries: cli.feature_line_mask_countries,
             hillshading_max_open_per_country: cli.hillshading_max_open_per_country,
+            pool_stats_interval: Duration::from_secs(cli.pool_stats_interval_secs),
             place_type_overrides: cli.place_type_overrides.map(Arc::new),
         });
 
