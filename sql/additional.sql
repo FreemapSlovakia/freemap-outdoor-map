@@ -29,17 +29,21 @@ AS $$
   )::smallint
 $$;
 
--- How many ways lead away from `p` along `g` - 1 where the way merely ends there, 2 where it
--- passes through (a closed way passes through its own seam too). Summed over every way at a
--- node it gives the node's degree, which is what tells a Y or T junction from a mere
--- continuation of one way into the next.
+-- Arms of `g` at `p`: 1 where the way ends there, 2 where it passes through. An end can also lie
+-- on the way's own interior (a P-shaped way), adding that pass's 2 arms. Summed over the ways at a
+-- node it gives the node's degree, which tells a junction from a continuation of one way into the next.
 CREATE OR REPLACE FUNCTION road_arms(g geometry, p geometry) RETURNS int
   LANGUAGE sql IMMUTABLE PARALLEL SAFE
 AS $$
   SELECT CASE
-    WHEN ST_IsClosed(g) THEN 2
-    WHEN ST_Equals(p, ST_StartPoint(g)) OR ST_Equals(p, ST_EndPoint(g)) THEN 1
-    ELSE 2
+    WHEN NOT (ST_Equals(p, ST_StartPoint(g)) OR ST_Equals(p, ST_EndPoint(g))) THEN 2
+    ELSE CASE WHEN ST_IsClosed(g) THEN 2 ELSE 1 END
+      + CASE
+          WHEN ST_NPoints(g) < 3 THEN 0
+          WHEN ST_NPoints(g) = 3 THEN CASE WHEN ST_Equals(ST_PointN(g, 2), p) THEN 2 ELSE 0 END
+          WHEN ST_Intersects(ST_Points(ST_RemovePoint(ST_RemovePoint(g, ST_NPoints(g) - 1), 0)), p) THEN 2
+          ELSE 0
+        END
   END
 $$;
 

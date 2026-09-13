@@ -179,6 +179,8 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                     .with("mark_fracs", vec![0.3f64, 0.7])
                     .with("mark_dirs", vec![1i32, -1])
                     .with("mark_bounds", vec![1i32, 1])
+                    .with("ext_start", f64::INFINITY)
+                    .with("ext_end", f64::INFINITY)
             })
             .build()
         }),
