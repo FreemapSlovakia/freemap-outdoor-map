@@ -155,32 +155,15 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
 
                 b
             })
+            // Open parts either side make the sample show its bars as well as its cross.
             .add_feature("road_access_restrictions", |b| {
-                // Bits as `road_restriction` in sql/additional.sql builds them.
-                let mut restriction = 0i32;
-
-                for tag in tags {
-                    if tag.0 == "bicycle" {
-                        restriction |= 1;
-                    }
-
-                    if tag.0 == "foot" {
-                        restriction |= 2;
-                    }
-                }
-
-                // On the map a bar marks where the restriction starts and the cross beside it
-                // says which side it governs; the sample is a stretch of its own, so both its
-                // ends are such a place and the entry gets to show both symbols. The sample
-                // line runs off the canvas at both ends, so the two boundaries are placed well
-                // inside it - at the ends their marks would be drawn outside the visible box.
-                b.with_road(road_type)
-                    .with("restriction", restriction)
-                    .with("mark_fracs", vec![0.3f64, 0.7])
-                    .with("mark_dirs", vec![1i32, -1])
-                    .with("mark_bounds", vec![1i32, 1])
-                    .with("ext_start", f64::INFINITY)
-                    .with("ext_end", f64::INFINITY)
+                access_part(b, road_type, &[], 0.0, 0.3)
+            })
+            .add_feature("road_access_restrictions", |b| {
+                access_part(b, road_type, tags, 0.3, 0.7)
+            })
+            .add_feature("road_access_restrictions", |b| {
+                access_part(b, road_type, &[], 0.7, 1.0)
             })
             .build()
         }),
@@ -470,6 +453,24 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
             .build(),
     ])
     .collect()
+}
+
+/// A part of the legend line for `road_access_restrictions`, restricted by `tags`.
+fn access_part(
+    b: PropsBuilder,
+    road_type: &'static str,
+    tags: &[(&'static str, &'static str)],
+    from: f64,
+    to: f64,
+) -> PropsBuilder {
+    let tag = |key: &str| tags.iter().find(|tag| tag.0 == key).map_or("", |tag| tag.1);
+
+    b.with_road(road_type)
+        .with_line_string_part(from, to)
+        .with("access", "")
+        .with("vehicle", "")
+        .with("bicycle", tag("bicycle"))
+        .with("foot", tag("foot"))
 }
 
 impl PropsBuilder {
