@@ -44,7 +44,7 @@
 
 const BASE  = "https://geocloud.landesvermessung.sachsen.de/public.php/dav/files/JCcXyifaNdLDnxZ"
 const DEST  = "/run/media/martin/2190983A5767510F/DGM1/Sachsen"
-const PAR   = 6            # concurrent downloads — be polite to a public share
+const PAR   = 2            # concurrent downloads — 6 tripped the throttle above
 const TRIES = 4
 const EXPECTED = 4981
 
