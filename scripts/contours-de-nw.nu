@@ -143,7 +143,7 @@ if ($VRT | path exists) {
     print $"==> ($VRT) exists — reusing"
 } else {
     print "==> Building state VRT from the 2 m tiles"
-    let idx = "_idx_deby_cont"
+    let idx = "_idx_denw_cont"
     glob $"($SRC_DIR)/*.tif" | save -f $idx
     print $"  (open $idx | lines | length) tiles"
     gdalbuildvrt -vrtnodata $NODATA -input_file_list $idx $"($VRT).tmp" o> /dev/null
