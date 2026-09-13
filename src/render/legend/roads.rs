@@ -139,13 +139,13 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                 let mut b = b.with_road(road_type).with("class", "highway");
 
                 for tag in tags {
-                    if matches!(tag.0, "foot" | "bicycle") {
+                    if matches!(tag.0, "foot" | "bicycle" | "oneway") {
                         continue;
                     }
 
                     b = b.with(
                         tag.0,
-                        if matches!(tag.0, "bridge" | "tunnel" | "oneway") {
+                        if matches!(tag.0, "bridge" | "tunnel") {
                             LegendValue::I16(1)
                         } else {
                             LegendValue::String(tag.1)
@@ -155,15 +155,16 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
 
                 b
             })
-            // Open parts either side make the sample show its bars as well as its cross.
+            // Open parts either side give the sample its bars; off-centre keeps its symbol clear
+            // of the name label.
             .add_feature("road_access_restrictions", |b| {
-                access_part(b, road_type, &[], 0.0, 0.3)
+                access_part(b, road_type, &[], 0.0, 0.5)
             })
             .add_feature("road_access_restrictions", |b| {
-                access_part(b, road_type, tags, 0.3, 0.7)
+                access_part(b, road_type, tags, 0.5, 0.8)
             })
             .add_feature("road_access_restrictions", |b| {
-                access_part(b, road_type, &[], 0.7, 1.0)
+                access_part(b, road_type, &[], 0.8, 1.0)
             })
             .build()
         }),
@@ -471,6 +472,7 @@ fn access_part(
         .with("vehicle", "")
         .with("bicycle", tag("bicycle"))
         .with("foot", tag("foot"))
+        .with("oneway", i16::from(tag("oneway") == "yes"))
 }
 
 impl PropsBuilder {
@@ -482,7 +484,6 @@ impl PropsBuilder {
             .with("service", "")
             .with("bridge", 0i16)
             .with("tunnel", 0i16)
-            .with("oneway", 0i16)
             .with("bicycle", "")
             .with("foot", "")
             .with("trail_visibility", 0)

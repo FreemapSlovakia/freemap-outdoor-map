@@ -5,33 +5,39 @@ use crate::render::{
     projectable::TileProjectable,
     svg_repo::{SvgRepo, SvgRepoError},
 };
-use cairo::Context;
+use cairo::{Context, RecordingSurface, Rectangle};
 use geo::{BoundingRect, Coord, LineString};
-use std::collections::HashMap;
+use std::{collections::HashMap, f64::consts::PI};
 
 const NO_BICYCLE: u8 = 1;
 const NO_FOOT: u8 = 2;
 
-/// Keeps a cross off its junction, where it would read as forbidding the joining way too.
+/// Keeps a mark off its junction, where it would read as speaking for the joining way too.
 const MARK_OFFSET: f64 = 10.0;
 
-/// Crosses closer together than this collapse into one.
+/// Marks of one kind closer together than this collapse into one.
 const MERGE_GAP: f64 = 10.0;
 
-/// Spacing of the crosses repeated along a restricted way.
-const REPEAT_SPACING: f64 = 300.0;
+/// Gaps between marks are halved until no piece is longer than this.
+const MAX_GAP: f64 = 300.0;
 
-/// A stretch shorter than this gets one cross in its middle; a repeat gives way to marks this close.
-const SHORT_SEGMENT: f64 = REPEAT_SPACING / 2.0;
+/// A stretch shorter than this gets one mark in its middle.
+const SHORT_SEGMENT: f64 = MAX_GAP / 2.0;
 
-/// A stretch shorter than this gets no cross, which would cover the junctions at both its ends.
+/// A stretch shorter than this gets no mark, which would cover the junctions at both its ends.
 const MIN_STRETCH: f64 = 2.0 * MARK_OFFSET;
+
+/// Distance between a cross and an arrow that would otherwise overlap.
+const SIDE_BY_SIDE: f64 = 10.0;
 
 /// How far outside the tile a mark can still show.
 const DRAW_BUFFER: f64 = 32.0;
 
+/// Longest gap halved over its full length: both its ends must lie within the fetched roads.
+const HALVED_GAP: f64 = 500.0;
+
 /// Covers every node a visible mark can depend on, so each gets its complete degree.
-const TOPOLOGY_BUFFER: f64 = DRAW_BUFFER + MERGE_GAP + MARK_OFFSET + SHORT_SEGMENT;
+const TOPOLOGY_BUFFER: f64 = HALVED_GAP + DRAW_BUFFER + SIDE_BY_SIDE + MERGE_GAP + MARK_OFFSET;
 
 const UNDRAWN_TYPES: [&str; 4] = ["trunk", "motorway", "trunk_link", "motorway_link"];
 
@@ -40,7 +46,7 @@ pub async fn query(
     client: &tokio_postgres::Client,
 ) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let sql = "
-        SELECT osm_id, geometry, type, class, access, vehicle, bicycle, foot
+        SELECT osm_id, geometry, type, class, access, vehicle, bicycle, foot, oneway
         FROM osm_roads
         WHERE geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
     ";
@@ -81,13 +87,23 @@ struct Road {
     geom: LineString,
     lengths: Vec<f64>,
     bits: u8,
+    /// `1` travelled along the geometry, `-1` against it, `0` both ways.
+    oneway: i16,
     /// Railways never count as a way at a node.
     joins: bool,
-    draws: bool,
+    /// Carries restriction marks.
+    restricted: bool,
 }
 
 impl Road {
-    fn new(map: &LineString, geom: LineString, typ: &str, class: &str, bits: u8) -> Option<Self> {
+    fn new(
+        map: &LineString,
+        geom: LineString,
+        typ: &str,
+        class: &str,
+        bits: u8,
+        oneway: i16,
+    ) -> Option<Self> {
         let lengths = cumulative_lengths(&geom);
 
         if *lengths.last()? <= 0.0 {
@@ -103,8 +119,9 @@ impl Road {
             geom,
             lengths,
             bits,
+            oneway: oneway.signum(),
             joins: class != "railway",
-            draws: bits != 0 && !UNDRAWN_TYPES.contains(&typ),
+            restricted: bits != 0 && !UNDRAWN_TYPES.contains(&typ),
         })
     }
 
@@ -124,6 +141,11 @@ impl Road {
             2
         }
     }
+
+    /// Whether travel along this way heads into `vertex`, one of its ends.
+    const fn enters(&self, vertex: usize) -> bool {
+        (self.oneway > 0 && vertex == self.last()) || (self.oneway < 0 && vertex == 0)
+    }
 }
 
 /// Orders the rows by OSM way, so that overlapping marks stack alike on every tile, and merges rows
@@ -141,7 +163,7 @@ fn merge_rows(mut rows: Vec<(Option<i64>, Road)>) -> Vec<Road> {
             && prev.keys == road.keys
         {
             prev.joins |= road.joins;
-            prev.draws |= road.draws;
+            prev.restricted |= road.restricted;
 
             continue;
         }
@@ -151,6 +173,49 @@ fn merge_rows(mut rows: Vec<(Option<i64>, Road)>) -> Vec<Road> {
     }
 
     roads
+}
+
+/// What a way's marks say.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Kind {
+    /// Crosses for what is forbidden, bars where that changes without a junction.
+    Access,
+    /// Arrows for the direction of travel.
+    Oneway,
+}
+
+/// How a stretch ending at a plain continuation meets the way it runs into.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Meeting {
+    Same,
+    /// The stretch ends and this way marks the node.
+    Boundary,
+    /// The stretch ends and the other way marks the node.
+    Yield,
+}
+
+impl Kind {
+    const fn draws(self, road: &Road) -> bool {
+        match self {
+            Self::Access => road.restricted,
+            Self::Oneway => road.oneway != 0,
+        }
+    }
+
+    const fn meets(self, road: &Road, vertex: usize, other: &Road, other_vertex: usize) -> Meeting {
+        match self {
+            Self::Access if road.bits & !other.bits != 0 => Meeting::Boundary,
+            Self::Access if other.bits & !road.bits != 0 => Meeting::Yield,
+            Self::Access => Meeting::Same,
+            // Travel carries on only if it enters the node on one way and leaves it on the other.
+            Self::Oneway
+                if other.oneway != 0 && road.enters(vertex) != other.enters(other_vertex) =>
+            {
+                Meeting::Same
+            }
+            Self::Oneway => Meeting::Boundary,
+        }
+    }
 }
 
 type NodeIndex = HashMap<(u64, u64), Vec<(usize, usize)>>;
@@ -167,9 +232,9 @@ struct Mark {
 enum End {
     /// The end carries a mark of its own.
     Marked,
-    /// A way forbidding more meets it here and marks the node itself.
-    Stricter,
-    /// The stretch runs on into this vertex, an end of a way with the same restriction.
+    /// The way it runs into marks the node itself.
+    Yield,
+    /// The stretch runs on into this vertex, an end of a way it carries on along.
     Continues(usize, usize),
 }
 
@@ -179,15 +244,13 @@ struct Topology {
     ends: [End; 2],
 }
 
-fn topology(roads: &[Road], index: &NodeIndex, r: usize) -> Topology {
+fn topology(kind: Kind, roads: &[Road], index: &NodeIndex, r: usize) -> Topology {
     let road = &roads[r];
     let mut marks = Vec::new();
     let mut ends = [End::Marked; 2];
 
     for (v, key) in road.keys.iter().enumerate() {
         let mut degree = 0;
-        let mut starts = 0;
-        let mut stricter = 0;
         let mut other = None;
 
         for &(o, ov) in &index[key] {
@@ -198,19 +261,22 @@ fn topology(roads: &[Road], index: &NodeIndex, r: usize) -> Topology {
             degree += roads[o].arms(ov);
 
             if o != r {
-                starts |= road.bits & !roads[o].bits;
-                stricter |= roads[o].bits & !road.bits;
                 other = Some((o, ov));
             }
         }
 
-        // A continuation is a stretch boundary only where the restriction changes.
-        let is_mark = degree != 2 || starts != 0;
+        let meeting = match other {
+            Some((o, ov)) if degree == 2 => kind.meets(road, v, &roads[o], ov),
+            _ => Meeting::Same,
+        };
+
+        // A continuation is a stretch boundary only where what the marks say changes.
+        let is_mark = degree != 2 || meeting == Meeting::Boundary;
         let pos = road.lengths[v];
 
         if is_mark {
-            // Only a continuation hides its boundary, so only there does a bar show it.
-            let bound = degree == 2;
+            // Only a continuation hides where a restriction changes, so only there does a bar show it.
+            let bound = kind == Kind::Access && degree == 2;
 
             if v != 0 {
                 marks.push(Mark {
@@ -228,8 +294,8 @@ fn topology(roads: &[Road], index: &NodeIndex, r: usize) -> Topology {
         if v == 0 || v == road.last() {
             ends[usize::from(v != 0)] = if is_mark {
                 End::Marked
-            } else if stricter != 0 {
-                End::Stricter
+            } else if meeting == Meeting::Yield {
+                End::Yield
             } else {
                 // Nothing else here means the seam of a loop, which runs on into its other end.
                 let (o, ov) = other.unwrap_or_else(|| (r, road.last() - v));
@@ -242,8 +308,8 @@ fn topology(roads: &[Road], index: &NodeIndex, r: usize) -> Topology {
     Topology { marks, ends }
 }
 
-/// How far a stretch runs on past a way's end before a mark bounds it; infinite once that reaches a
-/// short stretch, or when it runs onto a way this layer never draws.
+/// How far a stretch runs on past a way's end before a mark bounds it; infinite once that reaches
+/// [`HALVED_GAP`], or when it runs onto a way that never draws its marks.
 fn reach(roads: &[Road], topos: &[Option<Topology>], mut end: End) -> f64 {
     let mut acc = 0.0;
 
@@ -251,7 +317,7 @@ fn reach(roads: &[Road], topos: &[Option<Topology>], mut end: End) -> f64 {
     for _ in 0..=roads.len() {
         let (road, vertex) = match end {
             End::Marked => return f64::INFINITY,
-            End::Stricter => return acc,
+            End::Yield => return acc,
             End::Continues(road, vertex) => (road, vertex),
         };
 
@@ -274,7 +340,7 @@ fn reach(roads: &[Road], topos: &[Option<Topology>], mut end: End) -> f64 {
 
         acc += total;
 
-        if acc >= SHORT_SEGMENT {
+        if acc >= HALVED_GAP {
             return f64::INFINITY;
         }
 
@@ -329,8 +395,8 @@ fn sample(line_string: &LineString, lengths: &[f64], distance: f64) -> (f64, f64
     )
 }
 
-/// Crosses and bars for a way's marks, given how far its stretches run on past its start and end
-/// (`ext`): a short stretch gets one cross in its middle, and one too short for any gets nothing.
+/// Symbols and bars for a way's marks, given how far its stretches run on past its start and end
+/// (`ext`): a short stretch gets one symbol in its middle, and one too short for any gets nothing.
 fn place_marks(marks: &[Mark], ext: (f64, f64), total: f64) -> (Vec<f64>, Vec<f64>) {
     // Whether each mark is real; a stand-in for the mark ending the stretch on another way draws nothing.
     let mut nodes = marks.iter().map(|&mark| (mark, true)).collect::<Vec<_>>();
@@ -362,10 +428,10 @@ fn place_marks(marks: &[Mark], ext: (f64, f64), total: f64) -> (Vec<f64>, Vec<f6
     }
 
     // Pairing each opening mark with the next closing one spends every mark on a single stretch, so
-    // close junctions never chain into one cross.
+    // close junctions never chain into one symbol.
     nodes.sort_unstable_by(|(a, _), (b, _)| a.pos.total_cmp(&b.pos).then(a.dir.cmp(&b.dir)));
 
-    let mut crosses = Vec::with_capacity(nodes.len());
+    let mut symbols = Vec::with_capacity(nodes.len());
     let mut bars = Vec::new();
     let mut i = 0;
 
@@ -389,7 +455,7 @@ fn place_marks(marks: &[Mark], ext: (f64, f64), total: f64) -> (Vec<f64>, Vec<f6
 
                 // A stretch spanning ways is marked by the one its middle falls on.
                 if (0.0..=total).contains(&mid) {
-                    crosses.push(mid);
+                    symbols.push(mid);
                 }
 
                 if bound {
@@ -411,17 +477,17 @@ fn place_marks(marks: &[Mark], ext: (f64, f64), total: f64) -> (Vec<f64>, Vec<f6
                 bars.push(pos);
             }
 
-            crosses.push(f64::from(dir).mul_add(MARK_OFFSET, pos).clamp(0.0, total));
+            symbols.push(f64::from(dir).mul_add(MARK_OFFSET, pos).clamp(0.0, total));
         }
 
         i += 1;
     }
 
-    crosses.sort_unstable_by(f64::total_cmp);
+    symbols.sort_unstable_by(f64::total_cmp);
 
-    let mut merged = Vec::<f64>::with_capacity(crosses.len());
+    let mut merged = Vec::<f64>::with_capacity(symbols.len());
 
-    for pos in crosses {
+    for pos in symbols {
         match merged.last_mut() {
             Some(last) if pos - *last < MERGE_GAP => *last = f64::midpoint(*last, pos),
             _ => merged.push(pos),
@@ -434,44 +500,67 @@ fn place_marks(marks: &[Mark], ext: (f64, f64), total: f64) -> (Vec<f64>, Vec<f6
     (merged, bars)
 }
 
-/// Crosses repeated on a grid measured from the way's start, so that every tile places them alike,
-/// each giving way to a mark closer than a short stretch, including those beyond the way's ends.
-fn repeats(total: f64, marks: &[Mark], ext: (f64, f64)) -> Vec<f64> {
+/// Halves every gap between marks, those beyond the way's ends included, into pieces of at most
+/// [`MAX_GAP`]. A gap of [`HALVED_GAP`] or more may end beyond the fetched roads, so it takes its own
+/// way's halves instead, which every tile knows alike; a way under [`SHORT_SEGMENT`] takes none.
+fn halve(total: f64, marks: &[Mark], ext: (f64, f64)) -> Vec<f64> {
+    let mut bounds = std::iter::once(-ext.0)
+        .chain(marks.iter().map(|mark| mark.pos))
+        .chain(std::iter::once(total + ext.1))
+        .collect::<Vec<_>>();
+
+    bounds.dedup();
+
+    let mut own = Vec::new();
+
+    if total >= SHORT_SEGMENT {
+        own.push(total / 2.0);
+        split(0.0, total / 2.0, &mut own);
+        split(total / 2.0, total, &mut own);
+    }
+
     let mut out = Vec::new();
 
-    for step in 0.. {
-        let pos = (f64::from(step) + 0.5) * REPEAT_SPACING;
+    for gap in bounds.windows(2) {
+        let (from, to) = (gap[0], gap[1]);
 
-        if pos >= total {
-            break;
-        }
-
-        let i = marks.partition_point(|mark| mark.pos < pos);
-
-        let nearest = [marks.get(i.wrapping_sub(1)), marks.get(i)]
-            .into_iter()
-            .flatten()
-            .map(|mark| (mark.pos - pos).abs())
-            .chain([pos + ext.0, total + ext.1 - pos])
-            .fold(f64::INFINITY, f64::min);
-
-        if nearest >= SHORT_SEGMENT {
-            out.push(pos);
+        if to - from < HALVED_GAP {
+            split(from, to, &mut out);
+        } else {
+            out.extend(own.iter().filter(|&&pos| {
+                from + SHORT_SEGMENT / 2.0 < pos && pos < to - SHORT_SEGMENT / 2.0
+            }));
         }
     }
+
+    out.retain(|pos| (0.0..=total).contains(pos));
+    out.sort_unstable_by(f64::total_cmp);
 
     out
 }
 
-/// Finds junctions from the roads' shared vertices, then places crosses and bars on every visible
-/// drawn road.
-fn plan(roads: &[Road], visible: impl Fn(&Road) -> bool) -> Vec<(usize, Vec<f64>, Vec<f64>)> {
-    let drawn = roads.iter().filter(|road| road.draws);
+fn split(from: f64, to: f64, out: &mut Vec<f64>) {
+    if to - from <= MAX_GAP {
+        return;
+    }
 
-    // Only the vertices of drawn roads are ever looked up.
-    let mut index = NodeIndex::with_capacity(drawn.clone().map(|road| road.keys.len()).sum());
+    let mid = f64::midpoint(from, to);
 
-    for road in drawn {
+    out.push(mid);
+
+    split(from, mid, out);
+    split(mid, to, out);
+}
+
+/// Every road's vertices that some drawing road passes through, the only ones ever looked up.
+fn node_index(roads: &[Road]) -> NodeIndex {
+    let drawing = roads
+        .iter()
+        .filter(|road| Kind::Access.draws(road) || Kind::Oneway.draws(road));
+
+    let mut index = NodeIndex::with_capacity(drawing.clone().map(|road| road.keys.len()).sum());
+
+    for road in drawing {
         for &key in &road.keys {
             index.entry(key).or_default();
         }
@@ -485,18 +574,30 @@ fn plan(roads: &[Road], visible: impl Fn(&Road) -> bool) -> Vec<(usize, Vec<f64>
         }
     }
 
+    index
+}
+
+/// Sorted symbols and bars of `kind` for each road, empty where it draws none.
+fn plan(
+    kind: Kind,
+    roads: &[Road],
+    index: &NodeIndex,
+    visible: impl Fn(&Road) -> bool,
+) -> Vec<(Vec<f64>, Vec<f64>)> {
     let topos = roads
         .iter()
         .enumerate()
-        .map(|(r, road)| road.draws.then(|| topology(roads, &index, r)))
+        .map(|(r, road)| kind.draws(road).then(|| topology(kind, roads, index, r)))
         .collect::<Vec<_>>();
 
     roads
         .iter()
-        .enumerate()
-        .filter(|(_, road)| road.draws && visible(road))
-        .map(|(r, road)| {
-            let topo = topos[r].as_ref().expect("a drawn road has its topology");
+        .zip(&topos)
+        .map(|(road, topo)| {
+            let Some(topo) = topo.as_ref().filter(|_| visible(road)) else {
+                return Default::default();
+            };
+
             let total = road.total();
 
             let ext = (
@@ -504,13 +605,55 @@ fn plan(roads: &[Road], visible: impl Fn(&Road) -> bool) -> Vec<(usize, Vec<f64>
                 reach(roads, &topos, topo.ends[1]),
             );
 
-            let (mut crosses, bars) = place_marks(&topo.marks, ext, total);
+            let (mut symbols, bars) = place_marks(&topo.marks, ext, total);
 
-            crosses.extend(repeats(total, &topo.marks, ext));
+            symbols.extend(halve(total, &topo.marks, ext));
+            symbols.sort_unstable_by(f64::total_cmp);
 
-            (r, crosses, bars)
+            (symbols, bars)
         })
         .collect()
+}
+
+/// Moves a cross and an arrow that would overlap apart, the cross first in the direction of travel.
+/// Both lists must be sorted.
+fn side_by_side(crosses: &mut [f64], arrows: &mut [f64], oneway: i16, total: f64) {
+    let half = f64::from(oneway) * SIDE_BY_SIDE / 2.0;
+    let (mut c, mut a) = (0, 0);
+
+    while c < crosses.len() && a < arrows.len() {
+        if (crosses[c] - arrows[a]).abs() < SIDE_BY_SIDE {
+            let mid = f64::midpoint(crosses[c], arrows[a]);
+
+            crosses[c] = (mid - half).clamp(0.0, total);
+            arrows[a] = (mid + half).clamp(0.0, total);
+
+            c += 1;
+            a += 1;
+        } else if crosses[c] < arrows[a] {
+            c += 1;
+        } else {
+            a += 1;
+        }
+    }
+}
+
+fn paint(
+    context: &Context,
+    road: &Road,
+    pos: f64,
+    turn: f64,
+    (icon, rect): &(RecordingSurface, Rectangle),
+    alpha: f64,
+) -> cairo::Result<()> {
+    let (x, y, angle) = sample(&road.geom, &road.lengths, pos);
+
+    context.save()?;
+    context.translate(x, y);
+    context.rotate(angle + turn);
+    context.set_source_surface(icon, -rect.width() / 2.0, -rect.height() / 2.0)?;
+    context.paint_with_alpha(alpha)?;
+    context.restore()
 }
 
 pub fn render(
@@ -546,6 +689,7 @@ pub fn render(
             row.get_string("type")?,
             row.get_string("class")?,
             bits,
+            row.get_i16("oneway")?,
         ) {
             parsed.push((id, road));
         }
@@ -565,9 +709,16 @@ pub fn render(
         })
     };
 
-    let placements = plan(&roads, visible);
+    let index = node_index(&roads);
 
-    if placements.is_empty() {
+    let access = plan(Kind::Access, &roads, &index, visible);
+    let oneway = plan(Kind::Oneway, &roads, &index, visible);
+
+    if access
+        .iter()
+        .chain(&oneway)
+        .all(|(symbols, bars)| symbols.is_empty() && bars.is_empty())
+    {
         return Ok(());
     }
 
@@ -582,9 +733,10 @@ pub fn render(
     let no_foot = load("no_foot")?;
     let no_foot_bicycle = load("no_foot_bicycle")?;
     let boundary = load("access_boundary")?;
+    let arrow = load("highway-arrow")?;
 
-    for (r, crosses, bars) in placements {
-        let road = &roads[r];
+    for ((road, (mut crosses, bars)), (mut arrows, _)) in roads.iter().zip(access).zip(oneway) {
+        side_by_side(&mut crosses, &mut arrows, road.oneway, road.total());
 
         // Every cross shows the way's whole restriction; the bar alone says it changes right here.
         let cross = match road.bits {
@@ -593,20 +745,18 @@ pub fn render(
             _ => &no_foot_bicycle,
         };
 
-        let marks = crosses
-            .into_iter()
-            .map(|pos| (pos, cross))
-            .chain(bars.into_iter().map(|pos| (pos, &boundary)));
+        for pos in crosses {
+            paint(context, road, pos, 0.0, cross, 0.75)?;
+        }
 
-        for (pos, (icon, rect)) in marks {
-            let (x, y, angle) = sample(&road.geom, &road.lengths, pos);
+        for pos in bars {
+            paint(context, road, pos, 0.0, &boundary, 0.75)?;
+        }
 
-            context.save()?;
-            context.translate(x, y);
-            context.rotate(angle);
-            context.set_source_surface(icon, -rect.width() / 2.0, -rect.height() / 2.0)?;
-            context.paint_with_alpha(0.75)?;
-            context.restore()?;
+        let turn = if road.oneway < 0 { PI } else { 0.0 };
+
+        for pos in arrows {
+            paint(context, road, pos, turn, &arrow, 1.0)?;
         }
     }
 
@@ -643,26 +793,30 @@ mod tests {
         place_marks(&marks(list), ext, total).0
     }
 
-    fn road_of(coords: &[(f64, f64)], bits: u8, typ: &str, class: &str) -> Road {
+    fn road_with(coords: &[(f64, f64)], bits: u8, oneway: i16, typ: &str, class: &str) -> Road {
         let line = LineString::from(coords.to_vec());
 
-        Road::new(&line, line.clone(), typ, class, bits).expect("a valid road")
+        Road::new(&line, line.clone(), typ, class, bits, oneway).expect("a valid road")
+    }
+
+    fn road_of(coords: &[(f64, f64)], bits: u8, typ: &str, class: &str) -> Road {
+        road_with(coords, bits, 0, typ, class)
     }
 
     fn road(coords: &[(f64, f64)], bits: u8) -> Road {
         road_of(coords, bits, "path", "highway")
     }
 
-    /// Crosses (sorted) and bars of every road.
+    fn oneway(coords: &[(f64, f64)], oneway: i16) -> Road {
+        road_with(coords, 0, oneway, "residential", "highway")
+    }
+
+    fn placed_as(kind: Kind, roads: &[Road]) -> Vec<(Vec<f64>, Vec<f64>)> {
+        plan(kind, roads, &node_index(roads), |_| true)
+    }
+
     fn placed(roads: &[Road]) -> Vec<(Vec<f64>, Vec<f64>)> {
-        let mut out = vec![(Vec::new(), Vec::new()); roads.len()];
-
-        for (r, mut crosses, bars) in plan(roads, |_| true) {
-            crosses.sort_unstable_by(f64::total_cmp);
-            out[r] = (crosses, bars);
-        }
-
-        out
+        placed_as(Kind::Access, roads)
     }
 
     #[test]
@@ -755,13 +909,47 @@ mod tests {
     }
 
     #[test]
-    fn repeats_sit_on_a_grid_and_give_way_to_near_marks() {
-        assert_marks(&repeats(1000.0, &[], OPEN), &[150.0, 450.0, 750.0]);
-        assert_marks(
-            &repeats(1000.0, &marks(&[(0.0, 1), (280.0, -1)]), OPEN),
-            &[450.0, 750.0],
-        );
-        assert_marks(&repeats(200.0, &[], (f64::INFINITY, 20.0)), &[]);
+    fn gaps_are_halved_and_halved_again() {
+        let between = |to: f64| halve(to, &marks(&[(0.0, 1), (to, -1)]), OPEN);
+
+        assert_marks(&between(300.0), &[]);
+        assert_marks(&between(400.0), &[200.0]);
+        assert_marks(&between(1000.0), &[250.0, 500.0, 750.0]);
+    }
+
+    #[test]
+    fn a_gap_spanning_ways_is_halved_alike_on_both() {
+        let on_a = halve(200.0, &marks(&[(0.0, 1)]), (f64::INFINITY, 250.0));
+        let on_b = halve(250.0, &marks(&[(250.0, -1)]), (200.0, f64::INFINITY));
+
+        assert_marks(&on_a, &[]);
+        assert_marks(&on_b, &[25.0]);
+    }
+
+    #[test]
+    fn a_gap_too_long_to_know_whole_takes_the_halves_of_its_way() {
+        let ends = marks(&[(100.0, 1), (1000.0, -1)]);
+
+        assert_marks(&halve(1000.0, &ends, OPEN), &[250.0, 500.0, 750.0]);
+        assert_marks(&halve(250.0, &[], OPEN), &[125.0]);
+        assert_marks(&halve(100.0, &[], OPEN), &[]);
+    }
+
+    #[test]
+    fn a_long_chain_of_short_ways_is_marked_on_each() {
+        let ways = (0..5)
+            .map(|i| {
+                let x = f64::from(i) * 250.0;
+
+                oneway(&[(x, 0.0), (x + 250.0, 0.0)], 1)
+            })
+            .collect::<Vec<_>>();
+
+        let placed = placed_as(Kind::Oneway, &ways);
+
+        assert_marks(&placed[0].0, &[10.0, 125.0]);
+        assert_marks(&placed[2].0, &[125.0]);
+        assert_marks(&placed[4].0, &[125.0, 240.0]);
     }
 
     #[test]
@@ -858,7 +1046,7 @@ mod tests {
             BOTH,
         )];
 
-        assert_marks(&placed(&roads)[0].0, &[50.0, 110.0, 490.0]);
+        assert_marks(&placed(&roads)[0].0, &[50.0, 110.0, 300.0, 490.0]);
     }
 
     #[test]
@@ -877,7 +1065,7 @@ mod tests {
             road(&[(0.0, 0.0), (0.0, -200.0)], 0),
         ];
 
-        assert_marks(&placed(&roads)[0].0, &[10.0, 150.0, 450.0, 790.0]);
+        assert_marks(&placed(&roads)[0].0, &[10.0, 200.0, 400.0, 600.0, 790.0]);
     }
 
     #[test]
@@ -934,7 +1122,7 @@ mod tests {
         ]);
 
         assert_eq!(roads.len(), 1);
-        assert!(roads[0].joins && roads[0].draws);
+        assert!(roads[0].joins && roads[0].restricted);
         assert_marks(&placed(&roads)[0].0, &[10.0, 190.0]);
     }
 
@@ -953,5 +1141,76 @@ mod tests {
         // Counted twice, the pier would make a junction of the node and the bar would be lost.
         assert_marks(&placed[0].0, &[50.0]);
         assert_marks(&placed[0].1, &[100.0]);
+    }
+
+    #[test]
+    fn a_oneway_way_gets_arrows_near_its_ends_and_no_bars() {
+        let placed = placed_as(Kind::Oneway, &[oneway(&[(0.0, 0.0), (200.0, 0.0)], 1)]);
+
+        assert_marks(&placed[0].0, &[10.0, 190.0]);
+        assert!(placed[0].1.is_empty());
+    }
+
+    #[test]
+    fn oneway_travel_carries_on_into_a_way_drawn_the_other_way_round() {
+        let roads = [
+            oneway(&[(0.0, 0.0), (60.0, 0.0)], 1),
+            oneway(&[(100.0, 0.0), (60.0, 0.0)], -1),
+        ];
+
+        let placed = placed_as(Kind::Oneway, &roads);
+
+        assert_marks(&placed[0].0, &[50.0]);
+        assert_marks(&placed[1].0, &[]);
+    }
+
+    #[test]
+    fn oneway_ways_meeting_head_on_are_separate_stretches() {
+        let roads = [
+            oneway(&[(0.0, 0.0), (100.0, 0.0)], 1),
+            oneway(&[(200.0, 0.0), (100.0, 0.0)], 1),
+        ];
+
+        let placed = placed_as(Kind::Oneway, &roads);
+
+        assert_marks(&placed[0].0, &[50.0]);
+        assert_marks(&placed[1].0, &[50.0]);
+    }
+
+    #[test]
+    fn a_way_that_stops_being_oneway_ends_the_stretch() {
+        let roads = [
+            oneway(&[(0.0, 0.0), (200.0, 0.0)], 1),
+            oneway(&[(200.0, 0.0), (400.0, 0.0)], 0),
+        ];
+
+        let placed = placed_as(Kind::Oneway, &roads);
+
+        assert_marks(&placed[0].0, &[10.0, 190.0]);
+        assert_marks(&placed[1].0, &[]);
+    }
+
+    #[test]
+    fn an_arrow_and_a_cross_on_one_spot_sit_side_by_side_cross_first() {
+        let (mut crosses, mut arrows) = (vec![10.0], vec![10.0]);
+
+        side_by_side(&mut crosses, &mut arrows, 1, 200.0);
+
+        assert_marks(&crosses, &[5.0]);
+        assert_marks(&arrows, &[15.0]);
+
+        let (mut crosses, mut arrows) = (vec![10.0], vec![10.0]);
+
+        side_by_side(&mut crosses, &mut arrows, -1, 200.0);
+
+        assert_marks(&crosses, &[15.0]);
+        assert_marks(&arrows, &[5.0]);
+
+        let (mut crosses, mut arrows) = (vec![10.0], vec![50.0]);
+
+        side_by_side(&mut crosses, &mut arrows, 1, 200.0);
+
+        assert_marks(&crosses, &[10.0]);
+        assert_marks(&arrows, &[50.0]);
     }
 }

@@ -2,10 +2,9 @@ use crate::render::{
     Feature, FeatureError,
     colors::{self, Color, ContextExt},
     ctx::Ctx,
-    draw::{markers_on_path::draw_markers_on_path, path_geom::path_line_string},
+    draw::path_geom::path_line_string,
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
-    svg_repo::SvgRepo,
 };
 use cairo::Context;
 use std::borrow::Cow;
@@ -50,7 +49,6 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
             service,
             bridge,
             tunnel,
-            oneway,
             bicycle,
             foot,
             trail_visibility
@@ -69,12 +67,7 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
     client.query(&query, &ctx.bbox_query_params(Some(128.0)).as_params()).await
 }
 
-pub fn render(
-    ctx: &Ctx,
-    context: &Context,
-    rows: Vec<Feature>,
-    svg_repo: &mut SvgRepo,
-) -> LayerRenderResult {
+pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
     let _span = tracy_client::span!("roads::render");
 
     let zoom = ctx.zoom;
@@ -105,11 +98,6 @@ pub fn render(
         14.. => 1.00,
         _ => 0.00,
     };
-
-    // TODO lazy
-    let arrow = svg_repo.get("highway-arrow")?;
-
-    let rect = arrow.extents().expect("surface extents");
 
     context.save()?;
 
@@ -606,27 +594,6 @@ pub fn render(
             }
 
             _ => (),
-        }
-
-        let oneway = row.get_i16("oneway")?;
-
-        if zoom >= 14 && oneway != 0 {
-            path_line_string(context, geom);
-
-            let path = context.copy_path()?;
-
-            context.new_path();
-
-            draw_markers_on_path(&path, 50.0, 100.0, &|x, y, angle| -> cairo::Result<()> {
-                context.save()?;
-                context.translate(x, y);
-                context.rotate(angle + if oneway < 0 { 180.0 } else { 0.0 });
-                context.set_source_surface(arrow, -rect.width() / 2.0, -rect.height() / 2.0)?;
-                context.paint()?;
-                context.restore()?;
-
-                Ok(())
-            })?;
         }
     }
 

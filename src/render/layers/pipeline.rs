@@ -526,7 +526,7 @@ pub fn render(
             "roads",
             None,
             |ctx, conn| async move { layers::roads::query(&ctx, &conn).await }.boxed(),
-            |rows, params| layers::roads::render(&ctx, context, rows, params.svg_repo),
+            |rows, _params| layers::roads::render(&ctx, context, rows),
         );
     }
 
