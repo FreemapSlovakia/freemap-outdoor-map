@@ -31,6 +31,7 @@ tags:
     - icao
     - intermittent
     - ladder
+    - local_ref # bus stop number, shown instead of the name - https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/43
     - location
     - operator
     - plant:method
@@ -64,17 +65,19 @@ generalized_tables:
     tolerance: 200
   roads_gen0:
     source: roads
+    # no construction, disused or abandoned railways at low zoom - https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/81
     sql_filter:
       type IN ('motorway', 'motorway_link', 'trunk', 'trunk_link', 'primary',
       'primary_link', 'secondary', 'secondary_link', 'tertiary', 'tertiary_link')
-      OR class IN('railway')
+      OR (class = 'railway' AND type NOT IN ('abandoned', 'construction', 'disused'))
     tolerance: 200
   roads_gen1:
     source: roads
+    # no construction, disused or abandoned railways at low zoom - https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/81
     sql_filter:
       type IN ('motorway', 'motorway_link', 'trunk', 'trunk_link', 'primary',
       'primary_link', 'secondary', 'secondary_link', 'tertiary', 'tertiary_link')
-      OR class IN('railway')
+      OR (class = 'railway' AND type NOT IN ('abandoned', 'construction', 'disused'))
     tolerance: 50
   waterways_gen0:
     source: waterways_gen1
@@ -216,12 +219,19 @@ tables:
         aliases:
           boundary:
             forest: forest_boundary
+          # one style for all road/airfield surfaces; exact value kept in tags - https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/36
+          area:highway:
+            __any__: area_highway
+          area:aeroway:
+            __any__: area_aeroway
       - name: area
         type: webmerc_area
       - name: tags
         type: hstore_tags
         args:
           include:
+            - area:aeroway # https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/36
+            - area:highway # https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/36
             - protect_class
             - ref
             - wetland
@@ -237,6 +247,12 @@ tables:
             - parking
             - hospital
             - grave_yard
+      area:aeroway: # https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/36
+        mapping:
+          area:aeroway: [__any__]
+      area:highway: # https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/36
+        mapping:
+          area:highway: [__any__]
       boundary:
         mapping:
           boundary:
@@ -319,8 +335,6 @@ tables:
             - bunker_silo
             - clearcut
             - pier
-            - silo # TODO remove
-            - storage_tank # TODO remove
             - wastewater_plant
       natural:
         mapping:
@@ -482,6 +496,16 @@ tables:
         key: tunnel
       - name: type
         type: mapping_value
+        # Disused and abandoned waterways get their own types - https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/58, https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/32
+        aliases:
+          disused:waterway:
+            canal: disused_canal
+            ditch: disused_ditch
+            drain: disused_drain
+          abandoned:waterway:
+            canal: abandoned_canal
+            ditch: abandoned_ditch
+            drain: abandoned_drain
     type: linestring
     mapping:
       waterway:
@@ -498,6 +522,14 @@ tables:
         - river
         - stream
         - tidal_channel
+      disused:waterway: # https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/58
+        - canal
+        - ditch
+        - drain
+      abandoned:waterway: # https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/32
+        - canal
+        - ditch
+        - drain
 
   feature_lines:
     columns:
@@ -674,6 +706,7 @@ tables:
             - horse
             - icao
             - intermittent
+            - local_ref # https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/43
             - operator
             - protected
             - ref
@@ -1046,6 +1079,7 @@ tables:
                 - resort
                 - sauna
                 - slipway
+                - sports_centre # as a point too, not only an area - https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/42
                 - sports_hall
                 - swimming_area
                 - swimming_pool
@@ -1359,6 +1393,24 @@ tables:
         type: geometry
       - name: type
         type: mapping_value
+        # disused:railway=rail etc. share the plain disused/abandoned types - https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/32
+        aliases:
+          disused:railway:
+            funicular: disused
+            light_rail: disused
+            monorail: disused
+            narrow_gauge: disused
+            rail: disused
+            subway: disused
+            tram: disused
+          abandoned:railway:
+            funicular: abandoned
+            light_rail: abandoned
+            monorail: abandoned
+            narrow_gauge: abandoned
+            rail: abandoned
+            subway: abandoned
+            tram: abandoned
       - name: name
         type: string
         key: name
@@ -1456,6 +1508,22 @@ tables:
             - monorail
             - narrow_gauge
             - preserved
+            - rail
+            - subway
+            - tram
+          disused:railway: # https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/32
+            - funicular
+            - light_rail
+            - monorail
+            - narrow_gauge
+            - rail
+            - subway
+            - tram
+          abandoned:railway: # https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/32
+            - funicular
+            - light_rail
+            - monorail
+            - narrow_gauge
             - rail
             - subway
             - tram
