@@ -11,16 +11,18 @@
 # That is wanted: the Dutch signal is dykes, creek ridges and dune relief, mostly
 # 5-20 m wide, which an 11 m filter would partly erase.
 
-# ZOOM is unmeasured — run sample-zoom-nl.nu and set it from the number. Expect
-# the usual reasoning to invert: relief is negligible, but the whole signal is
-# metre-scale micro-relief, which is what a fine zoom serves and a coarse one
-# destroys. Saxony already showed relief is the wrong proxy.
+# ZOOM=17 MEASURED on the Veluwe (sample-zoom-nl.nu): z16 differs from z17 on
+# 25.7% of pixels, the same band as Bavaria's Alps (31.9%) and Saxony (31.4%),
+# far above England (3.2%) or Wallonia (4.2%) — in a country with no relief.
+# Confirmed on the same data: Limburg has 45x the relief of a Flevoland polder
+# and LESS pixel-scale roughness. Relief is the wrong proxy; micro-relief is the
+# signal, and a coarse zoom destroys exactly that.
 
-# gdal_fillnodata is UNMEASURED and unlikely to be a plain "off" as elsewhere.
-# AHN keeps only bare-ground points, so water is nodata and the country is ~a
-# fifth water; measured 7.8% nodata inland. Filling a canal invents a surface
-# and the hillshade then renders texture on water, so the likely answer is a
-# size threshold: fill buildings and bridges, leave lakes. Measure first.
+# gdal_fillnodata is ON here, unlike every other country. AHN keeps only
+# bare-ground points, so buildings, bridges, trees and water are all nodata —
+# 5-14% of pixels. -md 10 (5 m at 0.5 px) fills 92.8% of it, measured, which is
+# the man-made part; the remaining 7.2% is genuine water and must stay nodata or
+# the hillshade renders texture on canals and lakes.
 
 # RD New needs no datum grid here — see download-nl.nu.
 
@@ -42,7 +44,7 @@ const DATA_ROOT = "/mnt/osm/nl"                  # smooth2m/, tiles/ on NVMe
 const TILES_DIR = "/mnt/osm/nl/tiles"
 const EPSG      = "EPSG:28992"                   # Amersfoort / RD New
 const NODATA    = "-9999"                        # the VRT restamps AHN's FLT_MAX
-const ZOOM      = 17                             # UNMEASURED — see header
+const ZOOM      = 17                             # MEASURED — see header
 const PARALLEL  = 24
 const TMPDIR    = "/dev/shm"
 
@@ -171,12 +173,18 @@ def render-window [w: record, tr: string, data_dir: string]: nothing -> nothing 
         mv $tmp2 $dem2
     }
 
-    # 4. (no gdal_fillnodata — unmeasured for DGM1, see header)
+    # 4. Fill small voids only. -md is in PIXELS, so 10 = 5 m at AHN's 0.5 m —
+    #    the same physical reach the 1 m countries got from -md 5. Fills
+    #    buildings, bridges and tree gaps (92.8% of nodata, measured); leaves
+    #    canals and lakes, which must stay nodata or the hillshade renders
+    #    texture on water.
+    let dem = $"($d)/dem.tif"
+    gdal_fillnodata.py -md 10 $smooth $dem o> /dev/null err> /dev/null
 
     # 5. Three Igor hillshades on the collared window so edges have neighbours.
-    gdaldem hillshade $smooth $"($d)/_a.tif" -az -120 -igor -compute_edges ...$co o> /dev/null
-    gdaldem hillshade $smooth $"($d)/_b.tif" -az  60  -igor -compute_edges ...$co o> /dev/null
-    gdaldem hillshade $smooth $"($d)/_c.tif" -az -45  -igor -compute_edges ...$co o> /dev/null
+    gdaldem hillshade $dem $"($d)/_a.tif" -az -120 -igor -compute_edges ...$co o> /dev/null
+    gdaldem hillshade $dem $"($d)/_b.tif" -az  60  -igor -compute_edges ...$co o> /dev/null
+    gdaldem hillshade $dem $"($d)/_c.tif" -az -45  -igor -compute_edges ...$co o> /dev/null
 
     # 6. Crop the collar (minus the warp margin) off each hillshade.
     let info = gdalinfo -json $smooth | from json
