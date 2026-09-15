@@ -195,7 +195,9 @@ const CACHEMAX_MB  = 2048                       # per process
 if ($GPKG | path exists) {
     print $"==> ($GPKG) already exists — delete it to re-generate; skipping"
 } else {
-    let offsets = (0..(($OFF_INTERVAL / $INTERVAL) - 1) | each {|k| $k * $INTERVAL })
+    # Integer division: `/` yields a float, and a float-bounded range breaks
+    # outright when OFF_INTERVAL == INTERVAL (0..0.0).
+    let offsets = (0..(($OFF_INTERVAL // $INTERVAL) - 1) | each {|k| $k * $INTERVAL })
     print $"==> Generating contours in ($offsets | length) offset passes \(-i ($OFF_INTERVAL), -off ($offsets | str join ', ')\)"
 
     $offsets | par-each -t $PARALLEL_OFF {|off|
