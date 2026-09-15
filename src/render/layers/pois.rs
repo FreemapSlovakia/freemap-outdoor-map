@@ -383,6 +383,8 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         }),
         (15, 16, N, N, Transport, "taxi", Extra::default()),
         (15, 16, N, N, Transport, "bus_stop", Extra::default()),
+        // A ticket machine is how a walker gets home by bus.
+        (18, 19, N, N, Transport, "public_transport_tickets", Extra::default()),
         (15, 16, N, N, Transport, "ferry_terminal", Extra::default()),
         (15, 16, Y, N, Transport, "public_transport", Extra::default()),
         (15, 16, N, N, Religion, "tower_bell_tower", Extra::default()),
@@ -425,6 +427,8 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (15, 16, N, N, ManMade, "cooling_tower", Extra { icon: Some("tower_cooling"), ..Extra::default() }),
         (15, 16, N, N, ManMade, "windmill", Extra::default()),
         (15, 16, N, N, ManMade, "lighthouse", Extra::default()),
+        (16, 17, N, N, ManMade, "telescope_dish", Extra::default()),
+        (17, 18, N, N, ManMade, "telescope_dome", Extra::default()),
         (15, 16, N, N, Historic, "obelisk", Extra::default()),
         (15, 16, N, N, Culture, "casino", Extra::default()),
         (15, 16, N, N, Culture, "gallery", Extra::default()),
@@ -434,12 +438,20 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (16, 17, N, N, Sport, "massage", Extra::default()),
         (17, 18, N, N, Facility, "shower", Extra::default()),
         (15, NN, N, N, ManMade, "tower_communication", Extra::default()),
-        (15, NN, N, N, ManMade, "communications_tower", Extra { icon: Some("tower_communication"), ..Extra::default() }),
-        (15, NN, N, N, ManMade, "mast_communication", Extra { icon: Some("tower_communication"), ..Extra::default() }),
+        (15, NN, N, N, ManMade, "communications_tower", Extra::default()),
+        (15, NN, N, N, ManMade, "mast_communication", Extra::default()),
+        (15, NN, N, N, ManMade, "tower_lattice_communication", Extra::default()),
+        (15, NN, N, N, ManMade, "tower_lattice", Extra::default()),
+        (15, NN, N, N, ManMade, "tower_dish", Extra::default()),
+        (15, NN, N, N, ManMade, "tower_dome", Extra::default()),
         // Plain towers and masts: the old list ranked "tower_other"/"mast_other", names the
         // query never emits, so both sank to the bottom instead of ranking here.
         (15, NN, N, N, ManMade, "tower", Extra::default()),
         (15, NN, N, N, ManMade, "mast", Extra::default()),
+        // Mostly floodlights over pitches and car parks.
+        (18, NN, N, N, ManMade, "tower_lighting", Extra::default()),
+        (18, NN, N, N, ManMade, "tower_lattice_lighting", Extra::default()),
+        (18, NN, N, N, ManMade, "mast_lighting", Extra::default()),
         (10, 10, Y, Y, NaturalPoi, "volcano", Extra { icon: Some("peak"), font_size: 13.0, halo: false, text_color: Some(colors::MILITARY), color: Some(colors::POI_VOLCANO), ..Extra::default() }),
         (10, 10, Y, Y, NaturalPoi, "peak1", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
         (11, 11, Y, Y, NaturalPoi, "peak2", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
@@ -458,6 +470,7 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (16, NN, N, N, Facility, "picnic_table", Extra::default()),
         (16, 17, N, N, Facility, "bbq", Extra::default()),
         (17, 19, N, N, Transport, "parking", Extra { font_size: 10.0, text_color: Some(colors::AREA_LABEL), ..Extra::default() }), // { font: { haloOpacity: 0.5 } },
+        (19, 20, N, N, Transport, "parking_tickets", Extra::default()),
         (18, NN, N, N, Facility, "bench", Extra::default()),
         (17, 18, N, N, Other, "beehive", Extra::default()),
         (17, 18, N, N, Other, "apiary", Extra { icon: Some("beehive"), ..Extra::default() }),
@@ -478,6 +491,7 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (19, NN, N, N, Barrier, "turnstile",  Extra { icon: Some("bollard"), ..Extra::default() }),
         (19, NN, N, N, Barrier, "log",  Extra { icon: Some("bollard"), ..Extra::default() }),
         (18, NN, N, N, Facility, "waste_disposal", Extra::default()),
+        (19, 20, N, N, Facility, "excrement_bags", Extra::default()),
         (19, NN, N, N, Facility, "waste_basket", Extra::default()),
         (16, NN, N, N, Other, "feeding_place", Extra { icon: Some("manger"), ..Extra::default() }),
         (16, NN, N, N, Other, "game_feeding", Extra { icon: Some("manger"), ..Extra::default() }),
@@ -972,19 +986,42 @@ pub async fn query(
                 THEN
                     'mast' || CASE tags->'tower:type'
                         WHEN 'communication' THEN '_communication'
+                        WHEN 'lighting' THEN '_lighting'
                         ELSE ''
                     END
+                -- `tower_[construction_][type]`. A type that makes the tower a different
+                -- kind of place - a lookout, a belfry - keeps its own icon whatever it is
+                -- built of; Carto lets construction win there, but on this map an
+                -- observation tower is a destination, not a lattice.
                 WHEN type = 'tower'
                 THEN
-                    'tower' || CASE tags->'tower:type'
-                        WHEN 'communication' THEN '_communication'
-                        WHEN 'observation' THEN '_observation'
-                        WHEN 'watchtower' THEN '_watchtower'
-                        WHEN 'bell_tower' THEN '_bell_tower'
-                        WHEN 'cooling' THEN '_cooling'
-                        WHEN 'defensive' THEN '_defensive'
+                    'tower' || CASE
+                        WHEN tags->'tower:type' IN
+                            ('observation', 'watchtower', 'bell_tower', 'cooling', 'defensive')
+                        THEN '_' || (tags->'tower:type')
+                        WHEN tags->'tower:construction' IN ('dish', 'dome')
+                        THEN '_' || (tags->'tower:construction')
+                        WHEN tags->'tower:construction' = 'lattice'
+                        THEN '_lattice' || CASE tags->'tower:type'
+                            WHEN 'communication' THEN '_communication'
+                            WHEN 'lighting' THEN '_lighting'
+                            ELSE ''
+                        END
+                        WHEN tags->'tower:type' IN ('communication', 'lighting')
+                        THEN '_' || (tags->'tower:type')
                         ELSE ''
                     END
+                -- Untyped telescopes are optical, as in Carto.
+                WHEN type = 'telescope'
+                THEN
+                    'telescope_' || CASE COALESCE(tags->'telescope:type', 'optical')
+                        WHEN 'optical' THEN 'dome'
+                        ELSE 'dish'
+                    END
+                WHEN
+                    type = 'vending_machine' AND
+                    tags->'vending' IN ('excrement_bags', 'parking_tickets', 'public_transport_tickets')
+                THEN tags->'vending'
                 WHEN type IN ('obstacle_tree', 'obstacle_vegetation')
                 THEN type
                 WHEN type LIKE 'obstacle_%'

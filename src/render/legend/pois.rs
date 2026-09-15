@@ -341,9 +341,37 @@ fn build_poi_tags(
 
         match typ {
             s if typ.starts_with("tower_") || typ.starts_with("mast_") => {
-                let (a, b) = s.split_once('_').expect("matched a name containing '_'");
-                tags.push(("man_made", a));
-                tags.push(("tower:type", b));
+                let (man_made, rest) = s.split_once('_').expect("matched a name containing '_'");
+
+                tags.push(("man_made", man_made));
+
+                // The query builds `[construction_][type]`.
+                let (construction, kind) = match rest {
+                    "lattice" | "dish" | "dome" => (Some(rest), None),
+                    _ => rest
+                        .strip_prefix("lattice_")
+                        .map_or((None, Some(rest)), |kind| (Some("lattice"), Some(kind))),
+                };
+
+                if let Some(construction) = construction {
+                    tags.push(("tower:construction", construction));
+                }
+
+                if let Some(kind) = kind {
+                    tags.push(("tower:type", kind));
+                }
+            }
+            "telescope_dish" => {
+                override_key = Some("telescope");
+                tags.push(("telescope:type", "radio"));
+            }
+            "telescope_dome" => {
+                override_key = Some("telescope");
+                tags.push(("telescope:type", "optical"));
+            }
+            "excrement_bags" | "parking_tickets" | "public_transport_tickets" => {
+                tags.push(("amenity", "vending_machine"));
+                tags.push(("vending", typ));
             }
             "tree_protected" => {
                 override_key = Some("tree");

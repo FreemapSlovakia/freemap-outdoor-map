@@ -321,7 +321,6 @@ tables:
             - pier
             - silo # TODO remove
             - storage_tank # TODO remove
-            - telescope
             - wastewater_plant
       natural:
         mapping:
@@ -1072,6 +1071,7 @@ tables:
                 - silo
                 - spring_box
                 - storage_tank
+                - telescope
                 - tower
                 - mast
                 - wastewater_plant
