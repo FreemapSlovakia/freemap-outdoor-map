@@ -1,20 +1,26 @@
 use crate::render::{
     collision::Collision,
-    colors::{self, Color, ContextExt},
+    colors::{self, Color},
     draw::{
-        font_options::{FontAndLayoutOptions, uppercase_label},
-        font_system::{scale_outline, stamp_outline, with_font_system, with_scale_context},
+        font_options::{FontAndLayoutOptions, ShapeKey, label_attrs, label_text},
+        font_system::{
+            HaloPaint, draw_with_halo, glyph_outline, stamp_outline, with_font_system,
+            with_scale_context,
+        },
         offset_line::offset_line_string,
+        path_geom::cumulative_lengths,
     },
 };
 use cairo::Context;
-use cosmic_text::{
-    Attrs, Buffer, Family, Metrics, Shaping, Wrap,
-    fontdb::{ID as FontId, Weight as FdbWeight},
+use cosmic_text::{Buffer, Metrics, Shaping, Wrap};
+use geo::{Coord, Euclidean, InterpolatePoint, LineString, Rect, Vector2DOps};
+use rustc_hash::FxHashMap;
+use std::{
+    cell::{OnceCell, RefCell},
+    f64::consts::{FRAC_PI_2, PI, TAU},
+    rc::Rc,
 };
-use geo::Vector2DOps;
-use geo::{Coord, Distance, Euclidean, InterpolatePoint, LineString, Rect};
-use std::f64::consts::{PI, TAU};
+use swash::scale::outline::Outline;
 
 /// Vetoes a placement. The repeat is dropped rather than slid, so the decision rests on the
 /// label's own box, which neighbouring tiles agree on.
@@ -61,6 +67,18 @@ impl Default for TextOnLineOptions<'_> {
     }
 }
 
+impl From<&TextOnLineOptions<'_>> for HaloPaint {
+    fn from(options: &TextOnLineOptions<'_>) -> Self {
+        Self {
+            color: options.color,
+            halo_color: options.halo_color,
+            halo_opacity: options.halo_opacity,
+            halo_width: options.halo_width,
+            alpha: options.alpha,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 pub enum Upright {
     Left,
@@ -86,7 +104,7 @@ pub enum Repeat {
 #[derive(Copy, Clone, Debug)]
 pub enum Distribution {
     Align { align: Align, repeat: Repeat },
-    Justify { min_spacing: Option<f64> },
+    Justify { min_spacing: f64 },
 }
 
 fn normalize(v: Coord) -> Coord {
@@ -110,20 +128,37 @@ fn normalize_angle(a: f64) -> f64 {
     }
 }
 
-fn adjust_upright_angle(angle: f64, upright: Upright) -> f64 {
-    let a = normalize_angle(angle);
+/// Maps a span start between the forward and the reversed line (either way).
+fn flip_start(total_length: f64, span: f64, start: f64) -> f64 {
+    (total_length - span - start).max(0.0)
+}
 
-    match upright {
-        Upright::Left => normalize_angle(a + PI),
-        Upright::Right => a,
-        Upright::Auto => {
-            if a.abs() > PI / 2.0 {
-                normalize_angle(a + PI)
-            } else {
-                a
-            }
-        }
-    }
+/// Indices of the segments that may overlap `span_start..span_end`: segments ending at or
+/// before the span or starting at or after it can't.
+fn segment_range(cum: &[f64], span_start: f64, span_end: f64) -> (usize, usize) {
+    let first = cum[1..].partition_point(|&c| c <= span_start);
+    let last = cum[..cum.len() - 1].partition_point(|&c| c < span_end);
+
+    (first, last.max(first))
+}
+
+/// Segments overlapping `span_start..span_end`, as (unit tangent, overlap length).
+fn span_segments(
+    pts: &[Coord],
+    cum: &[f64],
+    span_start: f64,
+    span_end: f64,
+) -> impl Iterator<Item = (Coord, f64)> {
+    let (first, last) = segment_range(cum, span_start, span_end);
+
+    pts[first..=last]
+        .windows(2)
+        .zip(cum[first..=last].windows(2))
+        .filter_map(move |(p, c)| {
+            let overlap = span_end.min(c[1]) - span_start.max(c[0]);
+
+            (overlap > 0.0).then(|| (normalize(p[1] - p[0]), overlap))
+        })
 }
 
 fn weighted_tangent_for_span(
@@ -132,69 +167,43 @@ fn weighted_tangent_for_span(
     span_start: f64,
     span_end: f64,
 ) -> Option<Coord> {
-    if pts.len() < 2 {
-        return None;
-    }
-
     let mut accum = Coord { x: 0.0, y: 0.0 };
     let mut total = 0.0;
 
-    for i in 0..pts.len() - 1 {
-        let seg_start = cum[i];
-        let seg_end = cum[i + 1];
-
-        let overlap_start = span_start.max(seg_start);
-        let overlap_end = span_end.min(seg_end);
-
-        if overlap_end <= overlap_start {
-            continue;
-        }
-
-        let weight = overlap_end - overlap_start;
-        let tangent = normalize(pts[i + 1] - pts[i]);
-
+    for (tangent, weight) in span_segments(pts, cum, span_start, span_end) {
         accum = accum + tangent * weight;
         total += weight;
     }
 
-    if total == 0.0 {
-        None
-    } else {
-        Some(normalize(accum))
-    }
+    (total != 0.0).then(|| normalize(accum))
 }
 
-fn tangents_for_span(pts: &[Coord], cum: &[f64], span_start: f64, span_end: f64) -> Vec<Coord> {
-    let mut result = Vec::new();
+/// [`weighted_tangent_for_span`] and the largest turn between consecutive segments, in degrees,
+/// in one pass.
+fn weighted_tangent_and_turn(
+    pts: &[Coord],
+    cum: &[f64],
+    span_start: f64,
+    span_end: f64,
+) -> (Option<Coord>, Option<f64>) {
+    let mut accum = Coord { x: 0.0, y: 0.0 };
+    let mut total = 0.0;
+    let mut prev_tangent = None;
+    let mut turn: Option<f64> = None;
 
-    for i in 0..pts.len() - 1 {
-        let seg_start = cum[i];
-        let seg_end = cum[i + 1];
+    for (tangent, weight) in span_segments(pts, cum, span_start, span_end) {
+        accum = accum + tangent * weight;
+        total += weight;
 
-        let overlap_start = span_start.max(seg_start);
-        let overlap_end = span_end.min(seg_end);
-
-        if overlap_end <= overlap_start {
-            continue;
+        if let Some(prev) = prev_tangent {
+            let angle = angle_between(prev, tangent);
+            turn = Some(turn.map_or(angle, |turn| turn.max(angle)));
         }
 
-        let tangent = normalize(pts[i + 1] - pts[i]);
-
-        result.push(tangent);
+        prev_tangent = Some(tangent);
     }
 
-    result
-}
-
-fn cumulative_lengths(pts: &[Coord]) -> Vec<f64> {
-    let mut result = Vec::with_capacity(pts.len());
-    let mut total = 0.0;
-    result.push(0.0);
-    for window in pts.windows(2) {
-        total += Euclidean.distance(window[0], window[1]);
-        result.push(total);
-    }
-    result
+    ((total != 0.0).then(|| normalize(accum)), turn)
 }
 
 fn position_at(pts: &[Coord], cum: &[f64], dist: f64) -> Option<(Coord, Coord)> {
@@ -215,10 +224,7 @@ fn position_at(pts: &[Coord], cum: &[f64], dist: f64) -> Option<(Coord, Coord)> 
         return Some((pts[len - 1], tangent));
     }
 
-    let mut idx = 0;
-    while idx + 1 < cum.len() && cum[idx + 1] < dist {
-        idx += 1;
-    }
+    let idx = cum[1..].partition_point(|&c| c < dist);
 
     let seg_len = cum[idx + 1] - cum[idx];
     if seg_len == 0.0 {
@@ -250,20 +256,15 @@ fn trim_line_to_span(pts: &[Coord], cum: &[f64], span_start: f64, span_end: f64)
         return Vec::new();
     }
 
-    let mut trimmed = Vec::new();
+    let (first, last) = segment_range(cum, start, end);
+
+    let mut trimmed = Vec::with_capacity(last - first + 2);
 
     if let Some((p, _)) = position_at(pts, cum, start) {
         trimmed.push(p);
     }
 
-    for i in 0..pts.len() - 1 {
-        let seg_start = cum[i];
-        let seg_end = cum[i + 1];
-        if seg_end <= start || seg_start >= end {
-            continue;
-        }
-        trimmed.push(pts[i + 1]);
-    }
+    trimmed.extend_from_slice(&pts[first + 1..=last]);
 
     if let Some((p, _)) = position_at(pts, cum, end)
         && trimmed.last().is_none_or(|q| *q != p)
@@ -308,108 +309,11 @@ fn bbox_intersects_clip(pts: &[Coord], clip: (f64, f64, f64, f64), padding: f64)
     maxx >= min_cx && max_cx >= minx && maxy >= min_cy && max_cy >= miny
 }
 
-/// Trimming / offsetting / clipping knobs for [`prepare_label_span`].
-struct LabelSpanOpts {
-    trim_padding: f64,
-    offset: f64,
-    keep_offset_side: bool,
-    clip_padding: f64,
-    clip_extents: Option<(f64, f64, f64, f64)>,
-}
-
-fn prepare_label_span(
-    pts: &[Coord],
-    total_length: f64,
-    repeat_span: f64,
-    label_start: f64,
-    flip_needed: bool,
-    opts: LabelSpanOpts,
-) -> Option<PreparedLine> {
-    let LabelSpanOpts {
-        trim_padding,
-        offset,
-        keep_offset_side,
-        clip_padding,
-        clip_extents,
-    } = opts;
-
-    // Orient the geometry according to the chosen upright direction.
-    let mut oriented_pts = pts.to_vec();
-    if flip_needed {
-        oriented_pts.reverse();
-    }
-    let oriented_cum = cumulative_lengths(&oriented_pts);
-
-    let start_use = if flip_needed {
-        (total_length - repeat_span - label_start).max(0.0)
-    } else {
-        label_start
-    };
-    let span_end = start_use + repeat_span;
-
-    let trim_start = (start_use - trim_padding).max(0.0);
-    let trim_end = (span_end + trim_padding).min(total_length);
-
-    let mut pts_use = trim_line_to_span(&oriented_pts, &oriented_cum, trim_start, trim_end);
-    pts_use.dedup_by(|a, b| a == b);
-    if pts_use.len() < 2 {
-        return None;
-    }
-
-    // Offset only the trimmed slice to keep work bounded.
-    if offset != 0.0 {
-        let base_offset = -offset;
-        let signed_offset = if flip_needed {
-            if keep_offset_side {
-                offset
-            } else {
-                base_offset
-            }
-        } else {
-            base_offset
-        };
-        let ls = LineString::from(pts_use.clone());
-        let offset_ls = offset_line_string(&ls, signed_offset);
-        let mut off_pts: Vec<Coord> = offset_ls.into_iter().collect();
-        off_pts.dedup_by(|a, b| a == b);
-        if off_pts.len() < 2 {
-            return None;
-        }
-        pts_use = off_pts;
-    }
-
-    let intersects_clip = clip_extents
-        .is_none_or(|clip| bbox_intersects_clip(&pts_use, clip, clip_padding));
-
-    let cum_use = cumulative_lengths(&pts_use);
-    let total_length_use = *cum_use.last().unwrap_or(&0.0);
-    if total_length_use == 0.0 {
-        return None;
-    }
-
-    let cursor_start = (start_use - trim_start).max(0.0);
-    if cursor_start > total_length_use {
-        return None;
-    }
-
-    Some(PreparedLine {
-        pts: pts_use,
-        cum: cum_use,
-        total_length: total_length_use,
-        cursor_start,
-        trim_start,
-        intersects_clip,
-    })
-}
-
 /// One glyph within a cluster, with its offset from the cluster origin
 /// (at the baseline, advance-aligned).
-#[derive(Clone)]
 struct GlyphSpec {
-    font_id: FontId,
-    font_weight: FdbWeight,
-    font_size: f32,
-    glyph_id: u16,
+    /// Scaled outline, `None` for glyphs without one (e.g. spaces).
+    outline: Option<Rc<Outline>>,
     /// Offset of this glyph's pen position from the cluster origin.
     dx: f32,
     /// Same for vertical (usually 0 except for stacking diacritics).
@@ -418,7 +322,6 @@ struct GlyphSpec {
 
 /// A pango-style "cluster" = a run of glyphs that render together (e.g. a
 /// base letter plus combining marks). Positioned as a unit.
-#[derive(Clone)]
 struct ClusterInfo {
     /// Total horizontal advance (width the next cluster's origin sits at).
     advance: f64,
@@ -438,27 +341,23 @@ struct ClusterInfo {
     glyphs: Vec<GlyphSpec>,
 }
 
+impl ClusterInfo {
+    const fn logical_center(&self) -> (f64, f64) {
+        (
+            f64::midpoint(self.logical_left, self.logical_right),
+            f64::midpoint(self.logical_top, self.logical_bottom),
+        )
+    }
+}
+
 /// Shape `text` with `flo` into a single unwrapped line and walk its glyphs,
 /// grouping consecutive glyphs sharing `glyph.start` into one cluster.
 /// Cluster positions, ink extents, and logical extents are all relative to
 /// the cluster's pen origin (at the baseline).
 fn collect_clusters(text: &str, flo: &FontAndLayoutOptions) -> Vec<ClusterInfo> {
-    let family = Family::Name(if flo.narrow {
-        "PT Sans Narrow"
-    } else {
-        "PT Sans"
-    });
-    let attrs = Attrs::new()
-        .family(family)
-        .weight(flo.weight)
-        .style(flo.style)
-        .letter_spacing((flo.letter_spacing / flo.size.max(0.0001)) as f32);
+    let attrs = label_attrs(flo);
 
-    let text_owned = if flo.uppercase {
-        uppercase_label(text)
-    } else {
-        text.to_string()
-    };
+    let text = label_text(text, flo);
 
     let size = flo.size as f32;
     let metrics = Metrics::new(size, size);
@@ -469,7 +368,7 @@ fn collect_clusters(text: &str, flo: &FontAndLayoutOptions) -> Vec<ClusterInfo> 
         {
             let mut buf = buffer.borrow_with(fs);
             buf.set_size(None, None);
-            buf.set_text(&text_owned, &attrs, Shaping::Advanced, None);
+            buf.set_text(&text, &attrs, Shaping::Advanced, None);
             buf.shape_until_scroll(true);
         }
 
@@ -485,47 +384,38 @@ fn collect_clusters(text: &str, flo: &FontAndLayoutOptions) -> Vec<ClusterInfo> 
                     let Some(font) = fs.get_font(glyph.font_id, glyph.font_weight) else {
                         continue;
                     };
-                    let font_ref = font.as_swash();
 
-                    let fm = font_ref.metrics(&[]);
+                    let fm = font.as_swash().metrics(&[]);
                     let s = glyph.font_size / fm.units_per_em as f32;
                     let g_asc = (fm.ascent * s) as f64;
                     let g_desc = (fm.descent.abs() * s) as f64;
 
                     // Per-glyph ink box in the glyph's own pen coords (Y-up → Y-down flip).
-                    let (g_ink_l, g_ink_r, g_ink_t, g_ink_b) = scale_outline(
-                        sc,
-                        font_ref,
-                        glyph.font_size,
-                        glyph.glyph_id,
-                    )
-                    .map_or((0.0, 0.0, 0.0, 0.0), |o| {
-                        let b = o.bounds();
-                        (
-                            b.min.x as f64,
-                            b.max.x as f64,
-                            -(b.max.y as f64),
-                            -(b.min.y as f64),
-                        )
-                    });
+                    let outline = glyph_outline(fs, sc, glyph);
+
+                    let (g_ink_l, g_ink_r, g_ink_t, g_ink_b) =
+                        outline.as_ref().map_or((0.0, 0.0, 0.0, 0.0), |o| {
+                            let b = o.bounds();
+                            (
+                                b.min.x as f64,
+                                b.max.x as f64,
+                                -(b.max.y as f64),
+                                -(b.min.y as f64),
+                            )
+                        });
 
                     let gx = glyph.x as f64;
-                    let same_cluster = matches!(open, Some((s, _)) if s == glyph.start);
 
                     let spec = GlyphSpec {
-                        font_id: glyph.font_id,
-                        font_weight: glyph.font_weight,
-                        font_size: glyph.font_size,
-                        glyph_id: glyph.glyph_id,
+                        outline,
                         dx: 0.0,
                         dy: glyph.y,
                     };
 
-                    if same_cluster {
-                        let origin_x = open.expect("same_cluster implies open is Some").1;
-                        let cluster = out
-                            .last_mut()
-                            .expect("same_cluster implies a cluster was pushed");
+                    if let Some((start, origin_x)) = open
+                        && start == glyph.start
+                        && let Some(cluster) = out.last_mut()
+                    {
                         let rel_x = gx - origin_x;
                         // Glyph box in cluster-origin coords.
                         let l = rel_x + g_ink_l;
@@ -538,9 +428,10 @@ fn collect_clusters(text: &str, flo: &FontAndLayoutOptions) -> Vec<ClusterInfo> 
                         cluster.logical_right = cluster.logical_right.max(rel_x + glyph.w as f64);
                         cluster.logical_top = cluster.logical_top.min(-g_asc);
                         cluster.logical_bottom = cluster.logical_bottom.max(g_desc);
-                        let mut s = spec;
-                        s.dx = rel_x as f32;
-                        cluster.glyphs.push(s);
+                        cluster.glyphs.push(GlyphSpec {
+                            dx: rel_x as f32,
+                            ..spec
+                        });
                     } else {
                         open = Some((glyph.start, gx));
                         out.push(ClusterInfo {
@@ -564,58 +455,62 @@ fn collect_clusters(text: &str, flo: &FontAndLayoutOptions) -> Vec<ClusterInfo> 
     })
 }
 
-fn draw_label(
-    cr: &cairo::Context,
-    placements: &[(ClusterInfo, Coord, f64)],
-    opts: &TextOnLineOptions,
-) -> cairo::Result<()> {
-    if placements.is_empty() {
-        return Ok(());
+/// Bounds memory per render thread; outlines are shared, so an entry takes a few kilobytes.
+const SHAPED_CACHE_CAPACITY: usize = 2048;
+
+thread_local! {
+    static SHAPED_CACHE: RefCell<FxHashMap<ShapeKey, Rc<[ClusterInfo]>>> =
+        RefCell::new(FxHashMap::default());
+}
+
+/// [`collect_clusters`], cached: the same names, refs and contour heights recur across a tile's
+/// lines and neighbouring tiles.
+fn shaped_clusters(text: &str, flo: &FontAndLayoutOptions) -> Rc<[ClusterInfo]> {
+    let key = ShapeKey::new(text, flo);
+
+    if let Some(clusters) = SHAPED_CACHE.with(|cache| cache.borrow().get(&key).cloned()) {
+        return clusters;
     }
 
-    cr.push_group();
+    let clusters: Rc<[ClusterInfo]> = collect_clusters(text, flo).into();
 
-    with_font_system(|fs| {
-        with_scale_context(|sc| {
-            for (cluster, pos, angle) in placements {
-                // Rotate around the cluster's logical bbox center.
-                let cx = f64::midpoint(cluster.logical_left, cluster.logical_right);
-                let cy = f64::midpoint(cluster.logical_top, cluster.logical_bottom);
+    SHAPED_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
 
-                cr.save().ok();
-                cr.translate(pos.x, pos.y);
-                cr.rotate(*angle);
-                cr.translate(-cx, -cy);
+        if cache.len() >= SHAPED_CACHE_CAPACITY {
+            cache.clear();
+        }
 
-                for g in &cluster.glyphs {
-                    let Some(font) = fs.get_font(g.font_id, g.font_weight) else {
-                        continue;
-                    };
-                    let Some(outline) = scale_outline(sc, font.as_swash(), g.font_size, g.glyph_id)
-                    else {
-                        continue;
-                    };
-                    stamp_outline(cr, &outline, g.dx as f64, g.dy as f64);
-                }
-
-                cr.restore().ok();
-            }
-        });
+        cache.insert(key, Rc::clone(&clusters));
     });
 
-    cr.set_source_color_a(opts.halo_color, opts.halo_opacity);
-    cr.set_dash(&[], 0.0);
-    cr.set_line_width(opts.halo_width * 2.0);
-    cr.set_line_join(cairo::LineJoin::Round);
-    cr.stroke_preserve()?;
+    clusters
+}
 
-    cr.set_source_color(opts.color);
-    cr.fill()?;
+fn draw_label(
+    cr: &cairo::Context,
+    laid_out: &LaidOut,
+    opts: &TextOnLineOptions,
+) -> cairo::Result<()> {
+    draw_with_halo(cr, &laid_out.bboxes, &HaloPaint::from(opts), || {
+        for (cluster, pos, angle) in &laid_out.glyphs {
+            // Rotate around the cluster's logical bbox center.
+            let (cx, cy) = cluster.logical_center();
 
-    cr.pop_group_to_source()?;
-    cr.paint_with_alpha(opts.alpha)?;
+            cr.save().ok();
+            cr.translate(pos.x, pos.y);
+            cr.rotate(*angle);
+            cr.translate(-cx, -cy);
 
-    Ok(())
+            for g in &cluster.glyphs {
+                if let Some(outline) = &g.outline {
+                    stamp_outline(cr, outline, g.dx as f64, g.dy as f64);
+                }
+            }
+
+            cr.restore().ok();
+        }
+    })
 }
 
 fn label_offsets(
@@ -639,11 +534,7 @@ fn label_offsets(
         1
     };
 
-    let total_span = if count > 0 {
-        step.mul_add((count.saturating_sub(1)) as f64, label_span)
-    } else {
-        0.0
-    };
+    let total_span = step.mul_add((count - 1) as f64, label_span);
 
     let start = match align {
         Align::Left => 0.0,
@@ -657,14 +548,14 @@ fn label_offsets(
 }
 
 fn justify_spacing(
-    min_spacing: Option<f64>,
+    min_spacing: f64,
     total_length: f64,
     ink_span: f64,
     clusters: &[ClusterInfo],
-) -> Option<(f64, f64)> {
+) -> Option<f64> {
     let gaps = clusters.len().saturating_sub(1) as f64;
     if gaps == 0.0 {
-        return Some((1.0, 0.0));
+        return Some(0.0);
     }
 
     let raw_extra = (total_length - ink_span) / gaps;
@@ -675,25 +566,59 @@ fn justify_spacing(
         .max(0.0);
 
     // Allow slight compression (down to -80% of the narrowest advance), but keep spacing even.
-    let min_gap = if min_adv.is_finite() {
-        -min_adv * 0.8
+    let spacing = raw_extra.max(-min_adv * 0.8);
+
+    if spacing < min_spacing {
+        None
     } else {
-        raw_extra
-    };
-
-    let spacing = raw_extra.max(min_gap);
-    if let Some(m) = min_spacing
-        && spacing < m
-    {
-        return None;
+        Some(spacing)
     }
-
-    Some((1.0, spacing))
 }
 
-struct RepeatParams {
-    span: f64,
-    defer_collision: bool,
+/// Leftmost ink position along pen-x, and the distance from leftmost to rightmost ink.
+fn ink_extents(clusters: &[ClusterInfo]) -> (f64, f64) {
+    let mut cum = 0.0_f64;
+    let mut min_l = f64::INFINITY;
+    let mut max_r = f64::NEG_INFINITY;
+
+    for c in clusters {
+        min_l = min_l.min(cum + c.ink_left);
+        max_r = max_r.max(cum + c.ink_right);
+        cum += c.advance;
+    }
+
+    (min_l, (max_r - min_l).max(0.0))
+}
+
+/// Axis-aligned bbox of the cluster's ink rectangle, inflated by `halo_width` on every side
+/// before rotation so the halo rotates with the glyph. `pos` is where the cluster's logical
+/// center lands on screen.
+fn rotated_ink_bbox(cluster: &ClusterInfo, pos: Coord, angle: f64, halo_width: f64) -> Rect<f64> {
+    let (cx, cy) = cluster.logical_center();
+    let hw = halo_width;
+    let corners = [
+        (cluster.ink_left - hw - cx, cluster.ink_top - hw - cy),
+        (cluster.ink_right + hw - cx, cluster.ink_top - hw - cy),
+        (cluster.ink_right + hw - cx, cluster.ink_bottom + hw - cy),
+        (cluster.ink_left - hw - cx, cluster.ink_bottom + hw - cy),
+    ];
+    let c = angle.cos();
+    let s = angle.sin();
+    let mut minx = f64::INFINITY;
+    let mut miny = f64::INFINITY;
+    let mut maxx = f64::NEG_INFINITY;
+    let mut maxy = f64::NEG_INFINITY;
+
+    for (dx, dy) in corners {
+        let rx = dy.mul_add(-s, dx * c);
+        let ry = dy.mul_add(c, dx * s);
+        minx = minx.min(rx);
+        miny = miny.min(ry);
+        maxx = maxx.max(rx);
+        maxy = maxy.max(ry);
+    }
+
+    Rect::new((pos.x + minx, pos.y + miny), (pos.x + maxx, pos.y + maxy))
 }
 
 struct PreparedLine {
@@ -705,22 +630,303 @@ struct PreparedLine {
     intersects_clip: bool,
 }
 
-const fn repeat_params(
-    spacing: Option<f64>,
-    total_advance: f64,
-    ink_span: f64,
-    halo_width: f64,
-) -> RepeatParams {
-    if spacing.is_some() {
-        RepeatParams {
-            span: total_advance.max(halo_width.mul_add(2.0, ink_span)),
-            defer_collision: true,
+/// The label's line, measured once per call.
+struct Line {
+    pts: Vec<Coord>,
+    cum: Vec<f64>,
+    total_length: f64,
+    /// Built on the first flip; many lines never flip.
+    reversed: OnceCell<(Vec<Coord>, Vec<f64>)>,
+}
+
+impl Line {
+    fn oriented(&self, reversed: bool) -> (&[Coord], &[f64]) {
+        if reversed {
+            let (pts, cum) = self.reversed.get_or_init(|| {
+                let pts: Vec<Coord> = self.pts.iter().rev().copied().collect();
+                let cum = cumulative_lengths(&pts);
+                (pts, cum)
+            });
+
+            (pts, cum)
+        } else {
+            (&self.pts, &self.cum)
         }
-    } else {
-        RepeatParams {
-            span: total_advance,
-            defer_collision: false,
+    }
+}
+
+/// Glyphs of one repeat laid along a prepared line.
+struct LaidOut<'a> {
+    bboxes: Vec<Rect<f64>>,
+    span_ends: Vec<f64>,
+    /// Empty when the repeat is outside the clip.
+    glyphs: Vec<(&'a ClusterInfo, Coord, f64)>,
+}
+
+enum Rejection {
+    Drop,
+    /// The glyph ending at `span_end` on the prepared line sits on too sharp a bend.
+    Bend { span_end: f64 },
+}
+
+const MAX_RETRIES: usize = 5;
+
+/// Places single repeats of a label, sliding them past sharp bends and collisions.
+struct RepeatPlacer<'a> {
+    line: &'a Line,
+    options: &'a TextOnLineOptions<'a>,
+    clusters: &'a [ClusterInfo],
+    ink_lead: f64,
+    extra_spacing_between_glyphs: f64,
+    concave_spacing_factor: f64,
+    allow_overflow: bool,
+    repeat_span: f64,
+    clip_extents: Option<(f64, f64, f64, f64)>,
+}
+
+impl<'a> RepeatPlacer<'a> {
+    /// Where the repeat finally starts and its glyphs, or `None` when it is dropped.
+    fn place(&self, first_start: f64, collision: &Collision) -> Option<(f64, LaidOut<'a>)> {
+        let mut label_start = first_start;
+        let mut retries = MAX_RETRIES;
+
+        loop {
+            let flip_needed = self.flip_needed(label_start);
+
+            let prepared = self.prepare(label_start, flip_needed)?;
+
+            let retry_from = match self.lay_out(&prepared) {
+                Err(Rejection::Drop) => return None,
+                Err(Rejection::Bend { span_end }) => span_end,
+                Ok(laid_out) => {
+                    if self
+                        .options
+                        .placement_filter
+                        .is_some_and(|allows| laid_out.bboxes.iter().any(|bb| !allows(bb)))
+                    {
+                        return None;
+                    }
+
+                    match laid_out
+                        .bboxes
+                        .iter()
+                        .position(|bb| collision.collides(bb, None))
+                    {
+                        None => return Some((label_start, laid_out)),
+                        Some(idx) => laid_out.span_ends[idx],
+                    }
+                }
+            };
+
+            if retries == 0 {
+                return None;
+            }
+
+            retries -= 1;
+            label_start = self.retry_start(&prepared, flip_needed, retry_from)?;
         }
+    }
+
+    /// Whether to lay the label along the reversed line so it reads upright.
+    fn flip_needed(&self, label_start: f64) -> bool {
+        match self.options.upright {
+            Upright::Left => true,
+            Upright::Right => false,
+            Upright::Auto => {
+                let tangent = weighted_tangent_for_span(
+                    &self.line.pts,
+                    &self.line.cum,
+                    label_start,
+                    label_start + self.repeat_span,
+                )
+                .unwrap_or(Coord { x: 1.0, y: 0.0 });
+
+                tangent.y.atan2(tangent.x).abs() > FRAC_PI_2
+            }
+        }
+    }
+
+    /// Trims (and offsets) the line around a repeat. `label_start` is along the forward line
+    /// even when `flip_needed`.
+    fn prepare(&self, label_start: f64, flip_needed: bool) -> Option<PreparedLine> {
+        let options = self.options;
+        let total_length = self.line.total_length;
+        let (oriented_pts, oriented_cum) = self.line.oriented(flip_needed);
+
+        let start_use = if flip_needed {
+            flip_start(total_length, self.repeat_span, label_start)
+        } else {
+            label_start
+        };
+        let span_end = start_use + self.repeat_span;
+
+        let trim_padding = options.flo.size.mul_add(5.0, options.halo_width) + options.offset.abs();
+        let trim_start = (start_use - trim_padding).max(0.0);
+        let trim_end = (span_end + trim_padding).min(total_length);
+
+        let mut pts_use = trim_line_to_span(oriented_pts, oriented_cum, trim_start, trim_end);
+        pts_use.dedup();
+        if pts_use.len() < 2 {
+            return None;
+        }
+
+        // Offset only the trimmed slice to keep work bounded.
+        let pts_use = if options.offset == 0.0 {
+            pts_use
+        } else {
+            let keep_offset_side =
+                options.keep_offset_side && matches!(options.upright, Upright::Auto);
+
+            let signed_offset = if flip_needed && keep_offset_side {
+                options.offset
+            } else {
+                -options.offset
+            };
+
+            let mut off_pts: Vec<Coord> =
+                offset_line_string(&LineString::from(pts_use), signed_offset)
+                    .into_iter()
+                    .collect();
+
+            off_pts.dedup();
+            if off_pts.len() < 2 {
+                return None;
+            }
+
+            off_pts
+        };
+
+        let clip_padding = options.halo_width + options.flo.size;
+        let intersects_clip = self
+            .clip_extents
+            .is_none_or(|clip| bbox_intersects_clip(&pts_use, clip, clip_padding));
+
+        let cum_use = cumulative_lengths(&pts_use);
+        let total_length_use = *cum_use.last().unwrap_or(&0.0);
+        if total_length_use == 0.0 {
+            return None;
+        }
+
+        let cursor_start = (start_use - trim_start).max(0.0);
+        if cursor_start > total_length_use {
+            return None;
+        }
+
+        Some(PreparedLine {
+            pts: pts_use,
+            cum: cum_use,
+            total_length: total_length_use,
+            cursor_start,
+            trim_start,
+            intersects_clip,
+        })
+    }
+
+    fn lay_out(&self, prepared: &PreparedLine) -> Result<LaidOut<'a>, Rejection> {
+        let clusters = self.clusters;
+
+        let mut laid_out = LaidOut {
+            bboxes: Vec::with_capacity(clusters.len()),
+            span_ends: Vec::with_capacity(clusters.len()),
+            glyphs: if prepared.intersects_clip {
+                Vec::with_capacity(clusters.len())
+            } else {
+                Vec::new()
+            },
+        };
+
+        // Shift the whole label so its leftmost ink lands at the span
+        // start. This keeps every inter-glyph gap uniform (just the
+        // natural side-bearings), instead of pulling the first/last
+        // glyphs inward to anchor their ink edges.
+        let mut cursor = prepared.cursor_start - self.ink_lead;
+
+        for (idx, cluster) in clusters.iter().enumerate() {
+            let span_start = cursor;
+            let span_end = cursor + cluster.advance;
+            if span_end > prepared.total_length && !self.allow_overflow {
+                return Err(Rejection::Drop);
+            }
+
+            let Some((pos, tangent)) = position_at(
+                &prepared.pts,
+                &prepared.cum,
+                span_start + cluster.advance / 2.0,
+            ) else {
+                return Err(Rejection::Drop);
+            };
+
+            let (weighted_tangent, turn) =
+                weighted_tangent_and_turn(&prepared.pts, &prepared.cum, span_start, span_end);
+
+            let weighted_tangent = weighted_tangent.unwrap_or(tangent);
+
+            let tangent_before = position_at(&prepared.pts, &prepared.cum, span_start.max(0.0))
+                .map_or(weighted_tangent, |(_, t)| t);
+
+            let tangent_after = position_at(
+                &prepared.pts,
+                &prepared.cum,
+                span_end.min(prepared.total_length),
+            )
+            .map_or(weighted_tangent, |(_, t)| t);
+
+            // Largest turn of the line under the glyph, in degrees.
+            let ends_turn = angle_between(tangent_before, tangent_after);
+            let bend = turn.map_or(ends_turn, |turn| ends_turn.max(turn));
+
+            if bend > self.options.max_curvature_degrees {
+                return Err(Rejection::Bend { span_end });
+            }
+
+            // Extra space proportional to curvature to avoid glyph tops touching on bends.
+            let ratio = (bend / 180.0).clamp(0.0, 1.0);
+            let concave_spacing = cluster.advance * self.concave_spacing_factor * ratio;
+
+            let angle = normalize_angle(weighted_tangent.y.atan2(weighted_tangent.x));
+
+            laid_out.bboxes.push(rotated_ink_bbox(
+                cluster,
+                pos,
+                angle,
+                self.options.halo_width,
+            ));
+
+            laid_out.span_ends.push(span_end);
+
+            if prepared.intersects_clip {
+                laid_out.glyphs.push((cluster, pos, angle));
+            }
+
+            cursor += cluster.advance;
+
+            if idx + 1 < clusters.len() {
+                cursor += concave_spacing + self.extra_spacing_between_glyphs;
+            }
+        }
+
+        Ok(laid_out)
+    }
+
+    /// Label start for a retry just past `oriented_end`, a glyph end on the prepared line.
+    fn retry_start(
+        &self,
+        prepared: &PreparedLine,
+        flip_needed: bool,
+        oriented_end: f64,
+    ) -> Option<f64> {
+        let total_length = self.line.total_length;
+        let retry_skip = (self.options.halo_width + self.options.flo.size).max(1.0);
+
+        let next = (prepared.trim_start + oriented_end + retry_skip).min(total_length);
+
+        let next = if flip_needed {
+            flip_start(total_length, self.repeat_span, next)
+        } else {
+            next
+        };
+
+        (next + self.repeat_span <= total_length).then_some(next)
     }
 }
 
@@ -729,14 +935,14 @@ pub fn draw_text_on_line(
     context: &Context,
     line_string: &LineString,
     text: &str,
-    mut collision: Option<&mut Collision>,
+    collision: Option<&mut Collision>,
     options: &TextOnLineOptions,
 ) -> cairo::Result<bool> {
     let _span = tracy_client::span!("text_on_line::draw_text_on_line");
 
     let mut pts: Vec<Coord> = line_string.into_iter().copied().collect();
 
-    pts.dedup_by(|a, b| a == b);
+    pts.dedup();
 
     if pts.len() < 2 {
         return Ok(true);
@@ -749,360 +955,126 @@ pub fn draw_text_on_line(
         return Ok(true);
     }
 
-    let clip_extents = context.clip_extents().ok();
-
-    let TextOnLineOptions {
-        distribution,
-        upright,
-        max_curvature_degrees,
-        concave_spacing_factor,
-        flo,
-        offset,
-        ..
-    } = options;
-
-    // Derive layout mode from distribution.
-    let (align_mode, spacing_use, min_spacing) = match distribution {
+    let (align, spacing, justify_min_spacing) = match options.distribution {
         Distribution::Align { align, repeat } => {
             let spacing = match repeat {
                 Repeat::None => None,
-                Repeat::Spaced(s) => Some(*s),
+                Repeat::Spaced(s) => Some(s),
             };
-            (*align, spacing, None)
+            (align, spacing, None)
         }
-        Distribution::Justify { min_spacing } => (Align::Left, None, *min_spacing),
-    };
-    let is_justify = min_spacing.is_some();
-    let concave_spacing_factor = if is_justify {
-        // Keep justification exact; extra curvature padding would shift glyphs off the span.
-        0.0
-    } else {
-        *concave_spacing_factor
+        Distribution::Justify { min_spacing } => (Align::Left, None, Some(min_spacing)),
     };
 
-    // For justify we ignore user letter spacing (scaling is applied instead).
-    let flo_use = if min_spacing.is_some() {
+    let is_justify = justify_min_spacing.is_some();
+
+    // Justify sets its own spacing between glyphs.
+    let flo = if is_justify {
         FontAndLayoutOptions {
             letter_spacing: 0.0,
-            ..*flo
+            ..options.flo
         }
     } else {
-        *flo
+        options.flo
     };
 
-    let clusters = collect_clusters(text, &flo_use);
+    let clusters = shaped_clusters(text, &flo);
     if clusters.is_empty() {
         return Ok(true);
     }
 
-    // Full-label ink extents along pen-x. `ink_lead` is the leftmost ink
-    // position (used to bias the cursor so the leftmost ink lands at the
-    // span start); `ink_span` is the distance from leftmost to rightmost ink.
-    let (ink_lead, ink_span) = {
-        let mut cum = 0.0_f64;
-        let mut min_l = f64::INFINITY;
-        let mut max_r = f64::NEG_INFINITY;
-        for c in &clusters {
-            min_l = min_l.min(cum + c.ink_left);
-            max_r = max_r.max(cum + c.ink_right);
-            cum += c.advance;
-        }
-        (min_l, (max_r - min_l).max(0.0))
-    };
+    let (ink_lead, ink_span) = ink_extents(&clusters);
 
     if ink_span == 0.0 {
         return Ok(true);
     }
 
     // If justify spacing falls below the configured minimum, abort drawing.
-    let (advance_scale, extra_spacing_between_glyphs) = match min_spacing {
-        Some(ms) => match justify_spacing(Some(ms), total_length, ink_span, &clusters) {
-            Some(v) => v,
-            None => return Ok(false),
-        },
-        None => (1.0, 0.0),
+    let extra_spacing_between_glyphs = match justify_min_spacing {
+        Some(ms) => {
+            let Some(spacing) = justify_spacing(ms, total_length, ink_span, &clusters) else {
+                return Ok(false);
+            };
+            spacing
+        }
+        None => 0.0,
     };
 
-    let label_visual_span = ink_span.mul_add(
-        advance_scale,
-        extra_spacing_between_glyphs * clusters.len().saturating_sub(1) as f64,
-    );
+    let extra_width = extra_spacing_between_glyphs * clusters.len().saturating_sub(1) as f64;
+    let label_visual_span = ink_span + extra_width;
 
-    let repeat = repeat_params(spacing_use, label_visual_span, ink_span, options.halo_width);
-    let offsets = if min_spacing.is_some() {
+    let repeat_span = if spacing.is_some() {
+        label_visual_span.max(options.halo_width.mul_add(2.0, ink_span))
+    } else {
+        label_visual_span
+    };
+
+    let offsets = if is_justify {
         vec![0.0]
     } else {
-        label_offsets(total_length, repeat.span, spacing_use, align_mode)
+        label_offsets(total_length, repeat_span, spacing, align)
     };
-    let mut new_collision_bboxes: Vec<Rect<f64>> = Vec::new();
 
     if offsets.is_empty() {
         return Ok(false);
     }
 
-    let mut placements: Vec<Vec<(ClusterInfo, Coord, f64)>> = Vec::new();
-    let mut rendered = false;
+    let line = Line {
+        pts,
+        cum,
+        total_length,
+        reversed: OnceCell::new(),
+    };
 
-    // For each label repeat, walk glyphs along the line while keeping edge-alignment and curvature limits.
-    'outer: for label_start in offsets {
-        let mut label_start_try = label_start;
-        let mut retries = 5usize;
-        'attempt: loop {
-            // Decide per-repeat if we need to flip to stay upright.
-            let repeat_span = repeat.span;
-            let overall_span_start = label_start_try;
-            let overall_span_end = label_start_try + repeat_span;
-            let overall_tangent =
-                weighted_tangent_for_span(&pts, &cum, overall_span_start, overall_span_end)
-                    .unwrap_or(Coord { x: 1.0, y: 0.0 });
+    let placer = RepeatPlacer {
+        line: &line,
+        options,
+        clusters: &clusters,
+        ink_lead,
+        extra_spacing_between_glyphs,
+        // Keep justification exact; extra curvature padding would shift glyphs off the span.
+        concave_spacing_factor: if is_justify {
+            0.0
+        } else {
+            options.concave_spacing_factor
+        },
+        allow_overflow: is_justify,
+        repeat_span,
+        clip_extents: context.clip_extents().ok(),
+    };
 
-            let base_angle = overall_tangent.y.atan2(overall_tangent.x);
-            let adjusted_angle = adjust_upright_angle(base_angle, *upright);
-            let flip_needed = (normalize_angle(adjusted_angle - base_angle)).abs() > PI / 2.0;
-            let flip_offset = if flip_needed {
-                0.0
-            } else {
-                normalize_angle(adjusted_angle - base_angle)
-            };
+    // Repeats must avoid each other even when the caller keeps no collision set.
+    let mut local_collision = Collision::new(None);
+    let collision = collision.unwrap_or(&mut local_collision);
 
-            let trim_padding = options.flo.size.mul_add(5.0, options.halo_width) + offset.abs();
-            let keep_offset_side = options.keep_offset_side && matches!(upright, Upright::Auto);
-            let clip_padding = options.halo_width + options.flo.size;
-            let Some(prepared) = prepare_label_span(
-                &pts,
-                total_length,
-                repeat_span,
-                label_start_try,
-                flip_needed,
-                LabelSpanOpts {
-                    trim_padding,
-                    offset: *offset,
-                    keep_offset_side,
-                    clip_padding,
-                    clip_extents,
-                },
-            ) else {
-                continue 'outer;
-            };
+    let mut placements = Vec::new();
 
-            let should_draw = prepared.intersects_clip;
+    // Retries shift a repeat along the line; start the next one a full spacing after it.
+    let mut min_label_start = 0.0;
 
-            // Shift the whole label so its leftmost ink lands at the span
-            // start. This keeps every inter-glyph gap uniform (just the
-            // natural side-bearings), instead of pulling the first/last
-            // glyphs inward to anchor their ink edges.
-            let mut cursor = prepared.cursor_start - ink_lead;
-            let mut label_placements = Vec::new();
-            let mut glyph_bboxes: Vec<Rect<f64>> = Vec::new();
-            let mut glyph_span_ends: Vec<f64> = Vec::new();
+    for label_start in offsets {
+        let Some((start, laid_out)) = placer.place(label_start.max(min_label_start), collision)
+        else {
+            continue;
+        };
 
-            let label_advance_scale = advance_scale;
-            let label_extra_spacing_between_glyphs = extra_spacing_between_glyphs;
+        min_label_start = start + repeat_span + spacing.unwrap_or(0.0);
 
-            for (idx, cluster) in clusters.iter().enumerate() {
-                // Effective advance for this glyph (spacing between glyphs handled separately).
-                let eff_advance = cluster.advance * label_advance_scale;
-                let span_start = cursor;
-                let span_end = cursor + eff_advance;
-                if span_end > prepared.total_length && !is_justify {
-                    continue 'outer;
-                }
+        // Added right away: a retry can slide a repeat onto the next one, and a line folding
+        // back (switchbacks) brings distant repeats close on the map.
+        for bb in &laid_out.bboxes {
+            let _ = collision.add(*bb);
+        }
 
-                let Some((_, tangent)) =
-                    position_at(&prepared.pts, &prepared.cum, span_start + eff_advance / 2.0)
-                else {
-                    continue 'outer;
-                };
-
-                let weighted_tangent =
-                    weighted_tangent_for_span(&prepared.pts, &prepared.cum, span_start, span_end)
-                        .unwrap_or(tangent);
-
-                let tangent_before = position_at(&prepared.pts, &prepared.cum, span_start.max(0.0))
-                    .map_or(weighted_tangent, |(_, t)| t);
-
-                let tangent_after = position_at(
-                    &prepared.pts,
-                    &prepared.cum,
-                    span_end.min(prepared.total_length),
-                )
-                .map_or(weighted_tangent, |(_, t)| t);
-
-                let mut max_bend = angle_between(tangent_before, tangent_after);
-
-                for pair in
-                    tangents_for_span(&prepared.pts, &prepared.cum, span_start, span_end).windows(2)
-                {
-                    max_bend = max_bend.max(angle_between(pair[0], pair[1]));
-                }
-
-                if max_bend > *max_curvature_degrees {
-                    if retries == 0 {
-                        continue 'outer;
-                    }
-
-                    retries -= 1;
-
-                    // Skip a small distance past the bend and try again.
-                    let bend_skip = (options.flo.size + options.halo_width).max(1.0);
-
-                    let next_start_oriented =
-                        (prepared.trim_start + span_end + bend_skip).min(total_length);
-
-                    let next_label_start = if flip_needed {
-                        (total_length - repeat_span - next_start_oriented).max(0.0)
-                    } else {
-                        next_start_oriented
-                    };
-
-                    if next_label_start + repeat_span <= total_length {
-                        label_start_try = next_label_start;
-                        continue 'attempt;
-                    }
-
-                    continue 'outer;
-                }
-
-                // Extra space proportional to curvature to avoid glyph tops touching on bends.
-                let ratio = (max_bend / 180.0).clamp(0.0, 1.0);
-                let concave_spacing = eff_advance * concave_spacing_factor * ratio;
-
-                let shifted_start = span_start;
-                let shifted_end = shifted_start + eff_advance;
-
-                let logical_cx = f64::midpoint(cluster.logical_left, cluster.logical_right);
-                let shifted_center = shifted_start + eff_advance / 2.0;
-
-                if shifted_end > prepared.total_length && !is_justify {
-                    continue 'outer;
-                }
-
-                let Some((pos, _)) = position_at(&prepared.pts, &prepared.cum, shifted_center)
-                else {
-                    continue 'outer;
-                };
-
-                let weighted_tangent = weighted_tangent_for_span(
-                    &prepared.pts,
-                    &prepared.cum,
-                    shifted_start,
-                    shifted_end,
-                )
-                .unwrap_or(weighted_tangent);
-
-                let angle =
-                    normalize_angle(weighted_tangent.y.atan2(weighted_tangent.x) + flip_offset);
-
-                // Axis-aligned bbox of the rotated ink rectangle, inflated
-                // by `halo_width` on every side before rotation so the halo
-                // rotates with the glyph. `pos` is where the cluster's
-                // logical center lands on screen; corners are in
-                // cluster-origin coords and shifted to be relative to that
-                // pivot.
-                let cx = logical_cx;
-                let cy = f64::midpoint(cluster.logical_top, cluster.logical_bottom);
-                let hw = options.halo_width;
-                let corners = [
-                    (cluster.ink_left - hw - cx, cluster.ink_top - hw - cy),
-                    (cluster.ink_right + hw - cx, cluster.ink_top - hw - cy),
-                    (cluster.ink_right + hw - cx, cluster.ink_bottom + hw - cy),
-                    (cluster.ink_left - hw - cx, cluster.ink_bottom + hw - cy),
-                ];
-                let c = angle.cos();
-                let s = angle.sin();
-                let mut minx = f64::INFINITY;
-                let mut miny = f64::INFINITY;
-                let mut maxx = f64::NEG_INFINITY;
-                let mut maxy = f64::NEG_INFINITY;
-                for (dx, dy) in corners {
-                    let rx = dy.mul_add(-s, dx * c);
-                    let ry = dy.mul_add(c, dx * s);
-                    minx = minx.min(rx);
-                    miny = miny.min(ry);
-                    maxx = maxx.max(rx);
-                    maxy = maxy.max(ry);
-                }
-                glyph_bboxes.push(Rect::new(
-                    (pos.x + minx, pos.y + miny),
-                    (pos.x + maxx, pos.y + maxy),
-                ));
-                glyph_span_ends.push(span_end);
-
-                if should_draw {
-                    label_placements.push((cluster.clone(), pos, angle));
-                }
-
-                cursor += eff_advance;
-
-                if idx + 1 < clusters.len() {
-                    cursor += concave_spacing + label_extra_spacing_between_glyphs;
-                }
-            }
-
-            if options
-                .placement_filter
-                .is_some_and(|allows| glyph_bboxes.iter().any(|bb| !allows(bb)))
-            {
-                continue 'outer;
-            }
-
-            if let Some(col) = collision.as_deref()
-                && let Some((idx, _)) = glyph_bboxes
-                    .iter()
-                    .enumerate()
-                    .find(|(_, bb)| col.collides(bb))
-            {
-                if retries > 0 {
-                    retries -= 1;
-                    let skip = (options.halo_width + options.flo.size).max(1.0);
-
-                    let collided_end_oriented =
-                        prepared.trim_start + glyph_span_ends.get(idx).copied().unwrap_or(0.0);
-
-                    let next_start_oriented = (collided_end_oriented + skip).min(total_length);
-
-                    let next_label_start = if flip_needed {
-                        (total_length - repeat_span - next_start_oriented).max(0.0)
-                    } else {
-                        next_start_oriented
-                    };
-
-                    if next_label_start + repeat_span <= total_length {
-                        label_start_try = next_label_start;
-                        continue 'attempt;
-                    }
-                }
-
-                continue 'outer;
-            }
-
-            if repeat.defer_collision {
-                new_collision_bboxes.extend(glyph_bboxes);
-            } else if let Some(col) = collision.as_deref_mut() {
-                for bb in glyph_bboxes {
-                    let _ = col.add(bb);
-                }
-            }
-
-            if should_draw {
-                placements.push(label_placements);
-                rendered = true;
-            }
-
-            break 'attempt;
+        if !laid_out.glyphs.is_empty() {
+            placements.push(laid_out);
         }
     }
 
-    if repeat.defer_collision
-        && let Some(col) = collision
-    {
-        for bb in new_collision_bboxes {
-            let _ = col.add(bb);
-        }
-    }
+    let rendered = !placements.is_empty();
 
-    for label in placements {
-        draw_label(context, &label, options)?;
+    for laid_out in &placements {
+        draw_label(context, laid_out, options)?;
     }
 
     Ok(rendered)

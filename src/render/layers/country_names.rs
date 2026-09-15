@@ -39,7 +39,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
         },
         halo_width: 2.0,
         distribution: Distribution::Justify {
-            min_spacing: Some(0.0),
+            min_spacing: 0.0,
         },
         concave_spacing_factor: 0.0,
         ..Default::default()
@@ -53,7 +53,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
         halo_width: 2.0,
         color: colors::AREA_LABEL,
         distribution: Distribution::Justify {
-            min_spacing: Some(0.0),
+            min_spacing: 0.0,
         },
         concave_spacing_factor: 0.0,
         ..Default::default()

@@ -1362,7 +1362,7 @@ pub fn render_icons(
 
             let bbox = Rect::new((corner_x, corner_y), (corner_x + w, corner_y + he));
 
-            if collision.collides(&bbox) {
+            if collision.collides(&bbox, None) {
                 continue;
             }
 

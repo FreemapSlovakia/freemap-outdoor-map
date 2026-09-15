@@ -970,6 +970,7 @@ dependencies = [
  "proj",
  "rand 0.10.2",
  "regex",
+ "rustc-hash",
  "serde",
  "serde-saphyr",
  "serde_json",

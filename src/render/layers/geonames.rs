@@ -38,7 +38,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
             ..Default::default()
         },
         distribution: Distribution::Justify {
-            min_spacing: Some(0.0),
+            min_spacing: 0.0,
         },
         halo_opacity: 1.0,
         color: colors::TRAM,

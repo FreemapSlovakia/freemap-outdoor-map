@@ -1,12 +1,13 @@
 use crate::render::{
     Feature,
     ctx::Ctx,
+    draw::path_geom::cumulative_lengths,
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
     svg_repo::{SvgRepo, SvgRepoError},
 };
 use cairo::{Context, RecordingSurface, Rectangle};
-use geo::{BoundingRect, Coord, LineString};
+use geo::{BoundingRect, LineString};
 use std::{collections::HashMap, f64::consts::PI};
 
 const NO_BICYCLE: u8 = 1;
@@ -104,7 +105,7 @@ impl Road {
         bits: u8,
         oneway: i16,
     ) -> Option<Self> {
-        let lengths = cumulative_lengths(&geom);
+        let lengths = cumulative_lengths(&geom.0);
 
         if *lengths.last()? <= 0.0 {
             return None;
@@ -348,24 +349,6 @@ fn reach(roads: &[Road], topos: &[Option<Topology>], mut end: End) -> f64 {
     }
 
     f64::INFINITY
-}
-
-/// Distance of every vertex from the start of the line.
-fn cumulative_lengths(line_string: &LineString) -> Vec<f64> {
-    let mut lengths = Vec::with_capacity(line_string.0.len());
-    let mut total = 0.0;
-    let mut prev: Option<Coord> = None;
-
-    for coord in &line_string.0 {
-        if let Some(prev) = prev {
-            total += (coord.x - prev.x).hypot(coord.y - prev.y);
-        }
-
-        lengths.push(total);
-        prev = Some(*coord);
-    }
-
-    lengths
 }
 
 /// Index of the segment containing `distance`, as an index into the coordinates.

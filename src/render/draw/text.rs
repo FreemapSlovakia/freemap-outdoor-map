@@ -1,17 +1,17 @@
 use crate::render::{
     collision::Collision,
-    colors::{self, Color, ContextExt},
+    colors::{self, Color},
     draw::{
-        font_options::{FontAndLayoutOptions, uppercase_label},
-        font_system::{scale_outline, stamp_outline, with_font_system, with_scale_context},
+        font_options::{FontAndLayoutOptions, label_attrs, label_text},
+        font_system::{
+            HaloPaint, draw_with_halo, glyph_outline, stamp_outline, with_font_system,
+            with_scale_context,
+        },
     },
 };
 use cairo::Context;
-use cosmic_text::{
-    Attrs, AttrsList, Buffer, BufferLine, Family, LineEnding, Metrics, Shaping, Wrap,
-};
+use cosmic_text::{AttrsList, Buffer, BufferLine, LineEnding, Metrics, Shaping, Wrap};
 use geo::{Point, Rect};
-use std::borrow::Cow;
 
 #[derive(Copy, Clone)]
 pub struct TextOptions<'a> {
@@ -55,6 +55,18 @@ impl Default for TextOptions<'_> {
     }
 }
 
+impl From<&TextOptions<'_>> for HaloPaint {
+    fn from(options: &TextOptions<'_>) -> Self {
+        Self {
+            color: options.color,
+            halo_color: options.halo_color,
+            halo_opacity: options.halo_opacity,
+            halo_width: options.halo_width,
+            alpha: options.alpha,
+        }
+    }
+}
+
 pub fn draw_text(
     context: &Context,
     collision: Option<&mut Collision>,
@@ -66,55 +78,26 @@ pub fn draw_text(
         return Ok(Some(0));
     }
 
-    let TextOptions {
-        alpha,
-        color,
-        halo_color,
-        halo_opacity,
-        halo_width,
-        placements,
-        flo,
-        valign_by_placement,
-        omit_bbox,
-        sub_size_scale,
-    } = options;
+    let flo = &options.flo;
 
-    let FontAndLayoutOptions {
-        letter_spacing,
-        max_width,
-        narrow,
-        size,
-        uppercase,
-        ..
-    } = *flo;
+    let text = label_text(text, flo);
 
-    let text: Cow<str> = if uppercase {
-        Cow::Owned(uppercase_label(text))
-    } else {
-        Cow::Borrowed(text)
-    };
+    let base_attrs = label_attrs(flo);
 
-    let family = Family::Name(if narrow { "PT Sans Narrow" } else { "PT Sans" });
+    let line_height = flo.size;
+    let metrics = Metrics::new(flo.size as f32, line_height as f32);
 
-    let base_attrs = Attrs::new()
-        .family(family)
-        .weight(flo.weight)
-        .style(flo.style)
-        .letter_spacing((letter_spacing / size.max(0.0001)) as f32);
-
-    let line_height = size;
-    let metrics = Metrics::new(size as f32, line_height as f32);
-
-    let m = with_font_system(|font_system| {
+    with_font_system(|font_system| {
         let mut buffer = Buffer::new(font_system, metrics);
         buffer.set_wrap(Wrap::Word);
 
         #[allow(clippy::float_cmp)] // exact identity check: skip when sub-size scale is 1.0
-        if let Some(scale) = sub_size_scale
-            && *scale > 0.0
-            && *scale != 1.0
+        if let Some(scale) = options.sub_size_scale
+            && scale > 0.0
+            && scale != 1.0
         {
-            let scaled_metrics = Metrics::new(size as f32 * scale, line_height as f32 * scale);
+            let scaled_metrics =
+                Metrics::new(flo.size as f32 * scale, line_height as f32 * scale);
             let sub_attrs = base_attrs.clone().metrics(scaled_metrics);
 
             let mut lines: Vec<BufferLine> = Vec::new();
@@ -129,50 +112,48 @@ pub fn draw_text(
                 ));
             }
             buffer.lines = lines;
-            buffer.set_size(Some(max_width as f32), None);
+            buffer.set_size(Some(flo.max_width as f32), None);
             buffer.shape_until_scroll(font_system, true);
         } else {
             let mut buf = buffer.borrow_with(font_system);
-            buf.set_size(Some(max_width as f32), None);
+            buf.set_size(Some(flo.max_width as f32), None);
             buf.set_text(&text, &base_attrs, Shaping::Advanced, None);
             buf.shape_until_scroll(true);
         }
 
-        place_and_draw(
-            context,
-            collision,
-            point,
-            &buffer,
-            font_system,
-            *halo_width,
-            placements,
-            *valign_by_placement,
-            *omit_bbox,
-        )
-    });
+        let lines = with_scale_context(|sc| compute_lines(&buffer, font_system, sc));
 
-    let Some(placement_idx) = m else {
-        return Ok(None);
-    };
+        if lines.is_empty() {
+            return Ok(Some(0));
+        }
 
-    context.status()?;
+        let Some(placed) = place(collision, point, &lines, options) else {
+            return Ok(None);
+        };
 
-    context.push_group();
+        context.status()?;
 
-    context.set_source_color_a(*halo_color, *halo_opacity);
-    context.set_dash(&[], 0.0);
-    context.set_line_join(cairo::LineJoin::Round);
-    context.set_line_width(halo_width * 2.0);
-    context.stroke_preserve()?;
-    context.set_source_color(*color);
+        draw_with_halo(context, &placed.boxes, &HaloPaint::from(options), || {
+            with_scale_context(|scale_ctx| {
+                for run in buffer.layout_runs() {
+                    let line_x = (placed.layout_width - run.line_w as f64) / 2.0;
 
-    context.fill()?;
+                    for glyph in run.glyphs {
+                        let Some(outline) = glyph_outline(font_system, scale_ctx, glyph) else {
+                            continue;
+                        };
 
-    context.pop_group_to_source()?;
+                        let gx = placed.x + line_x + glyph.x as f64;
+                        let gy = placed.y + (run.line_y + glyph.y) as f64;
 
-    context.paint_with_alpha(*alpha)?;
+                        stamp_outline(context, &outline, gx, gy);
+                    }
+                }
+            });
+        })?;
 
-    Ok(Some(placement_idx))
+        Ok(Some(placed.idx))
+    })
 }
 
 struct LineInfo {
@@ -189,8 +170,7 @@ struct LineInfo {
 /// Compute per-line ink bounds by scaling each glyph outline and taking the
 /// union of its bounding box. Outlines live in Y-up coords relative to the
 /// glyph's pen position; we map to layout Y-down by flipping Y around the
-/// baseline. Uses the thread-local `ScaleContext` so the scaled outlines
-/// stay cached for the subsequent render pass.
+/// baseline. Outlines come from the glyph cache, so drawing reuses them.
 fn compute_lines(
     buffer: &Buffer,
     font_system: &mut cosmic_text::FontSystem,
@@ -218,13 +198,7 @@ fn compute_lines(
             .unwrap_or((0.0, 0.0));
 
         for glyph in run.glyphs {
-            let Some(font) = font_system.get_font(glyph.font_id, glyph.font_weight) else {
-                continue;
-            };
-
-            let Some(outline) =
-                scale_outline(scale_ctx, font.as_swash(), glyph.font_size, glyph.glyph_id)
-            else {
+            let Some(outline) = glyph_outline(font_system, scale_ctx, glyph) else {
                 continue;
             };
 
@@ -274,23 +248,23 @@ fn compute_lines(
     lines
 }
 
-#[allow(clippy::too_many_arguments)]
-fn place_and_draw(
-    context: &Context,
+/// Where a label went, with the ink boxes (halo included) it added to the collision set.
+struct Placed {
+    x: f64,
+    y: f64,
+    idx: usize,
+    layout_width: f64,
+    boxes: Vec<Rect>,
+}
+
+/// Tries the placements in order and takes the first that doesn't collide.
+fn place(
     collision: Option<&mut Collision>,
     point: &Point,
-    buffer: &Buffer,
-    font_system: &mut cosmic_text::FontSystem,
-    halo_width: f64,
-    placements: &[(f64, f64)],
-    valign_by_placement: bool,
-    omit_bbox: Option<usize>,
-) -> Option<usize> {
-    let lines = with_scale_context(|sc| compute_lines(buffer, font_system, sc));
-
-    if lines.is_empty() {
-        return Some(0);
-    }
+    lines: &[LineInfo],
+    options: &TextOptions,
+) -> Option<Placed> {
+    let halo_width = options.halo_width;
 
     let layout_width = lines.iter().map(|l| l.line_w).fold(0.0f32, f32::max) as f64;
 
@@ -304,8 +278,7 @@ fn place_and_draw(
         .map(|l| l.ink_bottom)
         .fold(f32::NEG_INFINITY, f32::max) as f64;
 
-    let layout_y = layout_min_top;
-    let layout_height = layout_max_bottom - layout_min_top;
+    let center = layout_min_top + (layout_max_bottom - layout_min_top) / 2.0;
 
     let first = lines.first().expect("lines is non-empty");
     let last = lines.last().expect("lines is non-empty");
@@ -319,100 +292,59 @@ fn place_and_draw(
 
     let x_base = point.x() - layout_width / 2.0;
 
-    let mut m: Option<(f64, f64, usize)> = None;
-    let mut i: usize = 0;
+    let (idx, x, y, boxes) =
+        options
+            .placements
+            .iter()
+            .enumerate()
+            .find_map(|(i, &(dx, dy))| {
+                let y_anchor = match (options.valign_by_placement, dy) {
+                    (true, dy) if dy > 0.0 => first_baseline - cap_height,
+                    (true, dy) if dy < 0.0 => last_baseline,
+                    _ => center,
+                };
 
-    let mut collision = collision;
+                let y = dy + point.y() - y_anchor;
+                let x = dx + x_base;
 
-    'outer: for &(dx, dy) in placements {
-        i += 1;
+                let boxes = lines
+                    .iter()
+                    .map(|line| {
+                        let line_x = (layout_width - line.line_w as f64) / 2.0;
 
-        let y_anchor = if valign_by_placement {
-            if dy > 0.0 {
-                first_baseline - cap_height
-            } else if dy < 0.0 {
-                last_baseline
-            } else {
-                layout_y + layout_height / 2.0
-            }
-        } else {
-            layout_y + layout_height / 2.0
-        };
+                        let ci = Rect::new(
+                            (
+                                x + line_x + line.ink_left as f64 - halo_width,
+                                y + line.ink_top as f64 - halo_width,
+                            ),
+                            (
+                                x + line_x + line.ink_right as f64 + halo_width,
+                                y + line.ink_bottom as f64 + halo_width,
+                            ),
+                        );
 
-        let y = dy + point.y() - y_anchor;
-        let x = dx + x_base;
+                        let collides = collision
+                            .as_deref()
+                            .is_some_and(|collision| collision.collides(&ci, options.omit_bbox));
 
-        let mut items = Vec::new();
+                        (!collides).then_some(ci)
+                    })
+                    .collect::<Option<Vec<_>>>()?;
 
-        let mut collided = false;
-        for line in &lines {
-            let line_x = (layout_width - line.line_w as f64) / 2.0;
-            let ci = Rect::new(
-                (
-                    x + line_x + line.ink_left as f64 - halo_width,
-                    y + line.ink_top as f64 - halo_width,
-                ),
-                (
-                    x + line_x + line.ink_right as f64 + halo_width,
-                    y + line.ink_bottom as f64 + halo_width,
-                ),
-            );
+                Some((i + 1, x, y, boxes))
+            })?;
 
-            if let Some(ref collision) = collision {
-                if let Some(omit_idx) = omit_bbox {
-                    if collision.collides_with_exclusion(&ci, omit_idx) {
-                        collided = true;
-                        break;
-                    }
-                } else if collision.collides(&ci) {
-                    collided = true;
-                    break;
-                }
-            }
-
-            items.push(ci);
+    if let Some(collision) = collision {
+        for bb in &boxes {
+            let _ = collision.add(*bb);
         }
-
-        if collided {
-            continue 'outer;
-        }
-
-        if let Some(ref mut collision) = collision {
-            for item in items {
-                let _ = collision.add(item);
-            }
-        }
-
-        m = Some((x, y, i));
-        break;
     }
 
-    let (tx, ty, _) = m?;
-
-    context.new_path();
-
-    with_scale_context(|scale_ctx| {
-        for run in buffer.layout_runs() {
-            let line_x = (layout_width - run.line_w as f64) / 2.0;
-
-            for glyph in run.glyphs {
-                let Some(font) = font_system.get_font(glyph.font_id, glyph.font_weight) else {
-                    continue;
-                };
-
-                let Some(outline) =
-                    scale_outline(scale_ctx, font.as_swash(), glyph.font_size, glyph.glyph_id)
-                else {
-                    continue;
-                };
-
-                let gx = tx + line_x + glyph.x as f64;
-                let gy = ty + (run.line_y + glyph.y) as f64;
-
-                stamp_outline(context, &outline, gx, gy);
-            }
-        }
-    });
-
-    m.map(|(_, _, idx)| idx)
+    Some(Placed {
+        x,
+        y,
+        idx,
+        layout_width,
+        boxes,
+    })
 }

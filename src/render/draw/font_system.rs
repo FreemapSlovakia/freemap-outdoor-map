@@ -3,10 +3,84 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use cairo::Context;
-use cosmic_text::{FontSystem, fontdb};
+use std::rc::Rc;
+
+use cosmic_text::{FontSystem, LayoutGlyph, fontdb};
+use rustc_hash::FxHashMap;
 use swash::scale::ScaleContext;
 use swash::zeno::Verb;
 use swash::{FontRef, scale::outline::Outline};
+
+use crate::render::colors::{Color, ContextExt};
+use geo::Rect;
+
+/// Margin around a label's boxes for antialiasing at the halo's edge.
+const HALO_CLIP_MARGIN: f64 = 2.0;
+
+/// Fill and halo of a label.
+pub struct HaloPaint {
+    pub color: Color,
+    pub halo_color: Color,
+    pub halo_opacity: f64,
+    pub halo_width: f64,
+    pub alpha: f64,
+}
+
+/// Fills the path `build_path` makes over its halo, composited as one group at `alpha`.
+///
+/// `boxes` must cover the ink and halo: the group is clipped to them, as a group of the whole
+/// clip costs a tile-sized buffer per label.
+pub fn draw_with_halo(
+    context: &Context,
+    boxes: &[Rect<f64>],
+    paint: &HaloPaint,
+    build_path: impl FnOnce(),
+) -> cairo::Result<()> {
+    let Some(first) = boxes.first() else {
+        return Ok(());
+    };
+
+    let (mut min, mut max) = (first.min(), first.max());
+
+    for bb in &boxes[1..] {
+        min.x = min.x.min(bb.min().x);
+        min.y = min.y.min(bb.min().y);
+        max.x = max.x.max(bb.max().x);
+        max.y = max.y.max(bb.max().y);
+    }
+
+    context.save()?;
+
+    // A path left by the caller would otherwise join the clip.
+    context.new_path();
+
+    context.rectangle(
+        min.x - HALO_CLIP_MARGIN,
+        min.y - HALO_CLIP_MARGIN,
+        HALO_CLIP_MARGIN.mul_add(2.0, max.x - min.x),
+        HALO_CLIP_MARGIN.mul_add(2.0, max.y - min.y),
+    );
+
+    context.clip();
+
+    build_path();
+
+    context.push_group();
+
+    context.set_source_color_a(paint.halo_color, paint.halo_opacity);
+    context.set_dash(&[], 0.0);
+    context.set_line_join(cairo::LineJoin::Round);
+    context.set_line_width(paint.halo_width * 2.0);
+    context.stroke_preserve()?;
+
+    context.set_source_color(paint.color);
+    context.fill()?;
+
+    context.pop_group_to_source()?;
+    context.paint_with_alpha(paint.alpha)?;
+
+    context.restore()
+}
 
 static FONTS_PATH: OnceLock<PathBuf> = OnceLock::new();
 
@@ -33,7 +107,15 @@ thread_local! {
     static FONT_SYSTEM: RefCell<FontSystem> =
         RefCell::new(build_font_system(configured_fonts_path()));
     static SCALE_CONTEXT: RefCell<ScaleContext> = RefCell::new(ScaleContext::new());
+    static OUTLINE_CACHE: RefCell<FxHashMap<OutlineKey, Option<Rc<Outline>>>> =
+        RefCell::new(FxHashMap::default());
 }
+
+/// Glyph outlines kept per render thread; swash rebuilds an outline on every scale.
+const OUTLINE_CACHE_CAPACITY: usize = 8192;
+
+/// Font, weight, size bits and glyph id.
+type OutlineKey = (fontdb::ID, fontdb::Weight, u32, u16);
 
 pub fn with_font_system<R>(f: impl FnOnce(&mut FontSystem) -> R) -> R {
     FONT_SYSTEM.with(|fs| f(&mut fs.borrow_mut()))
@@ -56,6 +138,44 @@ pub fn scale_outline(
         .size(font_size)
         .build()
         .scale_outline(glyph_id)
+}
+
+/// Scaled outline of a shaped glyph, cached; `None` when its font is missing or it has no
+/// outline.
+pub fn glyph_outline(
+    font_system: &mut FontSystem,
+    scale_ctx: &mut ScaleContext,
+    glyph: &LayoutGlyph,
+) -> Option<Rc<Outline>> {
+    let key = (
+        glyph.font_id,
+        glyph.font_weight,
+        glyph.font_size.to_bits(),
+        glyph.glyph_id,
+    );
+
+    OUTLINE_CACHE.with(|cache| {
+        if let Some(outline) = cache.borrow().get(&key) {
+            return outline.clone();
+        }
+
+        let outline = font_system
+            .get_font(glyph.font_id, glyph.font_weight)
+            .and_then(|font| {
+                scale_outline(scale_ctx, font.as_swash(), glyph.font_size, glyph.glyph_id)
+            })
+            .map(Rc::new);
+
+        let mut cache = cache.borrow_mut();
+
+        if cache.len() >= OUTLINE_CACHE_CAPACITY {
+            cache.clear();
+        }
+
+        cache.insert(key, outline.clone());
+
+        outline
+    })
 }
 
 /// Emit an already-scaled `outline`'s path to `context` translated to

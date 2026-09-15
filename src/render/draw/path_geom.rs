@@ -1,6 +1,24 @@
 use cairo::Context;
 use cavalier_contours::polyline::{PlineSource, PlineSourceMut, PlineVertex, Polyline};
-use geo::{Geometry, LineString, Point, Polygon};
+use geo::{Coord, Geometry, LineString, Point, Polygon};
+
+/// Distance of every vertex from the start of the line.
+pub fn cumulative_lengths(pts: &[Coord]) -> Vec<f64> {
+    let mut lengths = Vec::with_capacity(pts.len());
+    let mut total = 0.0;
+    let mut prev: Option<Coord> = None;
+
+    for coord in pts {
+        if let Some(prev) = prev {
+            total += (coord.x - prev.x).hypot(coord.y - prev.y);
+        }
+
+        lengths.push(total);
+        prev = Some(*coord);
+    }
+
+    lengths
+}
 
 pub fn path_geometry(context: &Context, geom: &Geometry) {
     walk_geometry_line_strings::<_, Result<(), ()>>(geom, &mut |line_string| {
