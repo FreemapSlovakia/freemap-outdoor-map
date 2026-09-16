@@ -18,10 +18,11 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
         12.. => "osm_roads",
     };
 
-    // TODO for zoom < 12 we select too much
+    // Only strokes bleed in from outside the tile, and none here is wider than ~7 px.
+    // Labels, oneway arrows and access marks are separate layers, each with its own buffer.
+    const BUFFER_PX: f64 = 16.0;
 
-    // Only zoom 12 reads it: every arm using it is `zoom > 12 || is_in_route`, and
-    // below 12 the join against osm_route_members costs far more than the scan itself.
+    // Only zoom 12 reads it: every arm using it is `zoom > 12 || is_in_route`.
     let select_member = if zoom == 12 {
         ",osm_route_members.member IS NOT NULL AS is_in_route"
     } else {
@@ -66,7 +67,7 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
             {table}.osm_id
     ");
 
-    client.query(&query, &ctx.bbox_query_params(Some(128.0)).as_params()).await
+    client.query(&query, &ctx.bbox_query_params(Some(BUFFER_PX)).as_params()).await
 }
 
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
