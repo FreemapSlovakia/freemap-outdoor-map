@@ -20,14 +20,16 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
 
     // TODO for zoom < 12 we select too much
 
-    let select_member = if zoom <= 12 {
+    // Only zoom 12 reads it: every arm using it is `zoom > 12 || is_in_route`, and
+    // below 12 the join against osm_route_members costs far more than the scan itself.
+    let select_member = if zoom == 12 {
         ",osm_route_members.member IS NOT NULL AS is_in_route"
     } else {
         ""
     };
 
     #[cfg_attr(any(), rustfmt::skip)]
-    let join_members: Cow<_> = if zoom <= 12 {
+    let join_members: Cow<_> = if zoom == 12 {
         format!("
             LEFT JOIN
                 osm_route_members
@@ -126,7 +128,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
             Ok(())
         };
 
-        let is_in_route = if zoom <= 12 {
+        let is_in_route = if zoom == 12 {
             row.get_bool("is_in_route")?
         } else {
             false
@@ -326,7 +328,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
             Ok(())
         };
 
-        let is_in_route = if zoom <= 12 {
+        let is_in_route = if zoom == 12 {
             row.get_bool("is_in_route")?
         } else {
             false
