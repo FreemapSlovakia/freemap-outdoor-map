@@ -26,6 +26,7 @@ mod geonames;
 mod highway_names;
 mod hillshading;
 mod hillshading_datasets;
+mod hillshading_footprint;
 mod housenumbers;
 mod landcover;
 mod landcover_names;

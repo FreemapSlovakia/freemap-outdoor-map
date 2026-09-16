@@ -1,7 +1,7 @@
 use crate::render::{
     ctx::Ctx,
     layer_render_error::{LayerRenderError, LayerRenderResult},
-    layers::hillshading_datasets::HillshadingDatasets,
+    layers::{hillshading_datasets::HillshadingDatasets, hillshading_footprint::PixelWindow},
 };
 use cairo::{Context, Format, ImageSurface};
 use gdal::Dataset;
@@ -55,30 +55,17 @@ fn read_rgba_from_gdal(
     ctx: &Ctx,
     mode: Mode,
 ) -> Result<Option<ImageSurface>, LayerRenderError> {
-    let bbox = ctx.bbox;
     let size = ctx.size;
 
-    let min = bbox.min();
-    let max = bbox.max();
+    // The same mapping the footprint test uses, so a tile can never be accepted by one
+    // and read at a different window by the other.
+    let window = PixelWindow::new(&dataset.geo_transform()?, &ctx.bbox);
 
-    let [gt_x_off, gt_x_width, _, gt_y_off, _, gt_y_width] = dataset.geo_transform()?;
+    let (pixel_min_x_f, pixel_max_x_f) = (window.min.x, window.max.x);
+    let (pixel_min_y_f, pixel_max_y_f) = (window.min.y, window.max.y);
 
-    // Convert geographic coordinates (min_x, min_y, max_x, max_y) to pixel coordinates
-    let pixel_min_x_f = (min.x - gt_x_off) / gt_x_width;
-    let pixel_max_x_f = (max.x - gt_x_off) / gt_x_width;
-
-    let pixel_min_x = pixel_min_x_f.floor() as isize;
-    let pixel_max_x = pixel_max_x_f.ceil() as isize;
-
-    let (pixel_min_y_f, pixel_max_y_f) = {
-        let pixel_y0 = (min.y - gt_y_off) / gt_y_width;
-        let pixel_y1 = (max.y - gt_y_off) / gt_y_width;
-
-        (pixel_y0.min(pixel_y1), pixel_y0.max(pixel_y1))
-    };
-
-    let pixel_min_y = pixel_min_y_f.floor() as isize;
-    let pixel_max_y = pixel_max_y_f.ceil() as isize;
+    let (pixel_min_x, pixel_max_x) = (window.min_x(), window.max_x());
+    let (pixel_min_y, pixel_max_y) = (window.min_y(), window.max_y());
 
     let window_width_px = (pixel_max_x - pixel_min_x) as usize;
     let window_height_px = (pixel_max_y - pixel_min_y) as usize;
@@ -377,7 +364,7 @@ pub fn load_surface(
     shading_data: &HillshadingDatasets,
     mode: Mode,
 ) -> Result<Option<ImageSurface>, LayerRenderError> {
-    let Some(dataset) = shading_data.get(country) else {
+    let Some(dataset) = shading_data.get(country, &ctx.bbox) else {
         return Ok(None);
     };
 

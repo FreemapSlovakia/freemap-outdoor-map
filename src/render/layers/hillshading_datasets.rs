@@ -1,11 +1,17 @@
-use crate::render::{FeatureLineMaskCountries, HillshadingHierarchy};
+use crate::render::{
+    FeatureLineMaskCountries, HillshadingHierarchy, layers::hillshading_footprint::Footprint,
+};
 use gdal::Dataset;
+use geo::Rect;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Write as _,
     ops::Deref,
     path::{Path, PathBuf},
-    sync::{Condvar, Mutex},
+    sync::{
+        Condvar, Mutex, OnceLock,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -14,7 +20,9 @@ const EVICT_AFTER: Duration = Duration::from_secs(10);
 /// A wait this long is logged as it happens: every handle of the dataset stayed busy for it.
 const SLOW_WAIT: Duration = Duration::from_secs(1);
 
-/// Shorter holds are masks of datasets outside the tile, handed back without reading.
+/// Shorter holds read nothing worth timing. A dataset with a footprint stops missing
+/// the tile this expensively — it is rejected before the checkout — but the first call
+/// per dataset, and every dataset without a footprint, still lands here.
 const MEANINGFUL_HOLD: Duration = Duration::from_millis(10);
 
 const POISONED: &str = "hillshading slot mutex not poisoned";
@@ -23,6 +31,15 @@ struct Slot {
     path: PathBuf,
     state: Mutex<SlotState>,
     returned: Condvar,
+    /// Built on the first checkout of the dataset and kept for the process' life —
+    /// ~8 KB, unlike the tile index the handles carry, so it outlives eviction.
+    /// `None` inside means the dataset has no footprint and is never skipped.
+    footprint: OnceLock<Option<Footprint>>,
+    /// Held only while the footprint is being built, so the workers that arrive during
+    /// it wait rather than each building their own.
+    building: Mutex<()>,
+    /// Counted outside `state`: a skipped dataset must not touch the slot mutex.
+    skipped: AtomicU64,
 }
 
 struct SlotState {
@@ -70,6 +87,9 @@ impl HillshadingDatasets {
                         stats: SlotStats::default(),
                     }),
                     returned: Condvar::new(),
+                    footprint: OnceLock::new(),
+                    building: Mutex::new(()),
+                    skipped: AtomicU64::new(0),
                 };
 
                 (name, slot)
@@ -107,10 +127,46 @@ impl HillshadingDatasets {
         }
     }
 
-    /// Borrows an open handle, waiting while `max_open` handles are already in use.
-    pub fn get(&self, name: &str) -> Option<DatasetGuard<'_>> {
+    /// Borrows an open handle for a tile, waiting while `max_open` handles are already
+    /// in use. Returns `None` when the dataset has no data under `bbox`, before any
+    /// waiting or opening happens — over the Netherlands that is about half the calls.
+    pub fn get(&self, name: &str, bbox: &Rect<f64>) -> Option<DatasetGuard<'_>> {
         let slot = self.slots.get(name)?;
 
+        // The footprint is read from the dataset, so the first call for one has to check
+        // a handle out; it then hands that same handle on to the read.
+        let guard = if slot.footprint.get().is_some() {
+            None
+        } else {
+            let guard = self.checkout(slot, name)?;
+
+            // Serialised, and re-checked inside: every worker reaching a cold dataset
+            // together would otherwise read and fold the same overview, once each.
+            // Held over the read, not stored in it, so a failed open is retried rather
+            // than remembered as "no footprint".
+            let building = slot.building.lock().expect(POISONED);
+
+            if slot.footprint.get().is_none() {
+                let _ = slot.footprint.set(Footprint::build(&guard, name));
+            }
+
+            drop(building);
+
+            Some(guard)
+        };
+
+        if let Some(Some(footprint)) = slot.footprint.get()
+            && !footprint.covers(bbox)
+        {
+            slot.skipped.fetch_add(1, Ordering::Relaxed);
+
+            return None;
+        }
+
+        guard.or_else(|| self.checkout(slot, name))
+    }
+
+    fn checkout<'a>(&'a self, slot: &'a Slot, name: &str) -> Option<DatasetGuard<'a>> {
         let mut waiting_since = None;
 
         {
@@ -171,10 +227,14 @@ impl HillshadingDatasets {
         names.sort();
 
         let mut line = String::new();
+        let mut total_checkouts = 0;
+        let mut total_skipped = 0;
 
         for name in names {
+            let slot = &self.slots[name];
+
             let (stats, open, idle) = {
-                let mut state = self.slots[name].state.lock().expect(POISONED);
+                let mut state = slot.state.lock().expect(POISONED);
 
                 let in_use = state.open - state.idle.len();
                 let stats = std::mem::take(&mut state.stats);
@@ -183,13 +243,18 @@ impl HillshadingDatasets {
                 (stats, state.open, state.idle.len())
             };
 
-            if stats.waits == 0 && stats.hold_max < MEANINGFUL_HOLD {
+            let skipped = slot.skipped.swap(0, Ordering::Relaxed);
+
+            total_checkouts += stats.checkouts;
+            total_skipped += skipped;
+
+            if stats.waits == 0 && stats.hold_max < MEANINGFUL_HOLD && skipped == 0 {
                 continue;
             }
 
             write!(
                 line,
-                " {name}[checkouts={} waits={} wait_total={:.1}s wait_max={:.2}s hold_max={:.2}s peak={}/{} open={open} idle={idle} opened={} evicted={}]",
+                " {name}[checkouts={} skipped={skipped} waits={} wait_total={:.1}s wait_max={:.2}s hold_max={:.2}s peak={}/{} open={open} idle={idle} opened={} evicted={}]",
                 stats.checkouts,
                 stats.waits,
                 stats.wait_total.as_secs_f64(),
@@ -203,8 +268,11 @@ impl HillshadingDatasets {
             .expect("writing to a String");
         }
 
-        if !line.is_empty() {
-            println!("hillshading pool, last {}s:{line}", interval.as_secs());
+        if !line.is_empty() || total_skipped > 0 {
+            println!(
+                "hillshading pool, last {}s: checkouts={total_checkouts} skipped={total_skipped}{line}",
+                interval.as_secs()
+            );
         }
     }
 }
