@@ -43,9 +43,11 @@ pub async fn query(
             "height_m % 20 = 0",
             "CASE WHEN height_m % 100 = 0 THEN 0.4 WHEN height_m % 20 = 0 THEN 0.2 ELSE 0.0 END",
         ),
+        // 5 m lines exist only in tables built at that interval (nl); elsewhere this matches
+        // the same 10 m set as before.
         _ => (
-            "height_m % 10 = 0",
-            "CASE WHEN height_m % 100 = 0 THEN 0.6 WHEN height_m % 10 = 0 THEN 0.3 ELSE 0.0 END",
+            "height_m % 5 = 0",
+            "CASE WHEN height_m % 100 = 0 THEN 0.6 WHEN height_m % 10 = 0 THEN 0.3 ELSE 0.2 END",
         ),
     };
 
