@@ -33,12 +33,25 @@
 #   voids mask cleanly. NOTE for downstream users (e.g. elevation sampling on fm6): a
 #   raw gdalbuildvrt would return 0 m over those three voids — apply the same fix.
 #
+# CONVERTED FROM gdal_retile TO THE SHARED WINDOW GRID (scripts/lib/shading.nu).
+#   The old pipeline retiled the national VRT to disk (retiled/), smoothed every
+#   tile to disk (smooth/), then hillshaded. That is ~2x the country written
+#   twice; the window grid cuts each window from the VRT on demand, keeps its
+#   intermediates in /dev/shm and deletes them on the way out. It also gets the
+#   resumability, the .empty markers, the failed/ retry path and the band-count
+#   guard that the retile scripts never had.
+#
+#   TILE IDS AND smooth2m/ ARE NEW. retiled/ and smooth/ are no longer produced,
+#   and contours-hr.nu now reads smooth2m/. This needs a FULL RE-RENDER; the old
+#   tiles/ names do not correspond to anything in the new grid. Delete tiles/,
+#   retiled/ and smooth/ before the first run.
+#
 # Differences from the Poland script, and why:
 #
 #  * Source is a tile tree, so stage 0 normalises it into ONE national VRT (hr.vrt)
-#    before retiling — assign CRS + unify nodata, both via gdalbuildvrt flags in a
-#    single command. Non-destructive: the provider tiles on the external HDD are never
-#    modified and nothing is written per tile; all state lives on NVMe.
+#    — assign CRS + unify nodata, both via gdalbuildvrt flags in a single command.
+#    Non-destructive: the provider tiles on the external HDD are never modified and
+#    nothing is written per tile; all state lives on NVMe.
 #
 #  * nodata is clean (each tile declares a real out-of-coverage sentinel), so NONE of
 #    Poland's zero-speck / heal machinery applies — that existed only because GUGiK's
@@ -49,11 +62,11 @@
 #  * NO de-doubling. That was Italy-specific (its HRDTM mosaics 10 m data pixel-doubled
 #    into the 5 m grid). Croatia is uniform 1 m LiDAR, so dedouble_dem.py is not used.
 #
-#  * PREDICTOR=1 on the retile is LOAD-BEARING, not a style choice. feature-preserving-
+#  * PREDICTOR=1 on the window DEM is LOAD-BEARING, not a style choice. feature-preserving-
 #    smoothing does I/O via the `wbgeotiff` crate, which does not parse the TIFF Predictor
 #    tag (317) — fed PREDICTOR=2/3 float data it decodes byte-shuffled deltas as garbage
-#    and emits ±Inf / f32::MAX rasters that render as static, WITHOUT erroring. Keep
-#    PREDICTOR=1 on retiled/. (Documented in shading-it.nu, verified 2026-07-17.)
+#    and emits ±Inf / f32::MAX rasters that render as static, WITHOUT erroring. The
+#    shared library owns this now (CO_DEM in lib/gdal.nu).
 #
 #  * ZOOM=16, like Poland (1 m source). Croatia spans ~42.4-46.5 degN; z16 = 2.39
 #    3857-m/px lands at ~1.6-1.8 ground m/px against a 1 m source (safely oversampled).
@@ -63,232 +76,95 @@
 #    data — matched to the source resolution, NOT Italy's softer 9/15/5/5 which was
 #    scaled for 5 m pixels).
 #
-# Resumable at every stage: src_vrt/, retiled/, smooth/ and tiles/ all skip existing
-# outputs. Delete a stage's directory (or hr.vrt) to force a rebuild. Run via:
+# THE GRID ORIGIN IS PINNED at (260000, 4690000), below the delivery extent
+#   (263600, 4692400). Deriving it from the extent was the Belgium trap: adding a
+#   region moves every window id and a resumable run treats finished tiles as
+#   pending. Changing these renames every tile.
+#
+# Resumable at window granularity: hr.vrt and every tiles/<id>.tif are skipped if
+# present, all-nodata windows leave a .empty marker, failures land in failed/ and
+# are retried next run. Run via:
 #   nice ~/miniforge3/bin/conda run --no-capture-output -n geo nu ~/fm/freemap-outdoor-map/shading-hr.nu
+
+use lib/gdal.nu
+use lib/shading.nu
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 const SRC_DIR  = "/run/media/martin/2190983A5767510F/croatia-dtm/DGU_HR_LIDAR_G1_G2_DMR"
-const DATA_DIR = "/mnt/osm/hr"           # all working state on NVMe
-const EPSG     = "EPSG:3765"             # HTRS96 / Croatia TM (all tiles, incl. the CRS-less ones)
-const NODATA   = "-9999"                 # unified nodata presented by hr.vrt
-const VRT      = "hr.vrt"                # national mosaic VRT (built in stage 0)
-const ZOOM     = 16                      # z16 ~ 1.6-1.8 ground m/px over Croatia vs 1 m source
-const PARALLEL = 24                      # tiles processed in parallel
-const PS       = 2000                    # retile tile size, px
-const OVERLAP  = 6                       # half of retile overlap; hillshading context
-const CROP     = 3                       # px cropped per edge after hillshading; OVERLAP - CROP leaves warp margin
-const TMPDIR   = "/dev/shm"              # ramdisk for intermediates
+const DATA_DIR = "/mnt/osm/hr"                   # VRT, smooth2m/, tiles/ on NVMe
+const EPSG     = "EPSG:3765"                     # HTRS96 / Croatia TM
+const NODATA   = "-9999"                         # unified sentinel; sources carry four
 
-# Smoothing (Poland's 1 m settings — filter is a pixel count = metres on 1 m data)
-const SM_FILTER    = 11
-const SM_NORM_DIFF = 16
-const SM_NUM_ITER  = 6
-const SM_MAX_DIFF  = 6
+let VRT = $"($DATA_DIR)/hr.vrt"
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+gdal require-proj $EPSG "shading-hr.nu"
 
-def has-data [file: string]: nothing -> bool {
-    let band = gdalinfo -json -mm $file err> /dev/null | from json | get bands | first
-    ($band | get -o computedMin | is-not-empty)
+if (not ($SRC_DIR | path exists)) or ((glob $"($SRC_DIR)/*.tif" | length) == 0) {
+    error make {msg: $"($SRC_DIR) is empty — is the source drive mounted?"}
 }
 
-# Weighted multi-directional hillshade blend formula for one RGB band.
-# wa/wb/wc are hex weights for azimuth directions a/b/c.
-def band-calc [wa: string, wb: string, wc: string]: nothing -> string {
-    let ea  = "0.8 * (255 - A)"
-    let eb  = "0.7 * (255 - B)"
-    let ec  = "1.0 * (255 - C)"
-    let num = $"($ea) * ($wa) + ($eb) * ($wb) + ($ec) * ($wc)"
-    let den = $"0.01 + ($ea) + ($eb) + ($ec)"
-    "((" + $num + ") / (" + $den + ") - 128.0) + 128.0"
-}
+mkdir $DATA_DIR
 
-# Alpha channel: inverse of "all directions dark simultaneously".
-def alpha-calc []: nothing -> string {
-    let ea = "0.8 * (255 - A)"
-    let eb = "0.7 * (255 - B)"
-    let ec = "1.0 * (255 - C)"
-    "255.0 - 255.0 * ((1.0 - " + $ea + " / 255.0) * (1.0 - " + $eb + " / 255.0) * (1.0 - " + $ec + " / 255.0))"
-}
+# ── 0. National VRT: stamp the CRS, unify four nodata sentinels ───────────────
+# Both provider quirks are fixed by flags, non-destructively — nothing is written
+# per tile and the delivery on the external HDD is never modified:
+#
+#   * -a_srs EPSG:3765 + -allow_projection_difference: stamps the CRS onto the
+#     output AND stops gdalbuildvrt skipping the ~45% of tiles that ship no CRS
+#     (see header QUIRK 2 — -a_srs alone would still skip them, because it only
+#     labels the output while the null tiles still mismatch the reference CRS).
+#
+#   * -vrtnodata -9999: presents one clean nodata downstream; each source keeps
+#     its own real sentinel (-3.4e38 / -99 / -32767 / 0) as a per-source
+#     <NODATA>, correctly masked.
 
-# Process one smooth tile into a warped RGBA shaded-relief GeoTIFF.
-# Output goes to tiles/<stem>.tif ; uses a tmp dir for crash-safe resumability.
-def process-tile [src: string, tr: string]: nothing -> nothing {
-    let stem = $src | path basename | path parse | get stem
-    let d    = $"($TMPDIR)/shading_($stem)"
-    let out  = $"tiles/($stem).tif"
-    print $"  tile ($stem): hillshade"
-
-    rm -rf $d
-    mkdir $d
-
-    let co      = [-co COMPRESS=ZSTD -co PREDICTOR=2 -co TILED=YES -co NUM_THREADS=ALL_CPUS]
-    let co_big  = [...$co -co BIGTIFF=YES]
-    let co_calc = [--co=COMPRESS=ZSTD --co=PREDICTOR=2 --co=TILED=YES --co=NUM_THREADS=ALL_CPUS --co=BIGTIFF=YES]
-
-    # Close small interior voids so they don't become transparent specks in the
-    # relief. Large out-of-coverage regions exceed -md 5 and stay nodata, hence
-    # transparent via the mask band — flat water has ~0 alpha anyway.
-    let dem = $"($d)/dem.tif"
-    gdal_fillnodata.py -md 5 $src $dem o> /dev/null err> /dev/null
-
-    # Three hillshades at different azimuths (run on the overlapped smooth tile so
-    # edges have real neighbours)
-    gdaldem hillshade $dem $"($d)/_a.tif" -az -120 -igor -compute_edges ...$co o> /dev/null
-    gdaldem hillshade $dem $"($d)/_b.tif" -az  60  -igor -compute_edges ...$co o> /dev/null
-    gdaldem hillshade $dem $"($d)/_c.tif" -az -45  -igor -compute_edges ...$co o> /dev/null
-
-    # Crop overlap from hillshades — discards edge pixels degraded by smoothing
-    let info = gdalinfo -json $src | from json
-    let w = $info.size.0
-    let h = $info.size.1
-    for name in [a b c] {
-        let raw = $"($d)/_($name)_raw.tif"
-        mv $"($d)/_($name).tif" $raw
-        gdal_translate -srcwin $CROP $CROP ($w - 2 * $CROP) ($h - 2 * $CROP) ...$co $raw $"($d)/_($name).tif" o> /dev/null
-        rm $raw
-    }
-
-    # Warp each to EPSG:3857 at zoom-level pixel size
-    print $"  tile ($stem): warp"
-    for name in [a b c] {
-        gdalwarp -t_srs EPSG:3857 -tr $tr $tr -tap -r cubic -dstnodata none -of GTiff ...$co_big -multi -wo NUM_THREADS=ALL_CPUS -wo INIT_DEST=0 $"($d)/_($name).tif" $"($d)/($name)-warped.tif" o> /dev/null
-    }
-
-    # Compute RGBA bands from the three warped hillshades
-    print $"  tile ($stem): bands"
-    let inputs = [-A $"($d)/a-warped.tif" -B $"($d)/b-warped.tif" -C $"($d)/c-warped.tif"]
-
-    #                       [a]    [b]    [c]
-    let r_calc = band-calc "0x20" "0xFF" "0x00"
-    let g_calc = band-calc "0x30" "0xEE" "0x00"
-    let b_calc = band-calc "0x60" "0x00" "0x00"
-    let a_calc = alpha-calc
-
-    gdal_calc.py ...$inputs ...$co_calc $"--outfile=($d)/R.tif" $"--calc=($r_calc)" o> /dev/null
-    gdal_calc.py ...$inputs ...$co_calc $"--outfile=($d)/G.tif" $"--calc=($g_calc)" o> /dev/null
-    gdal_calc.py ...$inputs ...$co_calc $"--outfile=($d)/B.tif" $"--calc=($b_calc)" o> /dev/null
-    gdal_calc.py ...$inputs ...$co_calc $"--outfile=($d)/A.tif" $"--calc=($a_calc)" o> /dev/null
-
-    # Stack RGBA into a VRT with the alpha as internal mask
-    print $"  tile ($stem): stack + translate"
-    let vrt = $"($d)/stack.vrt"
-    gdalbuildvrt -separate $vrt $"($d)/R.tif" $"($d)/G.tif" $"($d)/B.tif" $"($d)/A.tif" o> /dev/null
-    gdal_edit.py -colorinterp_1 red -colorinterp_2 green -colorinterp_3 blue $vrt o> /dev/null
-    sed -i '/<NoDataValue>/d; /<NODATA>/d; /<SrcRect/d; /<DstRect/d; s/ComplexSource/SimpleSource/g' $vrt
-    sed -i 's|</VRTDataset>|<MaskBand><VRTRasterBand dataType="Byte"><SimpleSource><SourceFilename relativeToVRT="1">a-warped.tif</SourceFilename><SourceBand>1</SourceBand></SimpleSource></VRTRasterBand></MaskBand></VRTDataset>|' $vrt
-
-    # Translate to final GeoTIFF
-    gdal_translate --config GDAL_TIFF_INTERNAL_MASK YES -of GTiff ...$co_big $vrt $"($d)/final.tif" o> /dev/null
-
-    mv $"($d)/final.tif" $out
-    rm -rf $d
-    print $"  tile ($stem): done"
-}
-
-# ── Pipeline ──────────────────────────────────────────────────────────────────
-
-cd $DATA_DIR
-
-let pi = (1 | math arctan) * 4
-let tr = ($pi * 2 * 6378137 / 256 / (2 ** $ZOOM) | into string)
-print $"ZOOM=($ZOOM) TR=($tr)"
-
-# 0. Normalise the provider tile tree into ONE national VRT (hr.vrt) in a single
-#    gdalbuildvrt — both provider quirks are fixed by flags, non-destructively:
-#      * -a_srs EPSG:3765 + -allow_projection_difference: stamps the CRS onto the
-#        output AND stops gdalbuildvrt skipping the ~45% of tiles that ship no CRS
-#        (see header QUIRK 2 — -a_srs alone would still skip them).
-#      * -vrtnodata -9999: presents one clean nodata; each source keeps its own real
-#        sentinel (-3.4e38 / -99 / -32767 / 0) as a per-source <NODATA>, correctly
-#        masked. An input_file_list avoids argv overflow on 62k tiles.
 if ($VRT | path exists) {
     print $"==> ($VRT) exists — reusing \(delete to force a rebuild\)"
 } else {
     print $"==> Building national VRT ($VRT) — assign ($EPSG), unified nodata ($NODATA)"
-    let idx = "_idx_hr"
-    glob $"($SRC_DIR)/*.tif" | save -f $idx
-    print $"  (open $idx | lines | length) tiles"
+    let tiles = (glob $"($SRC_DIR)/*.tif")
+    print $"  ($tiles | length) tiles"
+    let tmp = $"($VRT).tmp"
+    let idx = $"($DATA_DIR)/_idx_hr"
+    rm -f $tmp
+    $tiles | str join "\n" | save -f $idx
     (gdalbuildvrt -a_srs $EPSG -allow_projection_difference -vrtnodata $NODATA
-      -input_file_list $idx $"($VRT).tmp" o> /dev/null)
+      -input_file_list $idx $tmp o> /dev/null)
     rm $idx
-    # A handful of provider tiles (9 in this delivery) declare NO nodata at all, so
-    # gdalbuildvrt emits them as <SimpleSource> (no per-source mask). Three carry
-    # UNMARKED 0-value LiDAR voids — 10-35% exact-0 blobs amid 800-1000 m relief — which
-    # would otherwise render as false flat patches in the hillshade and spurious 0 m
-    # contour rings. Rewrite every SimpleSource -> ComplexSource with <NODATA>0> so those
-    # 0-voids mask like any other sentinel. Harmless for the full-coverage no-nodata
-    # tiles (they contain no 0 px). gdalbuildvrt only emits SimpleSource for no-nodata
-    # sources here (no tile's nodata equals the -9999 vrtnodata), so this hits exactly
-    # those 9 and nothing else.
-    sed -i 's|<SimpleSource>|<ComplexSource>|; s|</SimpleSource>|      <NODATA>0</NODATA>\n    </ComplexSource>|' $"($VRT).tmp"
-    mv $"($VRT).tmp" $VRT
+    gdal verify-vrt $tmp $tiles
+    # QUIRK 3: the 9 tiles that declare no nodata at all come out as SimpleSource
+    # (no per-source mask). Three carry UNMARKED 0-value LiDAR voids — 10-35%
+    # exact-0 blobs amid 800-1000 m relief — which would otherwise render as
+    # false flat patches in the hillshade and spurious 0 m contour rings.
+    # Rewrite every SimpleSource -> ComplexSource with <NODATA>0 so those voids
+    # mask like any other sentinel. gdalbuildvrt emits SimpleSource ONLY for
+    # no-nodata sources (no tile's nodata equals the -9999 vrtnodata), so this
+    # hits exactly those 9 and nothing else; it is harmless for the six that are
+    # full-coverage mountain tiles, which contain no 0 px.
+    sed -i 's|<SimpleSource>|<ComplexSource>|; s|</SimpleSource>|      <NODATA>0</NODATA>\n    </ComplexSource>|' $tmp
+    mv $tmp $VRT
+    print $"  verified: all ($tiles | length) tiles present in ($VRT)"
 }
 
-# 1. Retile the national VRT with overlap (overlap is kept through processing to
-#    avoid hillshade edge artifacts). PREDICTOR=1 is required — see header.
-print "==> Retiling"
-mkdir retiled
-if ((glob retiled/*.tif | length) > 0) {
-    print "  retiled/ is non-empty — reusing (delete the dir to force a re-tile)"
-} else {
-    (gdal_retile.py $VRT -ps $PS $PS -overlap 12 -targetDir retiled
-      -co COMPRESS=DEFLATE -co PREDICTOR=1)
+shading run {
+    code:      "hr"
+    src:       $VRT
+    data_root: $DATA_DIR
+    tiles_dir: $"($DATA_DIR)/tiles"
+    out_tif:   $"($DATA_DIR)/shading.tif"
+    nodata:    $NODATA
+    zoom:      16                                # 1 m source — see header
+    parallel:  24
+    tmpdir:    "/dev/shm"
+    step:      2500                              # m; = px at 1 m
+    collar:    6
+    crop:      3
+    clamp:     false
+    fill_md:   5                                 # px; closes small interior voids
+    dem_tr:    2                                 # m; what contours-hr.nu reads
+    smooth:    {filter: 11, norm_diff: 16, num_iter: 6, max_diff: 6}
+    prefilter: null
+
+    grid:      {kind: "pinned", x0: 260000, y0: 4690000, id_width: 3}
 }
-
-# 2. Smooth tiles — resumable, skips existing and all-nodata (sea) tiles
-print "==> Smoothing"
-mkdir smooth
-mkdir smooth/_tmp
-(
-  glob retiled/*.tif
-    | where {|f| not ($"smooth/($f | path basename)" | path exists)}
-    | where {|f| has-data $f}
-    | par-each -t $PARALLEL {|f|
-        let a    = $f | path basename
-        let dst  = $"smooth/($a)"
-        let band = gdalinfo -json -mm $f err> /dev/null | from json | get bands | first
-        let cmin = $band | get -o computedMin
-        let cmax = $band | get -o computedMax
-        if ($cmin == $cmax) {
-            # Flat tile (constant elevation, e.g. sea-level coast sliver) — the smoother
-            # panics on zero-variance input. A flat tile has no relief to smooth anyway.
-            print $"  copy ($a)"
-            cp $f $dst
-        } else {
-            let tmp = $"smooth/_tmp/($a)"
-            print $"  smooth ($a)"
-            (feature-preserving-smoothing --dem $f -o $tmp
-              --filter $SM_FILTER --norm_diff $SM_NORM_DIFF
-              --num_iter $SM_NUM_ITER --max_diff $SM_MAX_DIFF)
-            mv $tmp $dst
-        }
-      }
-)
-
-# 3. Process each smooth tile into shaded relief — resumable
-print "==> Processing tiles"
-mkdir tiles
-(
-  glob smooth/*.tif
-    | sort
-    | where {|f| not ($"tiles/($f | path basename | path parse | get stem).tif" | path exists)}
-    | par-each -t $PARALLEL {|src| process-tile $src $tr}
-)
-
-# 4. Merge all tiles and build overviews
-# Final shading.tif uses JXL (lossy, distance=3.0); requires GDAL linked against a
-# libtiff with libjxl support (conda geo env). PREDICTOR is intentionally omitted
-# (JXL doesn't use it).
-print "==> Merging tiles"
-glob tiles/*.tif | save -f shading_index
-gdalbuildvrt -input_file_list shading_index shading.vrt
-sed -i 's|<ColorInterp>Alpha</ColorInterp>|<ColorInterp>Undefined</ColorInterp>|g' shading.vrt
-gdal_translate --config GDAL_TIFF_INTERNAL_MASK YES --config GDAL_TIFF_INTERNAL_MASK_TO_8BIT YES -of GTiff -co COMPRESS=JXL -co JXL_LOSSLESS=NO -co JXL_DISTANCE=3.0 -co TILED=YES -co BLOCKXSIZE=256 -co BLOCKYSIZE=256 -co BIGTIFF=YES -co NUM_THREADS=ALL_CPUS shading.vrt shading.tif
-rm shading.vrt shading_index
-gdal_edit.py -colorinterp_4 alpha shading.tif
-print "==> Building overviews"
-gdaladdo --config GDAL_TIFF_INTERNAL_MASK YES --config GDAL_CACHEMAX 4096 --config GDAL_NUM_THREADS ALL_CPUS --config COMPRESS_OVERVIEW JXL --config JXL_LOSSLESS_OVERVIEW NO --config JXL_DISTANCE_OVERVIEW 3.0 -r average shading.tif
-print "==> Done"

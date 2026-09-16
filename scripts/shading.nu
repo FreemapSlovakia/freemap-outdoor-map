@@ -1,183 +1,88 @@
 #!/usr/bin/env nu
 
+# Generate shaded relief for POLAND from the GUGiK 1 m DTM.
+# (The file is named shading.nu for historical reasons — it was the first of
+# these scripts. Every other country is shading-<cc>.nu.)
+#
+# Source: /run/media/martin/4TB/PL/poland_dtm.vrt — the national 1 m mosaic
+#   assembled by fetch_dtm.sh from GUGiK's WCS, EPSG:2180 (ETRF2000-PL / CS92).
+#
+# NODATA IS 0, AND THAT IS THE ONE THING TO REMEMBER HERE. GUGiK's WCS returns 0
+#   both for out-of-coverage AND for genuine 0.00 m coastal terrain (Zulawy, the
+#   Vistula delta, the whole Baltic shore). Everything downstream inherits the
+#   ambiguity:
+#     - gdaldem treats those real 0 m pixels as nodata and emits 0, which shows
+#       as opaque specks (A=255, mask=0) scattered over flat land. gdal_fillnodata
+#       with a small -md interpolates the specks away while leaving large
+#       out-of-coverage regions as nodata, so they stay transparent via the mask.
+#     - gdal_contour honours nodata, so the same specks notch the low contours.
+#       contours-pl.nu deals with that end.
+#   Do NOT "fix" this by restamping the VRT to -9999: 0 IS a legitimate elevation
+#   here, and there is no sentinel in the delivery that distinguishes the two.
+#
+# ZOOM=16, the 1 m-source setting (same as Croatia and Norway). Poland spans
+#   49-55 degN, so z16 = 2.39 3857-m/px lands at ~1.4-1.6 ground m/px against a
+#   1 m source: safely oversampled. z15 would be ~2.8-3.2 ground m/px, which
+#   discards real detail.
+#
+# Smoothing is 11/16/6/6. The filter is a PIXEL count, so 11 px = 11 m on 1 m
+#   data. Italy's softer 9/15/5/5 was scaled for its 5 m pixels; do not copy it.
+#
+# CONVERTED FROM gdal_retile TO THE SHARED WINDOW GRID (scripts/lib/shading.nu).
+#   The old pipeline wrote retiled/ and then smooth/ — two full copies of Poland
+#   on disk — before hillshading. Windows are now cut from the VRT on demand,
+#   smoothed in /dev/shm and deleted on the way out. It also gains resumability
+#   at window granularity, .empty markers, the failed/ retry path, the
+#   band-count guard and the gdalbuildvrt-drop check, none of which the retile
+#   version had.
+#
+#   TILE IDS ARE NEW and smooth2m/ did not exist before, so this needs a FULL
+#   RE-RENDER. contours-pl.nu now reads smooth2m/ and its speck-heal and
+#   per-tile-crop stages are gone with the overlap they existed to undo.
+#   Delete tiles/, retiled/ and smooth/ before the first run.
+#
+# THE GRID ORIGIN IS PINNED at (165000, 130000), below the VRT extent
+#   (168000, 132000). Deriving it from the extent was the Belgium trap: adding
+#   coverage moves every window id and a resumable run treats finished tiles as
+#   pending. Changing these renames every tile.
+#
+# PREDICTOR=1 on the window DEM is LOAD-BEARING: feature-preserving-smoothing
+#   reads via wbgeotiff, which ignores the TIFF Predictor tag (317) and decodes
+#   PREDICTOR=2/3 float data as garbage WITHOUT erroring. The shared library
+#   owns this — CO_DEM in lib/gdal.nu.
+#
+# Run via:
+#   nice ~/miniforge3/bin/conda run --no-capture-output -n geo nu ~/fm/freemap-outdoor-map/scripts/shading.nu
+
+use lib/gdal.nu
+use lib/shading.nu
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-const ZOOM     = 16   # target zoom level; determines output pixel size
-const PARALLEL = 24   # number of tiles processed in parallel
-const OVERLAP  = 6    # half of retile overlap; used for hillshading context
-const CROP     = 3    # pixels cropped from each edge after hillshading; OVERLAP - CROP leaves margin for warp alignment
-const TMPDIR   = "/dev/shm"  # ramdisk for intermediate files; change to "." to use local disk
+const DATA_DIR = "/run/media/martin/4TB/PL"
+const SRC      = "/run/media/martin/4TB/PL/poland_dtm.vrt"
+const EPSG     = "EPSG:2180"                     # ETRF2000-PL / CS92
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+gdal require-proj $EPSG "shading.nu"
 
-def has-data [file: string]: nothing -> bool {
-    let band = gdalinfo -json -mm $file err> /dev/null | from json | get bands | first
-    ($band | get -o computedMin | is-not-empty)
+shading run {
+    code:      "pl"
+    src:       $SRC
+    data_root: $DATA_DIR
+    tiles_dir: $"($DATA_DIR)/tiles"
+    out_tif:   $"($DATA_DIR)/shading.tif"
+    nodata:    "0"                               # AMBIGUOUS BY DELIVERY — see header
+    zoom:      16                                # 1 m source — see header
+    parallel:  24
+    tmpdir:    "/dev/shm"
+    step:      2500                              # m; = px at 1 m
+    collar:    6
+    crop:      3
+    clamp:     false
+    fill_md:   5                                 # px; heals the 0-specks — see header
+    dem_tr:    2                                 # m; what contours-pl.nu reads
+    smooth:    {filter: 11, norm_diff: 16, num_iter: 6, max_diff: 6}
+    prefilter: null
+
+    grid:      {kind: "pinned", x0: 165000, y0: 130000, id_width: 3}
 }
-
-# Weighted multi-directional hillshade blend formula for one RGB band.
-# wa/wb/wc are hex weights for azimuth directions a/b/c.
-def band-calc [wa: string, wb: string, wc: string]: nothing -> string {
-    let ea  = "0.8 * (255 - A)"
-    let eb  = "0.7 * (255 - B)"
-    let ec  = "1.0 * (255 - C)"
-    let num = $"($ea) * ($wa) + ($eb) * ($wb) + ($ec) * ($wc)"
-    let den = $"0.01 + ($ea) + ($eb) + ($ec)"
-    "((" + $num + ") / (" + $den + ") - 128.0) + 128.0"
-}
-
-# Alpha channel: inverse of "all directions dark simultaneously".
-def alpha-calc []: nothing -> string {
-    let ea = "0.8 * (255 - A)"
-    let eb = "0.7 * (255 - B)"
-    let ec = "1.0 * (255 - C)"
-    "255.0 - 255.0 * ((1.0 - " + $ea + " / 255.0) * (1.0 - " + $eb + " / 255.0) * (1.0 - " + $ec + " / 255.0))"
-}
-
-# Process one smooth tile into a warped RGBA shaded-relief GeoTIFF.
-# Output goes to tiles/<stem>/ ; uses a .tmp dir for crash-safe resumability.
-def process-tile [src: string, tr: string]: nothing -> nothing {
-    let stem = $src | path basename | path parse | get stem
-    let d    = $"($TMPDIR)/shading_($stem)"
-    let out  = $"tiles/($stem).tif"
-    print $"  tile ($stem): hillshade"
-
-    rm -rf $d
-    mkdir $d
-
-    let co      = [-co COMPRESS=ZSTD -co PREDICTOR=2 -co TILED=YES -co NUM_THREADS=ALL_CPUS]
-    let co_big  = [...$co -co BIGTIFF=YES]
-    let co_calc = [--co=COMPRESS=ZSTD --co=PREDICTOR=2 --co=TILED=YES --co=NUM_THREADS=ALL_CPUS --co=BIGTIFF=YES]
-
-    # Heal spurious nodata holes before hillshading. GUGiK's WCS uses 0 for
-    # out-of-coverage, which collides with genuine 0.00 m coastal terrain
-    # (Żuławy etc.). gdaldem then treats those real 0 m pixels as nodata and
-    # emits 0, producing opaque specks (A=255, mask=0) scattered over flat land.
-    # gdal_fillnodata interpolates these small holes from their neighbours while
-    # leaving large out-of-coverage regions as nodata (kept transparent via the
-    # mask band) — flat water/sea has ~0 alpha anyway, so nothing visible is lost.
-    let dem = $"($d)/dem.tif"
-    gdal_fillnodata.py -md 5 $src $dem o> /dev/null err> /dev/null
-
-    # Three hillshades at different azimuths (run on smooth tile with overlap so edges have real neighbours)
-    gdaldem hillshade $dem $"($d)/_a.tif" -az -120 -igor -compute_edges ...$co o> /dev/null
-    gdaldem hillshade $dem $"($d)/_b.tif" -az  60  -igor -compute_edges ...$co o> /dev/null
-    gdaldem hillshade $dem $"($d)/_c.tif" -az -45  -igor -compute_edges ...$co o> /dev/null
-
-    # Crop overlap from hillshades — discards edge pixels degraded by smoothing
-    let info = gdalinfo -json $src | from json
-    let w = $info.size.0
-    let h = $info.size.1
-    for name in [a b c] {
-        let raw = $"($d)/_($name)_raw.tif"
-        mv $"($d)/_($name).tif" $raw
-        gdal_translate -srcwin $CROP $CROP ($w - 2 * $CROP) ($h - 2 * $CROP) ...$co $raw $"($d)/_($name).tif" o> /dev/null
-        rm $raw
-    }
-
-    # Warp each to EPSG:3857 at zoom-level pixel size
-    print $"  tile ($stem): warp"
-    for name in [a b c] {
-        gdalwarp -t_srs EPSG:3857 -tr $tr $tr -tap -r cubic -dstnodata none -of GTiff ...$co_big -multi -wo NUM_THREADS=ALL_CPUS -wo INIT_DEST=0 $"($d)/_($name).tif" $"($d)/($name)-warped.tif" o> /dev/null
-    }
-
-    # Compute RGBA bands from the three warped hillshades
-    print $"  tile ($stem): bands"
-    let inputs = [-A $"($d)/a-warped.tif" -B $"($d)/b-warped.tif" -C $"($d)/c-warped.tif"]
-
-    #                       [a]    [b]    [c]
-    let r_calc = band-calc "0x20" "0xFF" "0x00"
-    let g_calc = band-calc "0x30" "0xEE" "0x00"
-    let b_calc = band-calc "0x60" "0x00" "0x00"
-    let a_calc = alpha-calc
-
-    gdal_calc.py ...$inputs ...$co_calc $"--outfile=($d)/R.tif" $"--calc=($r_calc)" o> /dev/null
-    gdal_calc.py ...$inputs ...$co_calc $"--outfile=($d)/G.tif" $"--calc=($g_calc)" o> /dev/null
-    gdal_calc.py ...$inputs ...$co_calc $"--outfile=($d)/B.tif" $"--calc=($b_calc)" o> /dev/null
-    gdal_calc.py ...$inputs ...$co_calc $"--outfile=($d)/A.tif" $"--calc=($a_calc)" o> /dev/null
-
-    # Stack RGBA into a VRT with the alpha as internal mask
-    print $"  tile ($stem): stack + translate"
-    let vrt = $"($d)/stack.vrt"
-    gdalbuildvrt -separate $vrt $"($d)/R.tif" $"($d)/G.tif" $"($d)/B.tif" $"($d)/A.tif" o> /dev/null
-    gdal_edit.py -colorinterp_1 red -colorinterp_2 green -colorinterp_3 blue $vrt o> /dev/null
-    sed -i '/<NoDataValue>/d; /<NODATA>/d; /<SrcRect/d; /<DstRect/d; s/ComplexSource/SimpleSource/g' $vrt
-    sed -i 's|</VRTDataset>|<MaskBand><VRTRasterBand dataType="Byte"><SimpleSource><SourceFilename relativeToVRT="1">a-warped.tif</SourceFilename><SourceBand>1</SourceBand></SimpleSource></VRTRasterBand></MaskBand></VRTDataset>|' $vrt
-
-    # Translate to final GeoTIFF
-    gdal_translate --config GDAL_TIFF_INTERNAL_MASK YES -of GTiff ...$co_big $vrt $"($d)/final.tif" o> /dev/null
-
-    mv $"($d)/final.tif" $out
-    rm -rf $d
-    print $"  tile ($stem): done"
-}
-
-# ── Pipeline ──────────────────────────────────────────────────────────────────
-
-let pi = (1 | math arctan) * 4
-let tr = ($pi * 2 * 6378137 / 256 / (2 ** $ZOOM) | into string)
-print $"ZOOM=($ZOOM) TR=($tr)"
-
-# # 1. Build VRT from source DTM files
-# print "==> Building source VRT"
-# glob $"/home/martin/18TB/es/input/*-{H,HU}($ZONE)-*.{tif,TIF}" | save -f dtm_index
-# gdalbuildvrt -allow_projection_difference -input_file_list dtm_index $"zone($ZONE).vrt"
-
-# 2. Retile with overlap (overlap is kept through processing to avoid hillshade edge artifacts)
-print "==> Retiling"
-mkdir retiled
-gdal_retile.py poland_dtm.vrt -ps 1500 1500 -overlap 12 -targetDir retiled -co COMPRESS=DEFLATE -co PREDICTOR=1
-
-# 3. Smooth tiles — resumable, skips existing and all-nodata tiles
-print "==> Smoothing"
-mkdir smooth
-mkdir smooth/_tmp
-(
-  glob retiled/*.tif
-    | where {|f| not ($"smooth/($f | path basename)" | path exists)}
-    | where {|f| has-data $f}
-    | par-each -t $PARALLEL {|f|
-        print $f
-        let a    = $f | path basename
-        let dst  = $"smooth/($a)"
-        let band = gdalinfo -json -mm $f err> /dev/null | from json | get bands | first
-        let cmin = $band | get -o computedMin
-        let cmax = $band | get -o computedMax
-        if ($cmin == $cmax) {
-            # Flat tile (constant elevation, e.g. sea-level coast sliver) — WBT panics on zero-variance input.
-            print $"  copy ($a)"
-            cp $f $dst
-        } else {
-            let tmp = $"smooth/_tmp/($a)"
-            print $"  smooth ($a)"
-            feature-preserving-smoothing --dem retiled/($a) -o $tmp --filter 11 --norm_diff 16 --num_iter 6 --max_diff 6
-            mv $tmp $dst
-        }
-      }
-)
-
-# 4. Process each smooth tile into shaded relief — resumable
-print "==> Processing tiles"
-mkdir tiles
-(
-  glob smooth/*.tif
-    | sort
-    | where {|f| not ($"tiles/($f | path basename | path parse | get stem).tif" | path exists)}
-    # | first 20
-    | par-each -t $PARALLEL {|src| process-tile $src $tr}
-)
-
-# 5. Merge all tiles and build overviews
-# Final shading.tif uses JXL (lossy, distance=3.0); requires GDAL linked against
-# a libtiff with libjxl support — see README. PREDICTOR is intentionally omitted
-# (JXL doesn't use it).
-print "==> Merging tiles"
-glob tiles/*.tif | save -f shading_index
-gdalbuildvrt -input_file_list shading_index shading.vrt
-sed -i 's|<ColorInterp>Alpha</ColorInterp>|<ColorInterp>Undefined</ColorInterp>|g' shading.vrt
-gdal_translate --config GDAL_TIFF_INTERNAL_MASK YES --config GDAL_TIFF_INTERNAL_MASK_TO_8BIT YES -of GTiff -co COMPRESS=JXL -co JXL_LOSSLESS=NO -co JXL_DISTANCE=3.0 -co TILED=YES -co BLOCKXSIZE=256 -co BLOCKYSIZE=256 -co BIGTIFF=YES -co NUM_THREADS=ALL_CPUS shading.vrt shading.tif
-rm shading.vrt shading_index
-gdal_edit.py -colorinterp_4 alpha shading.tif
-print "==> Building overviews"
-gdaladdo --config GDAL_TIFF_INTERNAL_MASK YES --config GDAL_CACHEMAX 4096 --config GDAL_NUM_THREADS ALL_CPUS --config COMPRESS_OVERVIEW JXL --config JXL_LOSSLESS_OVERVIEW NO --config JXL_DISTANCE_OVERVIEW 3.0 -r average shading.tif
-print "==> Done"

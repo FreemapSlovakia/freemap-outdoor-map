@@ -3,24 +3,26 @@
 # Generate contour lines for all of Italy from the national 5 m HRDTM.
 # Italy port of contours-pl.nu (which targets Poland's 1 m GUGiK DTM).
 #
-# Two sources are possible, selected by USE_SMOOTH:
+# Pipeline: smooth2m/*.tif (from shading-it.nu, 5 m — see below)
+#             -> one national VRT (EPSG:6875)
+#             -> consolidate to ONE raster on NVMe
+#             -> gdal_contour on that raster -> GPKG (EPSG:6875)
 #
-#   USE_SMOOTH = false → contour /mnt/osm/it/it.tif directly. One command, no
-#     staging, no extra disk. it.tif is already a single contiguous file on NVMe,
-#     so the reason Poland needed the VRT → consolidate dance (143k tiles scattered
-#     on an HDD, gdal_contour reopening tiles per scanline) simply does not exist
-#     here. Lines are wigglier — the source carries LiDAR speckle plus, in places,
-#     corduroy striping and TIN facets from contour interpolation.
+# IT CONTOURS THE SMOOTHED DEM, NOT it.tif. Contouring the raw source is one
+#   command and needs no staging, but the lines come out wigglier: it.tif carries
+#   LiDAR speckle plus, in places, corduroy striping and TIN facets from contour
+#   interpolation. Smoothing moves the surface only ~0.4 m mean / 2 m p99, far
+#   below the 10 m interval, so this changes line SHAPE, not accuracy. The old
+#   USE_SMOOTH toggle is gone with the retile stage it selected between.
 #
-#   USE_SMOOTH = true → reuse shading-it.nu's smooth/ tiles: crop each tile's
-#     overlap into a per-tile VRT (no data copy), merge into one national VRT, then
-#     consolidate to a single raster before contouring. Costs an extra ~25-30 GB and
-#     one full pass, and REQUIRES shading-it.nu to have finished its smoothing stage.
-#     Buys visibly calmer lines. Smoothing moves the surface only ~0.4 m mean / 2 m
-#     p99 — far below the 10 m interval — so this changes line shape, not accuracy.
+# NO CROP STAGE. shading-it.nu no longer retiles with an overlap, so there is no
+#   6 px disagreement left to strip: each smooth2m/ tile is already cropped to
+#   its exact window extent, collar excluded.
 #
-# No downsampling: Poland went 1 m → 2 m for the contour pass, but 5 m is already
-# the right density for a 10 m interval, so the source resolution is kept as-is.
+# NO DOWNSAMPLING, and the tiles are 5 m not 2 m. Poland went 1 m -> 2 m for its
+#   contour pass, but 5 m is already the right density for a 10 m interval, so
+#   shading-it.nu writes smooth2m/ at the source resolution. (The directory is
+#   called smooth2m/ in every country for consistency; here it holds 5 m tiles.)
 #
 # nodata is -9999 throughout. Poland's `-snodata 0` MUST NOT be carried over: it
 # would treat genuine 0.00 m coastal terrain as nodata and notch every low contour.
@@ -41,107 +43,36 @@
 # pass it bare to opt into Visvalingam.
 #
 # Resumable: the national VRT, consolidated raster and GPKG are each skipped if
-# present (delete to force a rebuild). Run via:
+# present (delete to force a rebuild). Requires shading-it.nu's smooth2m/
+# populated. Run via:
 #   nice ~/miniforge3/bin/conda run --no-capture-output -n geo nu ~/fm/freemap-outdoor-map/contours-it.nu
+
+use lib/gdal.nu
+use lib/contours.nu
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-const DATA_DIR   = "/mnt/osm/it"
-const SRC        = "/mnt/osm/it/it.tif"
-const USE_SMOOTH = true                          # see header; false → contour it.tif directly
-const CROP       = 6                             # px to drop from each tile edge (retile overlap is 12)
-const INTERVAL   = 10                            # contour interval, metres
-const HEIGHT_COL = "height"
-const NODATA     = "-9999"
-const TABLE      = "cont_it_dtm"                 # layer name inside the GPKG
-const VRT        = "italy_dem.vrt"
-const DEM_TIF    = "/mnt/osm/it/italy_dem_5m.tif"        # consolidated smoothed DEM (EPSG:6875)
-const GPKG       = "/mnt/osm/it/italy_contours.gpkg"     # splitter input (EPSG:6875)
+const DATA_DIR = "/mnt/osm/it"
+const SRC_DIR  = "/mnt/osm/it/smooth2m"          # 5 m tiles — see header
+const EPSG     = "EPSG:6875"
 
-cd $DATA_DIR
+gdal require-proj $EPSG "contours-it.nu"
 
-# ── 1. Pick the raster to contour ─────────────────────────────────────────────
-
-let dem = if not $USE_SMOOTH {
-    print $"==> Contouring the raw DTM directly \(USE_SMOOTH = false\)"
-    $SRC
-} else {
-    if (not ("smooth" | path exists)) or ((glob smooth/*.tif | length) == 0) {
-        error make {msg: $"smooth/ is empty — run shading-it.nu's smoothing stage first, or set USE_SMOOTH = false"}
-    }
-
-    # 1a. Per-tile cropped VRTs (drop the 6 px/side overlap; references only, no copy)
-    print "==> Building per-tile cropped VRTs"
-    mkdir smooth_vrt
-    (
-      glob smooth/*.tif
-        | where {|f|
-            let stem = $f | path basename | path parse | get stem
-            not ($"smooth_vrt/($stem).vrt" | path exists)
-          }
-        | par-each -t 24 {|src|
-            let stem = $src | path basename | path parse | get stem
-            let dst  = $"smooth_vrt/($stem).vrt"
-            let info = gdalinfo -json $src | from json
-            let w = $info.size.0
-            let h = $info.size.1
-            (gdal_translate -of VRT
-              -srcwin $CROP $CROP ($w - 2 * $CROP) ($h - 2 * $CROP)
-              $src $dst o> /dev/null)
-          }
-    )
-
-    # 1b. National VRT from the cropped per-tile VRTs
-    if ($VRT | path exists) {
-        print $"==> ($VRT) exists — reusing"
-    } else {
-        print "==> Building national VRT"
-        let idx = "_idx_it"
-        glob smooth_vrt/*.vrt | save -f $idx
-        print $"  (open $idx | lines | length) tiles"
-        gdalbuildvrt -vrtnodata $NODATA -input_file_list $idx $"($VRT).tmp" o> /dev/null
-        rm $idx
-        mv $"($VRT).tmp" $VRT
-    }
-
-    # 1c. Consolidate the VRT into ONE raster so the contour pass reads sequentially
-    if ($DEM_TIF | path exists) {
-        print $"==> ($DEM_TIF) exists — reusing"
-    } else {
-        print $"==> Consolidating DEM → ($DEM_TIF) \(EPSG:6875 @ 5 m\) — one full pass"
-        let tmp = $"($DEM_TIF).tmp"
-        rm -f $tmp
-        (gdal_translate
-          --config GDAL_CACHEMAX 16384
-          -of GTiff
-          -a_nodata $NODATA
-          -co COMPRESS=ZSTD -co PREDICTOR=2 -co TILED=YES
-          -co NUM_THREADS=ALL_CPUS -co BIGTIFF=YES
-          $VRT $tmp o> /dev/null)
-        mv $tmp $DEM_TIF
-    }
-
-    $DEM_TIF
-}
-
-# ── 2. gdal_contour → GPKG (EPSG:6875) ────────────────────────────────────────
-# Single-threaded, reads sequentially off NVMe. Resumable: delete the GPKG.
-
-if ($GPKG | path exists) {
-    print $"==> ($GPKG) already exists — delete it to re-generate; skipping"
-} else {
-    print $"==> Generating contours from ($dem) → ($GPKG) — this will take hours"
-    let tmp = $"($GPKG).tmp"
-    rm -f $tmp
-    (gdal_contour
-      --config GDAL_CACHEMAX 16384
-      -f GPKG
-      -nln $TABLE
-      -i $INTERVAL
-      -a $HEIGHT_COL
-      -snodata $NODATA
-      -lco SPATIAL_INDEX=NO
-      $dem $tmp)
-    mv $tmp $GPKG
-    print $"==> Done → ($GPKG). Next: run splitter-rs \(--source-epsg 6875\); see header."
+contours run {
+    code:         "it"
+    data_dir:     $DATA_DIR
+    src_dir:      $SRC_DIR
+    vrt:          $"($DATA_DIR)/italy_dem_5m.vrt"
+    dem_tif:      $"($DATA_DIR)/italy_dem_5m.tif"
+    gpkg:         $"($DATA_DIR)/italy_contours.gpkg"
+    table:        "cont_it_dtm"                    # layer name inside the GPKG
+    height_col:   "height"
+    nodata:       "-9999"                          # NOT 0 — see header
+    epsg:         $EPSG
+    interval:     10
+    off_interval: 10                               # one pass — see cachemax_mb before raising
+    parallel_off: 3                                # concurrent gdal_contour passes
+    cachemax_mb:  16384                            # PER PROCESS: fine for one pass, but raising
+                                                   # off_interval runs up to 3 at once = 48 GB of 62.
+                                                   # Drop to 2048 when you do.
 }
