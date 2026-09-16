@@ -34,7 +34,7 @@ image = { version = "0.25.10", default-features = false, features = [
 ] }
 librsvg = { version = "2.62.3" }
 cairo-rs = { version = "0.22.0", features = ["pdf", "png", "svg"] }
-cavalier_contours = { version = "0.8.0" }
+cavalier_contours = { version = "0.9.0" }
 colorsys = "0.7.3"
 geo-postgis = "0.2.2"
 postgis = "0.9.0"
@@ -49,7 +49,7 @@ deadpool-postgres = "0.14"
 futures-util = "0.3"
 regex = "1.13.1"
 serde_json = "1.0.151"
-tracy-client = { version = "0.18.4", default-features = false }
+tracy-client = { version = "0.19.0", default-features = false }
 thiserror = "2.0.20"
 axum = "0.8.9"
 clap = { version = "4.6.6", features = ["derive", "env"] }
