@@ -94,100 +94,35 @@
 # (delete to force a rebuild). Run via:
 #   nice ~/miniforge3/bin/conda run --no-capture-output -n geo nu ~/fm/freemap-outdoor-map/scripts/contours-be.nu
 
+use lib/gdal.nu
+use lib/contours.nu
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-const DATA_DIR   = "/mnt/osm/be"
-const SRC_DIR    = "/mnt/osm/be/smooth2m"          # 2 m tiles from shading-be.nu
-const INTERVAL   = 10                              # contour interval, metres
-const HEIGHT_COL = "height"
-const NODATA     = "-9999"
-const TABLE      = "cont_be_dtm"                   # layer name inside the GPKG
-const VRT        = "belgium_dem_2m.vrt"
+const DATA_DIR = "/mnt/osm/be"
+const SRC_DIR  = "/mnt/osm/be/smooth2m"
+const EPSG     = "EPSG:3812"
 
-# ── Drive discovery ───────────────────────────────────────────────────────────
-# udisks2 moves the removable 18TB between /media and /run/media, and the unused
-# path survives as an empty root-owned directory on / — so a stale hardcoded
-# path does not fail, it silently fills the root filesystem.
-def find-drive []: nothing -> string {
-    let found = (
-        ["/run/media/martin/18TB" "/media/martin/18TB"]
-          | where {|p| (do { mountpoint -q $p } | complete).exit_code == 0 }
-    )
-    if ($found | is-empty) {
-        error make {msg: "the 18TB drive is not mounted at /media/martin/18TB or /run/media/martin/18TB. Check `lsblk -o NAME,LABEL,SIZE,MOUNTPOINT` (label 18TB)."}
-    }
-    $found | first
-}
+gdal require-proj $EPSG "contours-be.nu"
 
-let DRIVE   = (find-drive)
-let DEM_TIF = $"($DRIVE)/be/belgium_dem_2m.tif"      # consolidated DEM (EPSG:3812)
-let GPKG    = $"($DRIVE)/be/belgium_contours.gpkg"   # splitter input (EPSG:3812)
-
+let DRIVE = (gdal find-drive)
 print $"==> drive: ($DRIVE)"
 
-# PROJ sanity — a missing PROJ database degrades every CRS to ENGCRS instead of
-# failing loudly. Always run inside the geo env, never with its bin on PATH.
-let _probe = (do { gdalsrsinfo -o proj4 "EPSG:3812" } | complete)
-if $_probe.exit_code != 0 or ($_probe.stdout | str trim | is-empty) {
-    error make {msg: "PROJ cannot resolve EPSG:3812 — run via: nice ~/miniforge3/bin/conda run --no-capture-output -n geo nu contours-be.nu"}
-}
-
-cd $DATA_DIR
-
-if (not ($SRC_DIR | path exists)) or ((glob $"($SRC_DIR)/*.tif" | length) == 0) {
-    error make {msg: $"($SRC_DIR) is empty — run shading-be.nu first \(it emits the smoothed 2 m tiles\)"}
-}
-
-# ── 1. Regional VRT straight from the 2 m tiles (no cropping needed) ──────────
-
-if ($VRT | path exists) {
-    print $"==> ($VRT) exists — reusing"
-} else {
-    print "==> Building regional VRT from the 2 m tiles"
-    let idx = "_idx_be_cont"
-    glob $"($SRC_DIR)/*.tif" | save -f $idx
-    print $"  (open $idx | lines | length) tiles"
-    gdalbuildvrt -vrtnodata $NODATA -input_file_list $idx $"($VRT).tmp" o> /dev/null
-    rm $idx
-    mv $"($VRT).tmp" $VRT
-}
-
-# ── 2. Consolidate the VRT into ONE contiguous raster ─────────────────────────
-# No reprojection and no resampling — the tiles are already EPSG:3812 at 2 m.
-
-if ($DEM_TIF | path exists) {
-    print $"==> ($DEM_TIF) exists — reusing"
-} else {
-    print $"==> Consolidating DEM -> ($DEM_TIF) — one full pass"
-    let tmp = $"($DEM_TIF).tmp"
-    rm -f $tmp
-    (gdal_translate
-      --config GDAL_CACHEMAX 16384
-      -of GTiff
-      -a_nodata $NODATA
-      -co COMPRESS=ZSTD -co PREDICTOR=2 -co TILED=YES
-      -co NUM_THREADS=ALL_CPUS -co BIGTIFF=YES
-      $VRT $tmp)
-    mv $tmp $DEM_TIF
-}
-
-# ── 3. gdal_contour on the consolidated raster -> GPKG (EPSG:3812) ────────────
-
-if ($GPKG | path exists) {
-    print $"==> ($GPKG) already exists — delete it to re-generate; skipping"
-} else {
-    print $"==> Generating contours from ($DEM_TIF) -> ($GPKG)"
-    let tmp = $"($GPKG).tmp"
-    rm -f $tmp
-    (gdal_contour
-      --config GDAL_CACHEMAX 16384
-      -f GPKG
-      -nln $TABLE
-      -i $INTERVAL
-      -a $HEIGHT_COL
-      -snodata $NODATA
-      -lco SPATIAL_INDEX=NO
-      $DEM_TIF $tmp)
-    mv $tmp $GPKG
-    print $"==> Done -> ($GPKG). Next: create the dest table, then splitter-rs \(--source-epsg 3812\); see header."
+contours run {
+    code:         "be"
+    data_dir:     $DATA_DIR
+    src_dir:      $SRC_DIR
+    vrt:          $"($DATA_DIR)/belgium_dem_2m.vrt"
+    dem_tif:      $"($DRIVE)/be/belgium_dem_2m.tif"
+    gpkg:         $"($DRIVE)/be/belgium_contours.gpkg"
+    table:        "cont_be_dtm"                 # layer name inside the GPKG
+    height_col:   "height"
+    nodata:       "-9999"
+    epsg:         $EPSG
+    interval:     10
+    off_interval: 10
+    parallel_off: 3                                # concurrent gdal_contour passes
+    cachemax_mb:  16384                            # PER PROCESS: fine for one pass, but raising
+                                                   # off_interval runs up to 3 at once = 48 GB of 62.
+                                                   # Drop to 2048 when you do.
 }

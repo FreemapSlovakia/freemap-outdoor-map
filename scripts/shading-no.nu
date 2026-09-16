@@ -33,7 +33,8 @@
 #   detail the z17 countries (SK/AT/CZ/SI, all 46-50 degN) get at 0.8 m/px, and
 #   the same choice Sweden made with the same latitudes and the same 1 m LiDAR.
 #
-# WHY THIS SCRIPT DOES NOT USE gdal_retile, unlike every other country:
+# WHY THIS SCRIPT DOES NOT USE gdal_retile (it originated here, before the shared
+# window grid in lib/shading.nu made it the only pipeline):
 #
 #   1. DISK. retiled/ + smooth/ for all of Norway is ~1.8 TB against ~670 GB free
 #      on the NVMe. So windows are cut from the national VRT on demand, processed,
@@ -51,10 +52,10 @@
 #   tile seams — the property gdal_retile's -overlap gave the other scripts.
 #
 # CONTOURS. smooth/ cannot be kept (~900 GB), so each window also emits a 2 m
-#   downsample of its smoothed DEM into smooth2m/. That is precisely what
-#   contours-hr.nu's consolidation pass produces from smooth/ — so contours-no.nu
-#   can contour those directly and skip the consolidation entirely (8.5 h on
-#   Croatia, which would have been ~45 h here). ~225 GB, fits on the NVMe.
+#   downsample of its smoothed DEM into smooth2m/, which contours-no.nu reads
+#   directly. That skips the expensive half of consolidation — reading ~900 GB
+#   of 1 m data and resampling it (8.5 h on Croatia's old retile pipeline, ~45 h
+#   here). The consolidation pass itself still runs. ~225 GB, fits on the NVMe.
 #   `average` resampling is nodata-aware; bilinear/cubic would blend nodata into
 #   its neighbours.
 #
@@ -72,282 +73,102 @@
 # the next run. Delete tiles/ (or individual outputs) to force a rebuild. Run via:
 #   nice ~/miniforge3/bin/conda run --no-capture-output -n geo nu ~/fm/freemap-outdoor-map/shading-no.nu
 
+# ONE UNREADABLE SOURCE TILE MUST NOT KILL A 30-HOUR RUN. A window that throws is
+#   recorded in failed/ and skipped; because the pending check only looks for
+#   .tif and .empty, a later run retries it automatically once the source is
+#   repaired. (Learned the hard way: tile 33-125-145 had silent LZW corruption —
+#   correct byte count, bad content — and took the run down at 22751/50825.)
+#
+# THE 2 m CONTOUR DEM NOW COMES FROM THE FILLED RASTER, not from $smooth before
+#   the fill. Contouring the unfilled one breaks a line at every void while the
+#   hillshade beside it looks continuous, because the hillshade is filled. Any
+#   smooth2m/ tile written before this change is unfilled; delete them (not
+#   tiles/) to re-emit. tiles/ is unaffected.
+#
+use lib/gdal.nu
+use lib/shading.nu
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-const SRC_DIR   = "/media/martin/18TB/no/DTM1"
-const DATA_DIR  = "/mnt/osm/no"                  # VRT, window list, smooth2m/ on NVMe
-const TILES_DIR = "/media/martin/18TB/no/tiles"  # ~580 GB at z16 — too big for the NVMe
-const OUT_TIF   = "/media/martin/18TB/no/shading.tif"
-const EPSG      = "EPSG:25833"                   # ETRS89 / UTM 33N, all tiles
-const NODATA    = "-9999"                        # unified nodata presented by no.vrt
-const VRT       = "no.vrt"
-const ZOOM      = 16
-const PARALLEL  = 24
-const TMPDIR    = "/dev/shm"
+const DATA_DIR = "/mnt/osm/no"                   # smooth2m/ on NVMe
+const EPSG     = "EPSG:25833"                    # ETRS89 / UTM zone 33N
+const NODATA   = "-9999"                         # unified sentinel; sources carry -32767
+const PARALLEL = 24
 
-const STEP      = 3000                           # window size, m (= px); 15000 / 5, so 25 per source tile
-const COLLAR    = 6                              # m cut beyond the window on each side (smoothing context)
-const CROP      = 3                              # px cropped per edge after hillshading; COLLAR-CROP leaves warp margin
+const STEP     = 3000                            # m; 5x5 windows per 15 km cell
 
 # The 15 km CELL grid, derived from the tile naming (verified against 33-107-122,
 # 33-124-114 and 33-132-158): a tile named 33-E-N spans px [x0-5, x0+15005] where
 # x0 = CELL_X0 + (E - E_REF) * 15000, and likewise in y. Cells are contiguous.
+#
+# Windows are built on the CELLS, not on the tile extents. The tiles are 15010 px
+# — a 5 px collar beyond their cell — so using tile extents would drift the grid
+# by 5 m per tile and double-cover every seam.
 const CELL_X0   = 5430.0                         # west edge of cell E=107
 const CELL_YTOP = 6771000.0                      # north edge of cell N=122
 const E_REF     = 107
 const N_REF     = 122
+const CELL_M    = 15000
 
-# Smoothing (Poland/Croatia 1 m settings — filter is a pixel count = metres here)
-const SM_FILTER    = 11
-const SM_NORM_DIFF = 16
-const SM_NUM_ITER  = 6
-const SM_MAX_DIFF  = 6
+let DRIVE   = (gdal find-drive)
+let SRC_DIR = $"($DRIVE)/no/DTM1"
+let VRT     = $"($DATA_DIR)/no.vrt"
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+print $"==> drive: ($DRIVE)"
 
-def has-data [file: string]: nothing -> bool {
-    let band = gdalinfo -json -mm $file err> /dev/null | from json | get bands | first
-    ($band | get -o computedMin | is-not-empty)
+gdal require-proj $EPSG "shading-no.nu"
+
+if (not ($SRC_DIR | path exists)) or ((glob $"($SRC_DIR)/*.tif" | length) == 0) {
+    error make {msg: $"($SRC_DIR) is empty — run download-no.nu first"}
 }
-
-# Weighted multi-directional hillshade blend formula for one RGB band.
-def band-calc [wa: string, wb: string, wc: string]: nothing -> string {
-    let ea  = "0.8 * (255 - A)"
-    let eb  = "0.7 * (255 - B)"
-    let ec  = "1.0 * (255 - C)"
-    let num = $"($ea) * ($wa) + ($eb) * ($wb) + ($ec) * ($wc)"
-    let den = $"0.01 + ($ea) + ($eb) + ($ec)"
-    "((" + $num + ") / (" + $den + ") - 128.0) + 128.0"
-}
-
-# Alpha channel: inverse of "all directions dark simultaneously".
-def alpha-calc []: nothing -> string {
-    let ea = "0.8 * (255 - A)"
-    let eb = "0.7 * (255 - B)"
-    let ec = "1.0 * (255 - C)"
-    "255.0 - 255.0 * ((1.0 - " + $ea + " / 255.0) * (1.0 - " + $eb + " / 255.0) * (1.0 - " + $ec + " / 255.0))"
-}
-
-# Cut one window (plus collar) out of the national VRT, smooth it, emit the 2 m
-# DEM for contours, and render the RGBA shaded relief tile. All intermediates
-# live in TMPDIR and are removed on the way out, so disk never accumulates.
-def render-window [w: record, tr: string]: nothing -> nothing {
-    let out = $"($TILES_DIR)/($w.id).tif"
-    let d   = $"($TMPDIR)/no_($w.id)"
-
-    rm -rf $d
-    mkdir $d
-
-    let co      = [-co COMPRESS=ZSTD -co PREDICTOR=2 -co TILED=YES -co NUM_THREADS=ALL_CPUS]
-    let co_big  = [...$co -co BIGTIFF=YES]
-    let co_calc = [--co=COMPRESS=ZSTD --co=PREDICTOR=2 --co=TILED=YES --co=NUM_THREADS=ALL_CPUS --co=BIGTIFF=YES]
-
-    # 1. Cut window + collar from the national VRT. PREDICTOR=1 — see header.
-    let win = $"($d)/win.tif"
-    (gdal_translate -q -of GTiff
-      -projwin ($w.xmin - $COLLAR) ($w.ymax + $COLLAR) ($w.xmax + $COLLAR) ($w.ymin - $COLLAR)
-      -co COMPRESS=DEFLATE -co PREDICTOR=1 -co TILED=YES
-      $VRT $win o> /dev/null)
-
-    # An all-nodata window (sea, or bbox corner) leaves a marker so the next run
-    # skips it without re-cutting.
-    if not (has-data $win) {
-        rm -rf $d
-        touch $"($TILES_DIR)/($w.id).empty"
-        print $"  ($w.id): empty"
-        return
-    }
-
-    # 2. Smooth. A zero-variance window (flat sea-level sliver) makes the smoother
-    #    panic and has no relief to smooth anyway — pass it through.
-    let band = gdalinfo -json -mm $win err> /dev/null | from json | get bands | first
-    let smooth = $"($d)/smooth.tif"
-    if ($band.computedMin? == $band.computedMax?) {
-        cp $win $smooth
-    } else {
-        (feature-preserving-smoothing --dem $win -o $smooth
-          --filter $SM_FILTER --norm_diff $SM_NORM_DIFF
-          --num_iter $SM_NUM_ITER --max_diff $SM_MAX_DIFF)
-    }
-
-    # 3. 2 m DEM for contours-no.nu — collar cropped, nodata-aware `average`.
-    let dem2 = $"($DATA_DIR)/smooth2m/($w.id).tif"
-    if not ($dem2 | path exists) {
-        let tmp2 = $"($d)/dem2m.tif"
-        (gdal_translate -q -of GTiff
-          -projwin $w.xmin $w.ymax $w.xmax $w.ymin
-          -tr 2 2 -r average -a_nodata $NODATA
-          ...$co $smooth $tmp2 o> /dev/null)
-        mv $tmp2 $dem2
-    }
-
-    # 4. Close small interior voids so they don't become transparent specks.
-    #    Large out-of-coverage regions exceed -md 5 and stay nodata -> transparent.
-    let dem = $"($d)/dem.tif"
-    gdal_fillnodata.py -md 5 $smooth $dem o> /dev/null err> /dev/null
-
-    # 5. Three Igor hillshades at different azimuths, on the collared window so
-    #    edges have real neighbours.
-    gdaldem hillshade $dem $"($d)/_a.tif" -az -120 -igor -compute_edges ...$co o> /dev/null
-    gdaldem hillshade $dem $"($d)/_b.tif" -az  60  -igor -compute_edges ...$co o> /dev/null
-    gdaldem hillshade $dem $"($d)/_c.tif" -az -45  -igor -compute_edges ...$co o> /dev/null
-
-    # 6. Crop the collar (minus the warp margin) off each hillshade.
-    let info = gdalinfo -json $dem | from json
-    let w_px = $info.size.0
-    let h_px = $info.size.1
-    for name in [a b c] {
-        let raw = $"($d)/_($name)_raw.tif"
-        mv $"($d)/_($name).tif" $raw
-        (gdal_translate -q -srcwin $CROP $CROP ($w_px - 2 * $CROP) ($h_px - 2 * $CROP)
-          ...$co $raw $"($d)/_($name).tif" o> /dev/null)
-        rm $raw
-    }
-
-    # 7. Warp each to EPSG:3857 at zoom-level pixel size. -tap aligns every window
-    #    to the same global grid, so the tiles mosaic without seams.
-    for name in [a b c] {
-        (gdalwarp -t_srs EPSG:3857 -tr $tr $tr -tap -r cubic -dstnodata none -of GTiff
-          ...$co_big -multi -wo NUM_THREADS=ALL_CPUS -wo INIT_DEST=0
-          $"($d)/_($name).tif" $"($d)/($name)-warped.tif" o> /dev/null)
-    }
-
-    # 8. RGBA from the three warped hillshades.
-    let inputs = [-A $"($d)/a-warped.tif" -B $"($d)/b-warped.tif" -C $"($d)/c-warped.tif"]
-
-    #                       [a]    [b]    [c]
-    let r_calc = band-calc "0x20" "0xFF" "0x00"
-    let g_calc = band-calc "0x30" "0xEE" "0x00"
-    let b_calc = band-calc "0x60" "0x00" "0x00"
-    let a_calc = alpha-calc
-
-    gdal_calc.py ...$inputs ...$co_calc $"--outfile=($d)/R.tif" $"--calc=($r_calc)" o> /dev/null
-    gdal_calc.py ...$inputs ...$co_calc $"--outfile=($d)/G.tif" $"--calc=($g_calc)" o> /dev/null
-    gdal_calc.py ...$inputs ...$co_calc $"--outfile=($d)/B.tif" $"--calc=($b_calc)" o> /dev/null
-    gdal_calc.py ...$inputs ...$co_calc $"--outfile=($d)/A.tif" $"--calc=($a_calc)" o> /dev/null
-
-    # 9. Stack RGBA with the alpha as an internal mask, then write the tile.
-    let vrt = $"($d)/stack.vrt"
-    gdalbuildvrt -separate $vrt $"($d)/R.tif" $"($d)/G.tif" $"($d)/B.tif" $"($d)/A.tif" o> /dev/null
-    gdal_edit.py -colorinterp_1 red -colorinterp_2 green -colorinterp_3 blue $vrt o> /dev/null
-    sed -i '/<NoDataValue>/d; /<NODATA>/d; /<SrcRect/d; /<DstRect/d; s/ComplexSource/SimpleSource/g' $vrt
-    sed -i 's|</VRTDataset>|<MaskBand><VRTRasterBand dataType="Byte"><SimpleSource><SourceFilename relativeToVRT="1">a-warped.tif</SourceFilename><SourceBand>1</SourceBand></SimpleSource></VRTRasterBand></MaskBand></VRTDataset>|' $vrt
-
-    (gdal_translate --config GDAL_TIFF_INTERNAL_MASK YES -of GTiff
-      ...$co_big $vrt $"($d)/final.tif" o> /dev/null)
-
-    mv $"($d)/final.tif" $out
-    rm -rf $d
-    print $"  ($w.id): done"
-}
-
-# One unreadable source tile must not kill a 30-hour run. A window that throws is
-# recorded in failed/ and skipped; because the pending check only looks for .tif
-# and .empty, a later run retries it automatically once the source is repaired.
-# (Learned the hard way: tile 33-125-145 had silent LZW corruption — correct byte
-# count, bad content — and took the run down at 22751/50825.)
-def process-window [w: record, tr: string]: nothing -> nothing {
-    try {
-        render-window $w $tr
-    } catch {|e|
-        let msg = ($e | get -o msg | default "unknown")
-        print $"  !! ($w.id): FAILED — ($msg)"
-        touch $"($DATA_DIR)/failed/($w.id)"
-        rm -rf $"($TMPDIR)/no_($w.id)"
-    }
-}
-
-# ── Pipeline ──────────────────────────────────────────────────────────────────
 
 mkdir $DATA_DIR
-mkdir $TILES_DIR
-mkdir $"($DATA_DIR)/smooth2m"
-mkdir $"($DATA_DIR)/failed"
-cd $DATA_DIR
 
-let pi = (1 | math arctan) * 4
-let tr = ($pi * 2 * 6378137 / 256 / (2 ** $ZOOM) | into string)
-print $"ZOOM=($ZOOM) TR=($tr)"
+# ── 0. National VRT, one unified nodata ───────────────────────────────────────
 
-# 0. National VRT — plain gdalbuildvrt; every source quirk the HR script fought is
-#    absent here. An input_file_list avoids argv overflow on 2033 tiles.
 if ($VRT | path exists) {
     print $"==> ($VRT) exists — reusing \(delete to force a rebuild\)"
 } else {
     print $"==> Building national VRT ($VRT) — unified nodata ($NODATA)"
-    let idx = "_idx_no"
-    glob $"($SRC_DIR)/*.tif" | save -f $idx
-    print $"  (open $idx | lines | length) tiles"
-    gdalbuildvrt -vrtnodata $NODATA -input_file_list $idx $"($VRT).tmp" o> /dev/null
-    rm $idx
-    mv $"($VRT).tmp" $VRT
+    let tiles = (glob $"($SRC_DIR)/*.tif")
+    print $"  ($tiles | length) tiles"
+    gdal build-vrt $tiles $VRT --extra [-vrtnodata $NODATA] --index $"($DATA_DIR)/_idx_no"
 }
 
-# 1. Window grid: 25 windows per 15 km source cell, aligned to the CELL grid.
-print "==> Building window list"
-let windows = (
+# ── 1. Window origins, one per 15 km delivery cell ────────────────────────────
+
+let origins = (
     glob $"($SRC_DIR)/*.tif"
       | each {|f|
           let parts = ($f | path basename | path parse | get stem | split row "-")
-          {e: ($parts.1 | into int), n: ($parts.2 | into int)}
+          let e = ($parts.1 | into int)
+          let n = ($parts.2 | into int)
+          {
+            id: $"($e)-($n)"
+            x0: ($CELL_X0 + (($e - $E_REF) * $CELL_M | into float))
+            y1: ($CELL_YTOP + (($n - $N_REF) * $CELL_M | into float))
+          }
         }
-      | each {|t|
-          let x0 = $CELL_X0 + (($t.e - $E_REF) * 15000 | into float)
-          let y1 = $CELL_YTOP + (($t.n - $N_REF) * 15000 | into float)
-          0..4 | each {|i|
-              0..4 | each {|j|
-                  {
-                    id: $"($t.e)-($t.n)-($i)($j)"
-                    xmin: ($x0 + ($i * $STEP | into float))
-                    xmax: ($x0 + (($i + 1) * $STEP | into float))
-                    ymax: ($y1 - ($j * $STEP | into float))
-                    ymin: ($y1 - (($j + 1) * $STEP | into float))
-                  }
-              }
-          } | flatten
-        }
-      | flatten
 )
-print $"  ($windows | length) windows"
 
-# 2. Process every window that has no output and no empty-marker yet.
-let pending = (
-    $windows | where {|w|
-        not ($"($TILES_DIR)/($w.id).tif" | path exists) and not ($"($TILES_DIR)/($w.id).empty" | path exists)
-    }
-)
-print $"==> ($windows | length) windows, ($pending | length) pending"
+shading run {
+    code:      "no"
+    src:       $VRT
+    data_root: $DATA_DIR
+    tiles_dir: $"($DRIVE)/no/tiles"
+    out_tif:   $"($DRIVE)/no/shading.tif"
+    nodata:    $NODATA
+    zoom:      16                                # MEASURED — see header
+    parallel:  $PARALLEL
+    tmpdir:    "/dev/shm"
+    step:      $STEP
+    collar:    6
+    crop:      3
+    clamp:     false
+    fill_md:   5                                 # px; 5 m at 1 m
+    dem_tr:    2                                 # m; what contours-no.nu reads
+    smooth:    {filter: 11, norm_diff: 16, num_iter: 6, max_diff: 6}
+    prefilter: null
 
-if ($pending | length) > 0 {
-    $pending | par-each -t $PARALLEL {|w| process-window $w $tr}
+    grid:      {kind: "tiles", origins: $origins, nx: ($CELL_M // $STEP), ny: ($CELL_M // $STEP)}
 }
-
-# 3. Merge all tiles and build overviews.
-# JXL (lossy, distance=3.0) requires GDAL linked against a libtiff with libjxl
-# support (conda geo env). PREDICTOR is intentionally omitted (JXL doesn't use it).
-if ($OUT_TIF | path exists) {
-    print $"==> ($OUT_TIF) exists — delete it to re-merge; skipping"
-} else {
-    print "==> Merging tiles"
-    let idx = "shading_index"
-    glob $"($TILES_DIR)/*.tif" | save -f $idx
-    print $"  (open $idx | lines | length) tiles"
-    gdalbuildvrt -input_file_list $idx shading.vrt
-    rm $idx
-    sed -i 's|<ColorInterp>Alpha</ColorInterp>|<ColorInterp>Undefined</ColorInterp>|g' shading.vrt
-
-    (gdal_translate --config GDAL_TIFF_INTERNAL_MASK YES --config GDAL_TIFF_INTERNAL_MASK_TO_8BIT YES
-      -of GTiff -co COMPRESS=JXL -co JXL_LOSSLESS=NO -co JXL_DISTANCE=3.0
-      -co TILED=YES -co BLOCKXSIZE=256 -co BLOCKYSIZE=256 -co BIGTIFF=YES -co NUM_THREADS=ALL_CPUS
-      shading.vrt $"($OUT_TIF).tmp")
-    mv $"($OUT_TIF).tmp" $OUT_TIF
-    rm shading.vrt
-    gdal_edit.py -colorinterp_4 alpha $OUT_TIF
-
-    print "==> Building overviews"
-    (gdaladdo --config GDAL_TIFF_INTERNAL_MASK YES --config GDAL_CACHEMAX 4096
-      --config GDAL_NUM_THREADS ALL_CPUS --config COMPRESS_OVERVIEW JXL
-      --config JXL_LOSSLESS_OVERVIEW NO --config JXL_DISTANCE_OVERVIEW 3.0
-      -r average $OUT_TIF)
-}
-print "==> Done"

@@ -93,174 +93,33 @@
 # (delete to force a rebuild). Run via:
 #   nice ~/miniforge3/bin/conda run --no-capture-output -n geo nu ~/fm/freemap-outdoor-map/scripts/contours-de-nw.nu
 
+use lib/gdal.nu
+use lib/contours.nu
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-const DATA_DIR   = "/mnt/osm/de_nw"
-const SRC_DIR    = "/mnt/osm/de_nw/smooth2m"     # 2 m tiles from shading-de-nw.nu
-const INTERVAL   = 10                            # contour interval, metres
-const HEIGHT_COL = "height"
-const NODATA     = "-9999"
-const TABLE      = "cont_de_nw_dtm"              # layer name inside the GPKG
-const VRT        = "nrw_dem_2m.vrt"
+const DATA_DIR = "/mnt/osm/de_nw"
+const SRC_DIR  = "/mnt/osm/de_nw/smooth2m"
+const EPSG     = "EPSG:25832"
 
-# ── Drive discovery ───────────────────────────────────────────────────────────
-# udisks2 moves the removable 18TB between /media and /run/media, and the unused
-# path survives as an empty root-owned directory on / — a stale hardcoded path
-# silently fills the root filesystem instead of failing.
-def find-drive []: nothing -> string {
-    let found = (
-        ["/run/media/martin/18TB" "/media/martin/18TB"]
-          | where {|p| (do { mountpoint -q $p } | complete).exit_code == 0 }
-    )
-    if ($found | is-empty) {
-        error make {msg: "the 18TB drive is not mounted at /media/martin/18TB or /run/media/martin/18TB. Check `lsblk -o NAME,LABEL,SIZE,MOUNTPOINT` (label 18TB)."}
-    }
-    $found | first
-}
+gdal require-proj $EPSG "contours-de-nw.nu"
 
-let DRIVE   = (find-drive)
-let DEM_TIF = $"($DRIVE)/de_nw/nrw_dem_2m.tif"      # consolidated DEM (EPSG:25832)
-let GPKG    = $"($DRIVE)/de_nw/nrw_contours.gpkg"   # splitter input (EPSG:25832)
-
+let DRIVE = (gdal find-drive)
 print $"==> drive: ($DRIVE)"
 
-# PROJ sanity — a missing PROJ database degrades every CRS to ENGCRS instead of
-# failing loudly. Always run inside the geo env, never with its bin on PATH.
-let _probe = (do { gdalsrsinfo -o proj4 "EPSG:25832" } | complete)
-if $_probe.exit_code != 0 or ($_probe.stdout | str trim | is-empty) {
-    error make {msg: "PROJ cannot resolve EPSG:25832 — run via: nice ~/miniforge3/bin/conda run --no-capture-output -n geo nu contours-de-nw.nu"}
-}
-
-cd $DATA_DIR
-
-if (not ($SRC_DIR | path exists)) or ((glob $"($SRC_DIR)/*.tif" | length) == 0) {
-    error make {msg: $"($SRC_DIR) is empty — run shading-de-nw.nu first \(it emits the smoothed 2 m tiles\)"}
-}
-
-# ── 1. State VRT straight from the 2 m tiles (no cropping needed) ─────────────
-
-if ($VRT | path exists) {
-    print $"==> ($VRT) exists — reusing"
-} else {
-    print "==> Building state VRT from the 2 m tiles"
-    let idx = "_idx_denw_cont"
-    glob $"($SRC_DIR)/*.tif" | save -f $idx
-    print $"  (open $idx | lines | length) tiles"
-    gdalbuildvrt -vrtnodata $NODATA -input_file_list $idx $"($VRT).tmp" o> /dev/null
-
-    # gdalbuildvrt silently SKIPS inputs that disagree with the first on CRS,
-    # band count or colour interpretation — it dropped a whole region that way
-    # during the Belgium build. Verify every offered tile landed.
-    let n_offered = (open $idx | lines | length)
-    let n_used = (
-        open --raw $"($VRT).tmp"
-          | parse -r '<SourceFilename[^>]*>([^<]+)</SourceFilename>'
-          | get capture0 | uniq | length
-    )
-    if $n_used != $n_offered {
-        rm -f $"($VRT).tmp"; rm $idx
-        error make {msg: $"gdalbuildvrt kept only ($n_used) of ($n_offered) tiles — the rest were silently skipped. Run it by hand to see the warnings."}
-    }
-    print $"  verified: all ($n_offered) tiles present"
-    rm $idx
-    mv $"($VRT).tmp" $VRT
-}
-
-# ── 2. Consolidate the VRT into ONE contiguous raster ─────────────────────────
-# No reprojection and no resampling — the tiles are already EPSG:25832 at 2 m.
-
-if ($DEM_TIF | path exists) {
-    print $"==> ($DEM_TIF) exists — reusing"
-} else {
-    print $"==> Consolidating DEM -> ($DEM_TIF) — one full pass"
-    let tmp = $"($DEM_TIF).tmp"
-    rm -f $tmp
-    (gdal_translate
-      --config GDAL_CACHEMAX 16384
-      -of GTiff
-      -a_nodata $NODATA
-      -co COMPRESS=ZSTD -co PREDICTOR=2 -co TILED=YES
-      -co NUM_THREADS=ALL_CPUS -co BIGTIFF=YES
-      $VRT $tmp)
-    mv $tmp $DEM_TIF
-}
-
-# ── 3. gdal_contour on the consolidated raster -> GPKG (EPSG:25832) ───────────
-
-# ONE PASS AT -i 10 GETS OOM-KILLED ON A RASTER THIS BIG. Bayern consolidates
-# to 180000 x 183750 (33 Gpx) and spans ~2860 m of relief, so a single
-# `gdal_contour -i 10` has to hold ~290 levels of growing line work in memory at
-# once. It was SIGKILLed by the OOM killer at 41 GB of 62 GB (2026-09-07).
-# Belgium survived only because it is 15 Gpx with 83 levels.
-#
-# The fix is the one already used for Spain (es/contours_parallel.sh): run
-# gdal_contour ten times at -i 100 with -off 0,10,...,90. Each pass carries a
-# tenth of the levels and a fraction of the memory, and the union is identical
-# to a single -i 10 run. Partials are merged with ogr2ogr -append.
-#
-# Resumable per offset: an existing partial that opens cleanly is skipped.
-const OFF_INTERVAL = 100
-const PARALLEL_OFF = 3                          # concurrent gdal_contour passes
-const CACHEMAX_MB  = 2048                       # per process
-
-if ($GPKG | path exists) {
-    print $"==> ($GPKG) already exists — delete it to re-generate; skipping"
-} else {
-    # Integer division: `/` yields a float, and a float-bounded range breaks
-    # outright when OFF_INTERVAL == INTERVAL (0..0.0).
-    let offsets = (0..(($OFF_INTERVAL // $INTERVAL) - 1) | each {|k| $k * $INTERVAL })
-    print $"==> Generating contours in ($offsets | length) offset passes \(-i ($OFF_INTERVAL), -off ($offsets | str join ', ')\)"
-
-    $offsets | par-each -t $PARALLEL_OFF {|off|
-        let part = $"($DATA_DIR)/nrw_contours_off($off).gpkg"
-        if ($part | path exists) {
-            print $"  skip offset ($off) — already done"
-        } else {
-            print $"  start offset ($off)"
-            (nice -n 10 gdal_contour
-              --config GDAL_CACHEMAX $CACHEMAX_MB
-              -f GPKG
-              -nln $TABLE
-              -i $OFF_INTERVAL
-              -off $off
-              -a $HEIGHT_COL
-              -snodata $NODATA
-              -lco SPATIAL_INDEX=NO
-              $DEM_TIF $"($part).tmp")
-            mv $"($part).tmp" $part
-            print $"  done  offset ($off)"
-        }
-    }
-
-    # Every partial must exist before merging, or the country silently loses a
-    # tenth of its contour levels — the same class of failure as merging a
-    # partial shading mosaic.
-    let missing = ($offsets | where {|off| not ($"($DATA_DIR)/nrw_contours_off($off).gpkg" | path exists) })
-    if ($missing | is-not-empty) {
-        error make {msg: $"offsets ($missing | str join ', ') produced no output — re-run; finished offsets are skipped"}
-    }
-
-    # Merge with `enumerate` rather than `first`/`skip`. Both of those take
-    # `oneof<table, binary, list<any>>` as pipeline input, and on this list they
-    # blew up with "can't convert float to oneof<table, binary, list<any>>"
-    # after all ten passes had already succeeded (2026-09-08) — an hour of
-    # contouring saved only by the partials still being on disk. `enumerate`
-    # turns the list into a table up front and the first/rest split becomes a
-    # plain index test, so there is no pipeline-input coercion left to fail.
-    print "==> Merging partials"
-    let tmp = $"($GPKG).tmp"
-    rm -f $tmp
-    for it in ($offsets | enumerate) {
-        let part = $"($DATA_DIR)/nrw_contours_off($it.item).gpkg"
-        if $it.index == 0 {
-            print $"  base   offset ($it.item)"
-            cp $part $tmp
-        } else {
-            print $"  append offset ($it.item)"
-            ogr2ogr -update -append -nln $TABLE $tmp $part
-        }
-    }
-    mv $tmp $GPKG
-    print $"==> Done -> ($GPKG). Partials left in ($DATA_DIR) — delete once verified."
-    print $"    Next: splitter-rs \(--source-epsg 25832\); it now creates the table and index itself."
+contours run {
+    code:         "denw"
+    data_dir:     $DATA_DIR
+    src_dir:      $SRC_DIR
+    vrt:          $"($DATA_DIR)/nrw_dem_2m.vrt"
+    dem_tif:      $"($DRIVE)/de_nw/nrw_dem_2m.tif"
+    gpkg:         $"($DRIVE)/de_nw/nrw_contours.gpkg"
+    table:        "cont_de_nw_dtm"                 # layer name inside the GPKG
+    height_col:   "height"
+    nodata:       "-9999"
+    epsg:         $EPSG
+    interval:     10
+    off_interval: 100
+    parallel_off: 3                                # concurrent gdal_contour passes
+    cachemax_mb:  2048                             # per process
 }

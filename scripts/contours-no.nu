@@ -9,7 +9,9 @@
 #             -> consolidate to ONE contiguous raster on the 18TB
 #             -> gdal_contour -> GPKG (EPSG:25833)
 #
-# TWO DIFFERENCES FROM contours-hr.nu, both because shading-no.nu did the work up front:
+# TWO DIFFERENCES FROM THE OLD RETILE-BASED contours-hr.nu, both because shading-no.nu
+# did the work up front. (contours-hr.nu has since been converted and now works the
+# same way; these notes record why the approach was adopted.)
 #
 #  * NO per-tile cropped VRTs. The Croatian script had to strip a 6 px overlap
 #    from every smooth/ tile with its own gdal_translate -srcwin, 62351 of them.
@@ -24,8 +26,7 @@
 #
 #    NOTE: the consolidation itself is NOT skipped — earlier notes of mine said
 #    so and that was wrong. gdal_contour over a 48k-tile VRT is pathologically
-#    slow (scattered reads, tiles reopened per scanline), exactly as the Croatian
-#    header describes, so the tiles still have to be merged into one contiguous
+#    slow (scattered reads, tiles reopened per scanline), so the tiles still have to be merged into one contiguous
 #    raster first. What changed is that this pass now only copies 2 m data
 #    instead of reading ~900 GB of 1 m data and resampling it.
 #
@@ -52,77 +53,35 @@
 # (delete to force a rebuild). Run via:
 #   nice ~/miniforge3/bin/conda run --no-capture-output -n geo nu ~/fm/freemap-outdoor-map/contours-no.nu
 
+use lib/gdal.nu
+use lib/contours.nu
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-const DATA_DIR   = "/mnt/osm/no"
-const SRC_DIR    = "/mnt/osm/no/smooth2m"                       # 2 m tiles from shading-no.nu
-const INTERVAL   = 10                                           # contour interval, metres
-const HEIGHT_COL = "height"
-const NODATA     = "-9999"
-const TABLE      = "cont_no_dmr"                                # layer name inside the GPKG
-const VRT        = "norway_dem_2m.vrt"
-const DEM_TIF    = "/media/martin/18TB/no/norway_dem_2m.tif"    # consolidated DEM (EPSG:25833)
-const GPKG       = "/mnt/osm/no/norway_contours.gpkg"           # splitter input (EPSG:25833)
+const DATA_DIR = "/mnt/osm/no"
+const SRC_DIR  = "/mnt/osm/no/smooth2m"
+const EPSG     = "EPSG:25833"
 
-cd $DATA_DIR
+gdal require-proj $EPSG "contours-no.nu"
 
-if (not ($SRC_DIR | path exists)) or ((glob $"($SRC_DIR)/*.tif" | length) == 0) {
-    error make {msg: $"($SRC_DIR) is empty — run shading-no.nu first"}
-}
+let DRIVE = (gdal find-drive)
+print $"==> drive: ($DRIVE)"
 
-# ── 1. National VRT straight from the 2 m tiles (no cropping needed) ──────────
-
-if ($VRT | path exists) {
-    print $"==> ($VRT) exists — reusing"
-} else {
-    print "==> Building national VRT from the 2 m tiles"
-    let idx = "_idx_no_cont"
-    glob $"($SRC_DIR)/*.tif" | save -f $idx
-    print $"  (open $idx | lines | length) tiles"
-    gdalbuildvrt -vrtnodata $NODATA -input_file_list $idx $"($VRT).tmp" o> /dev/null
-    rm $idx
-    mv $"($VRT).tmp" $VRT
-}
-
-# ── 2. Consolidate the VRT into ONE contiguous raster ─────────────────────────
-# No reprojection and no resampling — the tiles are already EPSG:25833 at 2 m.
-# This exists purely so gdal_contour can read sequentially instead of reopening
-# tiles per scanline.
-
-if ($DEM_TIF | path exists) {
-    print $"==> ($DEM_TIF) exists — reusing"
-} else {
-    print $"==> Consolidating DEM -> ($DEM_TIF) — one full pass"
-    let tmp = $"($DEM_TIF).tmp"
-    rm -f $tmp
-    (gdal_translate
-      --config GDAL_CACHEMAX 16384
-      -of GTiff
-      -a_nodata $NODATA
-      -co COMPRESS=ZSTD -co PREDICTOR=2 -co TILED=YES
-      -co NUM_THREADS=ALL_CPUS -co BIGTIFF=YES
-      $VRT $tmp)
-    mv $tmp $DEM_TIF
-}
-
-# ── 3. gdal_contour on the consolidated raster -> GPKG (EPSG:25833) ───────────
-# Single-threaded but reads sequentially. Resumable: delete the GPKG.
-
-if ($GPKG | path exists) {
-    print $"==> ($GPKG) already exists — delete it to re-generate; skipping"
-} else {
-    print $"==> Generating contours from ($DEM_TIF) -> ($GPKG) — this will take hours"
-    let tmp = $"($GPKG).tmp"
-    rm -f $tmp
-    (gdal_contour
-      --config GDAL_CACHEMAX 16384
-      -f GPKG
-      -nln $TABLE
-      -i $INTERVAL
-      -a $HEIGHT_COL
-      -snodata $NODATA
-      -lco SPATIAL_INDEX=NO
-      $DEM_TIF $tmp)
-    mv $tmp $GPKG
-    print $"==> Done -> ($GPKG). Next: run splitter-rs \(--source-epsg 25833\); see header."
+contours run {
+    code:         "no"
+    data_dir:     $DATA_DIR
+    src_dir:      $SRC_DIR
+    vrt:          $"($DATA_DIR)/norway_dem_2m.vrt"
+    dem_tif:      $"($DRIVE)/no/norway_dem_2m.tif"
+    gpkg:         "/mnt/osm/no/norway_contours.gpkg"
+    table:        "cont_no_dmr"                 # layer name inside the GPKG
+    height_col:   "height"
+    nodata:       "-9999"
+    epsg:         $EPSG
+    interval:     10
+    off_interval: 10
+    parallel_off: 3                                # concurrent gdal_contour passes
+    cachemax_mb:  16384                            # PER PROCESS: fine for one pass, but raising
+                                                   # off_interval runs up to 3 at once = 48 GB of 62.
+                                                   # Drop to 2048 when you do.
 }
