@@ -111,8 +111,9 @@ pub struct Cli {
     )]
     pub hillshading_max_open_per_country: usize,
 
-    /// Seconds between hillshading dataset and database pool statistics in the log; 0 disables them.
-    #[arg(long, env = "MAPRENDER_POOL_STATS_INTERVAL_SECS", default_value_t = 60)]
+    /// Seconds between hillshading dataset and database pool statistics in the log.
+    /// Off by default: the summaries are verbose and only wanted while chasing a stall.
+    #[arg(long, env = "MAPRENDER_POOL_STATS_INTERVAL_SECS", default_value_t = 0)]
     pub pool_stats_interval_secs: u64,
 
     /// Country contour sources. Comma-separated country codes; the token `_` includes
