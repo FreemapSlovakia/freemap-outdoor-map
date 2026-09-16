@@ -281,9 +281,18 @@ let corners = (
 let png_px = 900
 for r in $rendered {
     let png = $"($OUT_DIR)/z($r.zoom).png"
+    # CUBIC, NOT NEAREST — this line decides whether the comparison is honest.
+    # All the crops are blown up to the same pixel size so they can be laid side
+    # by side; with -r nearest the coarser zooms come out as hard blocks, which
+    # reads as "much worse" for a reason that has nothing to do with how much
+    # terrain detail they carry. That is not what a map client does when it
+    # overzooms, and judging z16 against z17 from nearest-neighbour crops
+    # overstates the case for the finer zoom badly enough to have caused a wrong
+    # call once already. Cubic matches the client, and matches the -r cubic used
+    # for the numeric comparison above, so the picture and the statistics agree.
     (gdal_translate -q -of PNG
       -projwin $corners.0 $corners.3 $corners.2 $corners.1
-      -outsize $png_px $png_px -r nearest
+      -outsize $png_px $png_px -r cubic
       $r.file $png o> /dev/null)
     print $"    ($png | path basename)"
 }
