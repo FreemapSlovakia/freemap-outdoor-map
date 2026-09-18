@@ -41,12 +41,12 @@
 #   report.json       the numbers, plus the extrapolated disk cost per zoom
 #
 # Run via:
-#   nice ~/miniforge3/bin/conda run --no-capture-output -n geo nu ~/fm/freemap-outdoor-map/scripts/sample-zoom-sn.nu
+#   nice ~/miniforge3/bin/conda run --no-capture-output -n geo nu ~/fm/freemap-outdoor-map/scripts/sample-zoom-de-sn.nu
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 const SRC_DIR = "/run/media/martin/2190983A5767510F/DGM1/Sachsen"
-const OUT_DIR = "/run/media/martin/18TB/sn/zoom-sample"
+const OUT_DIR = "/run/media/martin/18TB/de_sn/zoom-sample"
 const NODATA  = "-9999"
 const ZOOMS   = [15 16 17]                  # ascending; the last is the reference
 # Saxon DGM1 tiles are 2 x 2 km, named dgm1_{E}_{N}_2_sn where E carries the UTM

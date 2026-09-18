@@ -38,7 +38,7 @@
 #
 # Resumable: a tile whose .tif already exists is skipped, and partial downloads
 # resume with curl -C -. Run via:
-#   nice ~/miniforge3/bin/conda run --no-capture-output -n geo nu ~/fm/freemap-outdoor-map/scripts/download-sn.nu
+#   nice ~/miniforge3/bin/conda run --no-capture-output -n geo nu ~/fm/freemap-outdoor-map/scripts/download-de-sn.nu
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 

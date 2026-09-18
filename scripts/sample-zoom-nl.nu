@@ -1,7 +1,7 @@
 #!/usr/bin/env nu
 
 # Render one Netherlands window at several zooms so shading-nl.nu's ZOOM is set
-# from evidence rather than analogy. Port of sample-zoom-sn.nu, method unchanged:
+# from evidence rather than analogy. Port of sample-zoom-de-sn.nu, method unchanged:
 # render each zoom through the production pipeline, upscale the coarser ones onto
 # the finest zoom's grid (what a client does when it overzooms) and report the
 # share of pixels that differ.
