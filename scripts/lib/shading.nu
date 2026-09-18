@@ -291,11 +291,41 @@ def process-window [w: record, cfg: record, tr: string]: nothing -> nothing {
 
 # ── Mosaic ────────────────────────────────────────────────────────────────────
 
+# Extent snapped outward so BOTH the origin and the dimensions are whole
+# multiples of 2^levels pixels.
+#
+# The tiles are already on the global pixel grid (gdalwarp -tap, and the
+# Mercator origin sits an exact 2^(zoom+7) pixels from projected zero), but
+# their union is not. A pyramid built on a ragged extent lands off the tile
+# grid, so GDAL cannot hand back a stored overview verbatim: every tile is
+# resampled and low zooms sit up to half a pixel off. The padding is masked
+# out, and costs ~1% of area — the Netherlands needed +1317 x +3113 px.
+#
+# levels tracks gdaladdo, which stops once a level fits in 256 px; tying the
+# two together keeps the padding proportionate on small countries.
+def aligned-extent [vrt: string, tr: float]: nothing -> list<string> {
+    let info = (gdalinfo -json $vrt | from json)
+    let ul = $info.cornerCoordinates.upperLeft
+    let lr = $info.cornerCoordinates.lowerRight
+    let maxdim = ([$info.size.0 $info.size.1] | math max)
+    let levels = ([1 ((($maxdim / 256) | math log 2) | math ceil)] | math max)
+    let q = $tr * (2 ** $levels)
+    let xmin = ((($ul.0 / $q) | math floor) * $q)
+    let ymax = ((($ul.1 / $q) | math ceil) * $q)
+    let xmax = ((($lr.0 / $q) | math ceil) * $q)
+    let ymin = ((($lr.1 / $q) | math floor) * $q)
+    print $"  aligning to 2^($levels) px: ($info.size.0)x($info.size.1) -> (($xmax - $xmin) / $tr | math round)x(($ymax - $ymin) / $tr | math round)"
+    [-te ($xmin | into string) ($ymin | into string) ($xmax | into string) ($ymax | into string)]
+}
+
 def merge-tiles [cfg: record]: nothing -> nothing {
     print "==> Merging tiles"
     let tiles = (glob $"($cfg.tiles_dir)/*.tif")
     print $"  ($tiles | length) tiles"
     build-vrt $tiles "shading.vrt" --index "shading_index"
+
+    let te = (aligned-extent "shading.vrt" (zoom-tr $cfg.zoom | into float))
+    build-vrt $tiles "shading.vrt" --extra $te --index "shading_index"
 
     sed -i 's|<ColorInterp>Alpha</ColorInterp>|<ColorInterp>Undefined</ColorInterp>|g' shading.vrt
 
