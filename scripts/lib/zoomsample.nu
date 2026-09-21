@@ -81,13 +81,36 @@ def alpha-calc []: nothing -> string {
 # claims parentheses, so inlining python source into an interpolated string
 # mangles every call. Plain single-quoted strings, arguments via argv.
 def write-helpers [d: string]: nothing -> nothing {
+    # COMPOSITE OVER WHITE BEFORE DIFFERENCING. The renders are RGBA and the
+    # alpha carries the shading strength, so flat ground comes out almost fully
+    # transparent — an East Frisian marsh window measured alpha 15/255, i.e.
+    # 94% invisible. Differencing the colour bands alone then compares pixels
+    # nobody sees, and reports noise as detail: that marsh scored 44.65% on the
+    # raw bands against 3.39% composited, a 13x overstatement, and ranked as
+    # losing more at z16 than the Harz. Hilly windows are overstated too, just
+    # less (Harz 28.18% raw against 21.61% composited).
+    #
+    # The map paints these tiles over a light basemap, so compositing over white
+    # is what the viewer actually gets. Compare the worst channel rather than the
+    # mean so a shift in one colour is not diluted by two that held still.
     '
 import json, sys
 import numpy as np
 from osgeo import gdal
-a = gdal.Open(sys.argv[1]).ReadAsArray().astype("float32")
-b = gdal.Open(sys.argv[2]).ReadAsArray().astype("float32")
-d = np.abs(a - b)
+
+def over_white(p):
+    a = gdal.Open(p).ReadAsArray().astype("float32")
+    if a.ndim == 2:                       # single band: nothing to composite
+        return a[None, ...]
+    if a.shape[0] < 4:                    # no alpha: take it as opaque
+        return a[:3]
+    al = a[3:4] / 255.0
+    return a[:3] * al + 255.0 * (1.0 - al)
+
+a = over_white(sys.argv[1])
+b = over_white(sys.argv[2])
+n = min(a.shape[1], b.shape[1]); m = min(a.shape[2], b.shape[2])
+d = np.abs(a[:, :n, :m] - b[:, :n, :m]).max(axis=0)
 print(json.dumps({
     "mean": round(float(d.mean()), 3),
     "p95": round(float(np.percentile(d, 95)), 2),
@@ -240,8 +263,9 @@ def render-site [site: record, cfg: record, d: string, vrt: string]: nothing -> 
             let ny = ([$refi.size.1 $upi.size.1] | math min)
             let a = $"($sd)/cmp_ref_($r.zoom).tif"
             let b = $"($sd)/cmp_up_($r.zoom).tif"
-            gdal_translate -q -srcwin 0 0 $nx $ny -b 1 ...$CO $ref.file $a o> /dev/null
-            gdal_translate -q -srcwin 0 0 $nx $ny -b 1 ...$CO $up $b o> /dev/null
+            # All four bands, NOT -b 1: diff.py needs the alpha to composite.
+            gdal_translate -q -srcwin 0 0 $nx $ny ...$CO $ref.file $a o> /dev/null
+            gdal_translate -q -srcwin 0 0 $nx $ny ...$CO $up $b o> /dev/null
             let stats = (python3 $"($d)/diff.py" $a $b | from json)
             print $"    z($r.zoom) -> z($ref.zoom): mean ($stats.mean)/255, p95 ($stats.p95), ($stats.pct_over_5)% off by >5"
             {zoom: $r.zoom, vs: $ref.zoom, ...$stats}
