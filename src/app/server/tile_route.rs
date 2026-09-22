@@ -306,9 +306,10 @@ fn whole_seconds(time: SystemTime) -> SystemTime {
 }
 
 /// The codes a cached tile carries, from its head bytes alone — the `COM` segment
-/// is written first, so the JPEG is never decoded and never fully read. `None`
-/// when the tile has no segment, which is how one cached before tiles carried
-/// their attribution goes out without an `attr` metric instead of breaking.
+/// sits among the first few, so the JPEG is never decoded and never fully read.
+/// `None` when the tile has no segment, which is how one cached before tiles
+/// carried their attribution goes out without an `attr` metric instead of
+/// breaking.
 async fn read_com(file: &mut fs::File) -> Option<Attribution> {
     let mut head = [0u8; JPEG_COM_HEAD_LEN];
     let mut read = 0;

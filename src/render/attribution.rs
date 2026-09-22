@@ -118,9 +118,8 @@ fn lengthen(token: &str) -> String {
 /// itself.
 const MAX_COM_PAYLOAD: usize = u16::MAX as usize - 2;
 
-/// Writes the codes into the JPEG as a `COM` segment placed first, right after
-/// `SOI`, so that a reader gets them from a fixed offset with no JPEG parser:
-/// `FF D8 | FF FE | len_hi len_lo | payload`.
+/// Writes the codes into the JPEG as a `COM` segment, placed right after the JFIF
+/// `APP0` that must itself immediately follow `SOI`.
 ///
 /// A payload too long for one segment is dropped rather than truncated: a
 /// half-code list would credit the wrong sources, where none at all just leaves
@@ -137,29 +136,73 @@ pub fn insert_jpeg_com(jpeg: &mut Vec<u8>, payload: &str) {
     segment.extend_from_slice(&((payload.len() + 2) as u16).to_be_bytes());
     segment.extend_from_slice(payload);
 
-    jpeg.splice(2..2, segment);
+    let at = after_app0(jpeg);
+
+    jpeg.splice(at..at, segment);
 }
 
-/// Bytes of a JPEG's head that must be readable for [`parse_jpeg_com`] to see the
-/// whole segment. Serving a cached tile reads this much and no more.
+/// Where the first `APP0` ends, or straight after `SOI` if the encoder wrote none.
+/// Keeping `APP0` first is what makes the file still a conformant JFIF.
+fn after_app0(jpeg: &[u8]) -> usize {
+    if jpeg.len() >= 6 && jpeg[2..4] == [0xFF, 0xE0] {
+        let end = 4 + u16::from_be_bytes([jpeg[4], jpeg[5]]) as usize;
+
+        if end <= jpeg.len() {
+            return end;
+        }
+    }
+
+    2
+}
+
+/// Bytes of a JPEG's head that must be readable for [`parse_jpeg_com`] to find the
+/// segment. Serving a cached tile reads this much and no more.
 pub const JPEG_COM_HEAD_LEN: usize = 1024;
 
-/// The payload of a `COM` segment written by [`insert_jpeg_com`], or `None` when
-/// the JPEG does not start with one — which is how a tile cached before tiles
-/// carried attribution is served without codes instead of breaking.
+/// The payload of the first `COM` segment, or `None` when there is none before the
+/// image data — which is how a tile cached before tiles carried attribution is
+/// served without codes instead of breaking.
+///
+/// Walks the segment chain rather than trusting a fixed offset, so it does not
+/// depend on which `APP` segments the encoder happens to write, and reads tiles
+/// written when the `COM` came first just the same.
 pub fn parse_jpeg_com(head: &[u8]) -> Option<&str> {
-    if head.len() < 6 || head[0..2] != [0xFF, 0xD8] || head[2..4] != [0xFF, 0xFE] {
+    if head.len() < 2 || head[0..2] != [0xFF, 0xD8] {
         return None;
     }
 
-    let length = u16::from_be_bytes([head[4], head[5]]) as usize;
-    let end = 4usize.checked_add(length)?;
+    let mut at = 2;
 
-    if length < 2 || end > head.len() {
-        return None;
+    // Each step advances by at least 4, so this always terminates.
+    while at + 4 <= head.len() {
+        if head[at] != 0xFF {
+            return None;
+        }
+
+        let marker = head[at + 1];
+
+        // Start of scan, or end of image: the entropy-coded data begins here and
+        // any COM past it is not one of ours.
+        if marker == 0xDA || marker == 0xD9 {
+            return None;
+        }
+
+        let length = u16::from_be_bytes([head[at + 2], head[at + 3]]) as usize;
+
+        if length < 2 {
+            return None;
+        }
+
+        let end = at + 2 + length;
+
+        if marker == 0xFE {
+            return (end <= head.len()).then(|| std::str::from_utf8(&head[at + 4..end]).ok())?;
+        }
+
+        at = end;
     }
 
-    std::str::from_utf8(&head[6..end]).ok()
+    None
 }
 
 /// `tEXt` keyword for the code list. Not one of PNG's registered keywords, so it
@@ -228,18 +271,26 @@ mod tests {
         assert_eq!(payload, "cat,o,sde_by");
         assert_eq!(attribution.encode_spaced(), "cat o sde_by");
 
+        // SOI, then a 18-byte JFIF APP0, then a scan header.
         let mut jpeg = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10];
+        jpeg.extend_from_slice(&[0; 14]);
+        jpeg.extend_from_slice(&[0xFF, 0xDA, 0x00, 0x08]);
+
         insert_jpeg_com(&mut jpeg, &payload);
 
-        assert_eq!(&jpeg[0..4], &[0xFF, 0xD8, 0xFF, 0xFE]);
+        // APP0 still immediately follows SOI, so the file is still a JFIF…
+        assert_eq!(&jpeg[0..4], &[0xFF, 0xD8, 0xFF, 0xE0]);
+        // …and the COM sits right after it.
+        assert_eq!(&jpeg[20..24], &[0xFF, 0xFE, 0x00, (payload.len() + 2) as u8]);
+
         assert_eq!(parse_jpeg_com(&jpeg), Some(payload.as_str()));
         assert_eq!(
             Attribution::decode(parse_jpeg_com(&jpeg).expect("segment present")),
             attribution
         );
 
-        // The original JPEG follows the segment untouched.
-        assert_eq!(&jpeg[jpeg.len() - 4..], &[0xFF, 0xE0, 0x00, 0x10]);
+        // The scan header still trails the file.
+        assert_eq!(&jpeg[jpeg.len() - 4..], &[0xFF, 0xDA, 0x00, 0x08]);
     }
 
     #[test]
@@ -261,6 +312,24 @@ mod tests {
         assert_eq!(parse_jpeg_com(&[]), None);
         // Truncated head: the segment claims more bytes than were read.
         assert_eq!(parse_jpeg_com(&[0xFF, 0xD8, 0xFF, 0xFE, 0xFF, 0x00]), None);
+        // A COM only past the start of scan is the encoder's, not ours.
+        assert_eq!(
+            parse_jpeg_com(&[
+                0xFF, 0xD8, 0xFF, 0xDA, 0x00, 0x08, 0xFF, 0xFE, 0x00, 0x03, b'x'
+            ]),
+            None
+        );
+    }
+
+    /// Tiles cached when the segment was written first must keep resolving, which
+    /// is what makes the move a deploy rather than a cache purge.
+    #[test]
+    fn a_segment_written_before_app0_is_still_found() {
+        let mut jpeg = vec![0xFF, 0xD8, 0xFF, 0xFE, 0x00, 0x05, b'o', b',', b'x'];
+        jpeg.extend_from_slice(&[0xFF, 0xE0, 0x00, 0x10]);
+        jpeg.extend_from_slice(&[0; 14]);
+
+        assert_eq!(parse_jpeg_com(&jpeg), Some("o,x"));
     }
 
     #[test]

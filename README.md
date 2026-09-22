@@ -363,8 +363,9 @@ Endpoint: `/service`
 ### Attribution
 
 Every rendered tile carries the datasets that contributed a pixel to it, as a JPEG `COM`
-segment inserted as the first segment (`FF D8 | FF FE | len_hi len_lo | payload`), so a
-reader takes them from a fixed offset without a JPEG parser.
+segment (`FF FE | len_hi len_lo | payload`) placed right after the JFIF `APP0`, which keeps
+the file a conformant JFIF. Reading it back walks the segment chain over the first kilobyte
+— no fixed offset to depend on which `APP` segments the encoder writes, and no decoding.
 
 The API names a dataset by a namespaced code — `osm`, `shading:<key>`, `contours:<key>`,
 where `<key>` is a `--hillshading-hierarchy` / `--contour-countries` key or `_` for a global
