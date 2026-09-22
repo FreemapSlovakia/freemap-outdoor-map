@@ -509,7 +509,9 @@ mod tests {
         use super::whole_seconds;
         use std::time::{Duration, SystemTime};
 
-        let mtime = SystemTime::UNIX_EPOCH + Duration::from_nanos(1_757_000_000_734_000_000);
+        let mtime = SystemTime::UNIX_EPOCH
+            + Duration::from_secs(1_757_000_000)
+            + Duration::from_millis(734);
         // What `Last-Modified` said, and so what comes back in If-Modified-Since.
         let sent = SystemTime::UNIX_EPOCH + Duration::from_secs(1_757_000_000);
 
