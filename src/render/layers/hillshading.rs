@@ -430,25 +430,24 @@ pub fn paint_surface(
     Ok(())
 }
 
-pub fn mask_covers_tile(surfaces: &mut [&mut ImageSurface]) -> Result<bool, LayerRenderError> {
-    if surfaces.is_empty() {
-        return Ok(false);
-    }
+/// Which tile pixels a surface has a non-zero alpha at, one bit each.
+///
+/// Both what covers the tile and which dataset was credited for a pixel come out
+/// of the same question — "is anything painted here" — so both are answered from
+/// these, with intersection and subtraction a word at a time. 8 KiB per surface
+/// for a 256 px tile.
+pub struct MaskBits {
+    words: Vec<u64>,
+    pixels: usize,
+}
 
-    let width = surfaces[0].width() as usize;
-    let height = surfaces[0].height() as usize;
+impl MaskBits {
+    pub fn from_surface(surface: &mut ImageSurface) -> Result<Self, LayerRenderError> {
+        let width = surface.width() as usize;
+        let height = surface.height() as usize;
+        let pixels = width * height;
 
-    if width == 0 || height == 0 {
-        return Ok(false);
-    }
-
-    let mut coverage = vec![false; width * height];
-    let mut remaining = coverage.len();
-
-    for surface in surfaces {
-        if surface.width() as usize != width || surface.height() as usize != height {
-            return Ok(false);
-        }
+        let mut words = vec![0u64; pixels.div_ceil(64)];
 
         surface.flush();
         let stride = surface.stride() as usize;
@@ -456,28 +455,213 @@ pub fn mask_covers_tile(surfaces: &mut [&mut ImageSurface]) -> Result<bool, Laye
 
         for y in 0..height {
             let row_start = y * stride;
-            let cov_row_start = y * width;
+            let bit_row_start = y * width;
 
             for x in 0..width {
-                let cov_index = cov_row_start + x;
-
-                if coverage[cov_index] {
-                    continue;
+                if data[row_start + x * 4 + 3] != 0 {
+                    let bit = bit_row_start + x;
+                    words[bit / 64] |= 1 << (bit % 64);
                 }
+            }
+        }
 
-                let alpha = data[row_start + x * 4 + 3];
+        Ok(Self { words, pixels })
+    }
 
-                if alpha != 0 {
-                    coverage[cov_index] = true;
-                    remaining -= 1;
+    /// Every pixel of the tile is painted.
+    pub fn is_full(&self) -> bool {
+        self.pixels != 0
+            && self
+                .words
+                .iter()
+                .enumerate()
+                .all(|(i, word)| *word == self.full_word(i))
+    }
 
-                    if remaining == 0 {
-                        return Ok(true);
+    /// Any pixel painted here and by none of `minus` — i.e. whether this surface
+    /// survives the `DestOut` subtraction of the better-priority masks and so
+    /// really did contribute to the tile.
+    pub fn has_any_outside(&self, minus: &[&Self]) -> bool {
+        self.words.iter().enumerate().any(|(i, word)| {
+            let cut = minus
+                .iter()
+                .filter(|other| other.pixels == self.pixels)
+                .fold(0u64, |acc, other| acc | other.words[i]);
+
+            word & !cut != 0
+        })
+    }
+
+    /// Any pixel painted in both this and `other`, and by none of `minus`. A mask
+    /// says the DEM has data there; the shading surface's own alpha says whether
+    /// that data drew anything, and only the intersection was really contributed.
+    pub fn has_any_shared_outside(&self, other: &Self, minus: &[&Self]) -> bool {
+        if other.pixels != self.pixels {
+            return self.has_any_outside(minus);
+        }
+
+        self.words.iter().enumerate().any(|(i, word)| {
+            let cut = minus
+                .iter()
+                .filter(|other| other.pixels == self.pixels)
+                .fold(0u64, |acc, other| acc | other.words[i]);
+
+            word & other.words[i] & !cut != 0
+        })
+    }
+
+    /// The union, or `None` when there is nothing to unite or the surfaces disagree
+    /// on size (which would make the bit indices mean different pixels).
+    pub fn union<'a>(masks: impl IntoIterator<Item = &'a Self>) -> Option<Self> {
+        let mut masks = masks.into_iter();
+        let first = masks.next()?;
+
+        let mut union = Self {
+            words: first.words.clone(),
+            pixels: first.pixels,
+        };
+
+        for mask in masks {
+            if mask.pixels != union.pixels {
+                return None;
+            }
+
+            for (word, other) in union.words.iter_mut().zip(&mask.words) {
+                *word |= other;
+            }
+        }
+
+        Some(union)
+    }
+
+    /// The bits of word `i` that correspond to real pixels; the last word of a tile
+    /// whose pixel count is not a multiple of 64 is only partly used.
+    fn full_word(&self, i: usize) -> u64 {
+        let used = (self.pixels - i * 64).min(64);
+
+        if used == 64 { u64::MAX } else { (1 << used) - 1 }
+    }
+}
+
+pub fn mask_covers_tile(surfaces: &mut [&mut ImageSurface]) -> Result<bool, LayerRenderError> {
+    let mut masks = Vec::with_capacity(surfaces.len());
+
+    for surface in surfaces {
+        masks.push(MaskBits::from_surface(surface)?);
+    }
+
+    Ok(MaskBits::union(&masks).is_some_and(|union| union.is_full()))
+}
+
+#[cfg(test)]
+mod mask_bits_tests {
+    use super::MaskBits;
+    use cairo::{Format, ImageSurface};
+
+    /// A surface whose alpha is non-zero exactly where `painted` says.
+    fn surface(width: i32, height: i32, painted: impl Fn(i32, i32) -> bool) -> ImageSurface {
+        let mut surface = ImageSurface::create(Format::ARgb32, width, height).expect("surface");
+
+        {
+            let stride = surface.stride() as usize;
+            let mut data = surface.data().expect("surface data");
+
+            for y in 0..height {
+                for x in 0..width {
+                    if painted(x, y) {
+                        data[y as usize * stride + x as usize * 4 + 3] = 255;
                     }
                 }
             }
         }
+
+        surface
     }
 
-    Ok(false)
+    fn bits(width: i32, height: i32, painted: impl Fn(i32, i32) -> bool) -> MaskBits {
+        MaskBits::from_surface(&mut surface(width, height, painted)).expect("bits")
+    }
+
+    #[test]
+    fn a_tile_is_full_only_when_every_pixel_is_painted() {
+        // 8x8 is exactly one word; 9x9 is 81 bits, so the last word is part used and
+        // its unused bits must not be read as unpainted.
+        for (w, h) in [(8, 8), (9, 9), (16, 4), (13, 7)] {
+            assert!(bits(w, h, |_, _| true).is_full(), "{w}x{h} all painted");
+            assert!(!bits(w, h, |_, _| false).is_full(), "{w}x{h} none painted");
+
+            // One hole anywhere, including in the last partial word.
+            let last = w * h - 1;
+            assert!(
+                !bits(w, h, |x, y| y * w + x != last).is_full(),
+                "{w}x{h} missing its last pixel"
+            );
+            assert!(
+                !bits(w, h, |x, y| y * w + x != 0).is_full(),
+                "{w}x{h} missing its first pixel"
+            );
+        }
+
+        // Cairo will not make a zero-size surface, so build the degenerate case by
+        // hand: it must cover nothing rather than vacuously everything.
+        assert!(
+            !MaskBits {
+                words: Vec::new(),
+                pixels: 0
+            }
+            .is_full()
+        );
+    }
+
+    #[test]
+    fn a_dataset_survives_only_where_no_better_one_covers_it() {
+        // Left half painted, and a better dataset covering the left quarter.
+        let mask = bits(16, 4, |x, _| x < 8);
+        let better = bits(16, 4, |x, _| x < 4);
+        let covering = bits(16, 4, |x, _| x < 8);
+
+        assert!(mask.has_any_outside(&[]));
+        assert!(mask.has_any_outside(&[&better]));
+        // Fully subtracted: nothing of it reaches the tile.
+        assert!(!mask.has_any_outside(&[&covering]));
+        // Several subtractions combine.
+        let right = bits(16, 4, |x, _| (4..8).contains(&x));
+        assert!(!mask.has_any_outside(&[&better, &right]));
+    }
+
+    #[test]
+    fn credit_needs_the_mask_and_the_shading_to_overlap() {
+        let mask = bits(16, 4, |x, _| x < 8);
+
+        // The DEM has data across the left half but drew only in its right part.
+        let painted = bits(16, 4, |x, _| (6..12).contains(&x));
+        assert!(mask.has_any_shared_outside(&painted, &[]));
+
+        // …and a better dataset takes exactly that part away.
+        let better = bits(16, 4, |x, _| (6..8).contains(&x));
+        assert!(!mask.has_any_shared_outside(&painted, &[&better]));
+
+        // Data everywhere, drawn nowhere.
+        let blank = bits(16, 4, |_, _| false);
+        assert!(!mask.has_any_shared_outside(&blank, &[]));
+
+        // Drawn only outside the mask.
+        let elsewhere = bits(16, 4, |x, _| x >= 8);
+        assert!(!mask.has_any_shared_outside(&elsewhere, &[]));
+    }
+
+    #[test]
+    fn the_union_needs_the_masks_to_agree_on_size() {
+        let left = bits(16, 4, |x, _| x < 8);
+        let right = bits(16, 4, |x, _| x >= 8);
+
+        assert!(MaskBits::union([&left, &right]).expect("union").is_full());
+        assert!(!MaskBits::union([&left]).expect("union").is_full());
+        assert!(MaskBits::union([]).is_none());
+
+        // Different pixel counts mean the bit indices are different pixels, so the
+        // union would be nonsense rather than merely wrong.
+        let other = bits(8, 9, |_, _| true);
+        assert!(MaskBits::union([&left, &other]).is_none());
+    }
 }

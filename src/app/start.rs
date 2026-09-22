@@ -1,11 +1,14 @@
 use crate::app::{
     cli::{Cli, TileVariantInput},
-    server::{ServerOptions, TileVariantOptions, start_server},
+    server::{LicenseCatalog, ServerOptions, TileVariantOptions, start_server},
     tile_invalidation,
     tile_processing_worker::TileProcessingWorker,
     tile_processor::{TileProcessingConfig, VariantConfig},
 };
-use crate::render::{RenderConfig, RenderWorkerPool, set_fonts_path, set_mapping_path};
+use crate::render::{
+    ContourCountries, FALLBACK_KEY, RenderConfig, RenderWorkerPool, set_fonts_path,
+    set_mapping_path,
+};
 use deadpool_postgres::Config;
 use dotenvy::dotenv;
 use geo::{Coord, Geometry, MapCoordsInPlace};
@@ -35,6 +38,47 @@ pub fn start() {
     let tile_variants = match build_tile_variants(&cli) {
         Ok(config) => config,
         Err(err) => panic!("invalid tile route configuration: {err}"),
+    };
+
+    let licenses = {
+        // Only what can actually be credited: the hierarchy's own datasets plus the
+        // global fallback. A feature-line-mask country's dataset paints no shading.
+        let mut shading_keys: Vec<&str> = cli
+            .hillshading_hierarchy
+            .iter()
+            .flat_map(|hierarchy| hierarchy.entries().iter().map(|entry| entry.country))
+            .collect();
+
+        let mut contour_keys: Vec<&str> = cli
+            .contour_countries
+            .iter()
+            .flat_map(|countries| countries.entries().iter().map(|entry| entry.country))
+            .collect();
+
+        if cli.hillshading_hierarchy.is_some() {
+            shading_keys.push(FALLBACK_KEY);
+        }
+
+        if cli
+            .contour_countries
+            .as_ref()
+            .is_some_and(ContourCountries::has_fallback)
+        {
+            contour_keys.push(FALLBACK_KEY);
+        }
+
+        let (licenses, warnings) = LicenseCatalog::build(
+            cli.hillshading_base_path.as_deref(),
+            &shading_keys,
+            &contour_keys,
+            cli.licenses.as_deref(),
+        );
+
+        for warning in warnings {
+            eprintln!("attribution: {warning}");
+        }
+
+        licenses
     };
 
     let tile_processing_variants = match build_tile_processing_variants(&cli) {
@@ -181,6 +225,7 @@ pub fn start() {
             max_export_pixels: cli.max_export_pixels,
             max_parallel_exports: cli.max_parallel_exports,
             export_abandon_grace: std::time::Duration::from_secs(cli.export_abandon_grace_secs),
+            licenses,
         },
     )) {
         eprintln!("Server stopped with error: {err}");

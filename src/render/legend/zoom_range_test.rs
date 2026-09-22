@@ -48,6 +48,7 @@ fn render(
         svg_repo,
     )
     .expect("legend item rendered")
+    .bytes
 }
 
 /// Whether anything of the item itself ends up on the tile — its background landcover is

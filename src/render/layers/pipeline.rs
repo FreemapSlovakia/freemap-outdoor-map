@@ -7,6 +7,7 @@ use crate::render::{
 };
 use crate::render::{
     Feature, ImageFormat,
+    attribution::Attribution,
     collision::Collision,
     ctx::Ctx,
     db_pool_stats,
@@ -347,7 +348,7 @@ pub fn render(
     handle: Handle,
     size: Size<u32>,
     svg_repo: &mut SvgRepo,
-) -> Result<(), RenderError> {
+) -> Result<Attribution, RenderError> {
     let _span = tracy_client::span!("render_tile::draw");
 
     let bbox = request.bbox;
@@ -386,6 +387,10 @@ pub fn render(
         legend,
         place_type_overrides,
     });
+
+    // Filled in by the layers that know which dataset a pixel came from; the
+    // shading/contour step is the only one, since everything else is OSM.
+    let attribution: Rc<RefCell<Attribution>> = Rc::default();
 
     let coverage_geometry = if ctx.legend.is_none()
         && matches!(request.format, ImageFormat::Jpeg | ImageFormat::Png)
@@ -677,6 +682,7 @@ pub fn render(
         };
 
         let ctx_for_closure = ctx.clone();
+        let attribution = attribution.clone();
 
         prefetcher.push(move |params| {
             let Some(hsd) = params.hsd else { return Ok(()) };
@@ -720,6 +726,8 @@ pub fn render(
                         rows
                     });
 
+            let mut attribution = attribution.borrow_mut();
+
             let render = || {
                 layers::shading_and_contours::render(
                     ctx,
@@ -732,6 +740,7 @@ pub fn render(
                         contour_countries: contour_countries_for_render.as_ref(),
                         do_shading,
                         dry_land,
+                        attribution: &mut attribution,
                     },
                 )
             };
@@ -1320,5 +1329,15 @@ pub fn render(
         hillshading_datasets.evict_unused();
     }
 
-    Ok(())
+    let mut attribution = Rc::try_unwrap(attribution)
+        .expect("all layer render_fns already dropped")
+        .into_inner();
+
+    // Every vector layer is OSM-derived, so a map render always credits it; a legend
+    // render draws no map data at all.
+    if ctx.legend.is_none() {
+        attribution.add_osm();
+    }
+
+    Ok(attribution)
 }

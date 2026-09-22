@@ -3,7 +3,9 @@ use crate::{
         server::{
             app_state::{AppState, TileRouteState, TileVariantState},
             export_route::{self, ExportState},
-            legend_route, tile_route, wmts_route,
+            legend_route,
+            licenses_route::{self, LicenseCatalog},
+            tile_route, wmts_route,
         },
         tile_processing_worker::TileProcessingWorker,
     },
@@ -38,6 +40,7 @@ pub struct ServerOptions {
     pub max_export_pixels: u64,
     pub max_parallel_exports: usize,
     pub export_abandon_grace: std::time::Duration,
+    pub licenses: LicenseCatalog,
 }
 
 pub struct TileVariantOptions {
@@ -75,6 +78,7 @@ pub async fn start_server(
             options.max_export_pixels,
             options.export_abandon_grace,
         )),
+        licenses: Arc::new(options.licenses),
         tile_variants: Arc::new(tile_variants),
         default_render,
         tile_worker,
@@ -94,20 +98,18 @@ pub async fn start_server(
                 .delete(export_route::delete),
         )
         .route("/legend", get(legend_route::get_metadata))
-        .route("/legend/{id}", get(legend_route::get));
+        .route("/legend/{id}", get(legend_route::get))
+        .route("/licenses", get(licenses_route::get));
 
     for (variant_index, variant) in options.tile_variants.iter().enumerate() {
-        let route_path = format!(
-            "{}/{{zoom}}/{{x}}/{{y}}",
-            if variant.url_path == "/" {
-                ""
-            } else {
-                &variant.url_path
-            }
-        );
+        let prefix = if variant.url_path == "/" {
+            ""
+        } else {
+            &variant.url_path
+        };
 
         router = router.route(
-            &route_path,
+            &format!("{prefix}/{{zoom}}/{{x}}/{{y}}"),
             get(tile_route::get).with_state(TileRouteState {
                 app_state: app_state.clone(),
                 variant_index,
@@ -122,7 +124,10 @@ pub async fn start_server(
             CorsLayer::new()
                 .allow_origin(Any)
                 .allow_methods(Any)
-                .allow_headers(Any),
+                .allow_headers(Any)
+                // So a browser can read the export's attribution off the poll it
+                // already makes.
+                .expose_headers(Any),
         );
     }
 

@@ -1,3 +1,4 @@
+pub use attribution::{Attribution, FALLBACK_KEY, JPEG_COM_HEAD_LEN, OSM as OSM_CODE, parse_jpeg_com};
 pub use coverage::{TileCoverageRelation, tile_touches_coverage};
 pub use feature::{Feature, FeatureError, GeomError, LegendValue};
 pub use image_format::ImageFormat;
@@ -13,6 +14,7 @@ pub use render_worker_pool::RenderWorkerPool;
 pub use xyz::bbox_size_in_pixels;
 use std::path::PathBuf;
 
+mod attribution;
 mod categories;
 mod collision;
 mod colors;

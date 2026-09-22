@@ -135,6 +135,9 @@ server {
                 add_header Access-Control-Allow-Origin $cors_origin always;
                 add_header Vary Origin always;
                 add_header Alt-Svc 'h3=":$server_port"; ma=86400';
+                # Without this the export's attribution header is invisible to the
+                # page: a cross-origin reader only sees the CORS-safelisted ones.
+                add_header Access-Control-Expose-Headers 'X-Attribution' always;
 
                 proxy_pass http://localhost:4000/export;
         }
@@ -181,60 +184,53 @@ server {
                 return 404;
         }
 
+        # Tiles are proxied rather than served off disk, because the renderer is the
+        # only thing that can read a tile's attribution out of its COM segment and put
+        # it on the response. It serves cache hits itself (MAPRENDER_SERVE_CACHED=true)
+        # and renders the misses, so the try_files/@fallback split is gone — and so is
+        # the ?rerender dance, which it handles as a query parameter.
+        #
+        # Cache-Control (with no-transform, so no intermediary re-encodes the tile and
+        # drops the COM), Server-Timing and Timing-Allow-Origin all come from upstream;
+        # nothing here hides them. Server-Timing carries both the tile's attribution
+        # and whether it was a cache hit, which is what the removed X-Tile-Source said.
         location ~ ^/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[1234])x)?(?:\.(?:jpe?g|png))?$ {
-                add_header Cache-Control no-cache;
                 add_header Access-Control-Allow-Origin $cors_origin always;
                 add_header Vary Origin always;
                 add_header Alt-Svc 'h3=":$server_port"; ma=86400';
 
-                if ($arg_rerender) {
-                        error_page 418 = @fallback;
-                        return 418;
-                }
-
-                add_header X-Tile-Source cache;
-                alias /fm/data4/X-tiles/;
-
-                try_files ${base}@${scale}.jpeg =404;
-                error_page 404 = @fallback;
-        }
-
-        location ~ ^/kst/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[123])x)?(?:\.(?:jpe?g|png))?$ {
-                add_header Cache-Control no-cache;
-                add_header Access-Control-Allow-Origin $cors_origin always;
-                add_header Vary Origin always;
-                add_header Alt-Svc 'h3=":$server_port"; ma=86400';
-
-                if ($arg_rerender) {
-                        error_page 418 = @fallback2;
-                        return 418;
-                }
-
-                add_header X-Tile-Source cache;
-                alias /fm/data4/X-tiles-kst/;
-
-                try_files ${base}@${scale}.jpeg =404;
-                error_page 404 = @fallback2;
-        }
-
-        location @fallback {
-                add_header Access-Control-Allow-Origin $cors_origin always;
-                add_header Vary Origin always;
-                add_header Cache-Control no-cache;
-                add_header X-Tile-Source render;
-                add_header Alt-Svc 'h3=":$server_port"; ma=86400';
                 proxy_pass http://localhost:4000/${base}@${scale}x.jpeg$is_args$args;
                 error_page 404 /40x.html;
         }
 
-        location @fallback2 {
+        location ~ ^/kst/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[123])x)?(?:\.(?:jpe?g|png))?$ {
                 add_header Access-Control-Allow-Origin $cors_origin always;
                 add_header Vary Origin always;
-                add_header Cache-Control no-cache;
-                add_header X-Tile-Source render;
                 add_header Alt-Svc 'h3=":$server_port"; ma=86400';
+
                 proxy_pass http://localhost:4000/kst/${base}@${scale}x.jpeg$is_args$args;
                 error_page 404 /40x.html;
+        }
+
+        # Open to any origin, unlike the rest: the tiles it explains are readable by
+        # anyone as an <img> and advertise their codes in Server-Timing, so limiting
+        # the dictionary to the allowlist would leave other readers holding codes
+        # they cannot resolve. Nothing here is credentialed.
+        location = /licenses {
+                if ($request_method = OPTIONS) {
+                        add_header Access-Control-Allow-Origin "*";
+                        add_header Access-Control-Allow-Methods "GET, OPTIONS";
+                        # If-None-Match is not CORS-safelisted, so a conditional
+                        # fetch preflights and would otherwise fail here.
+                        add_header Access-Control-Allow-Headers "If-None-Match";
+                        add_header Access-Control-Max-Age 86400;
+                        return 204;
+                }
+
+                add_header Access-Control-Allow-Origin "*" always;
+                add_header Alt-Svc 'h3=":$server_port"; ma=86400';
+
+                proxy_pass http://localhost:4000/licenses;
         }
 
         http2 on;

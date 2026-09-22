@@ -257,6 +257,17 @@ pub struct Cli {
     /// Render layers per tile URL path group (items delimited by ',', groups by ';').
     pub render: Vec<RenderGroup>,
 
+    /// Optional overrides for `GET /licenses`, which otherwise answers from each
+    /// dataset's own `<hillshading-base-path>/<key>/attribution.json` plus a built-in
+    /// entry for `osm`. A JSON object keyed by code (`shading:<key>`,
+    /// `contours:<key>`, where `<key>` is a hillshading-hierarchy / contour-country
+    /// key or `_` for a global fallback), each value a list of
+    /// `{"title": "…", "url": "…"}` with `url` optional. Use it for a code with no
+    /// dataset directory, or to correct one without touching the data volume; it
+    /// replaces whatever the dataset said. Titles are not localized.
+    #[arg(long, env = "MAPRENDER_LICENSES")]
+    pub licenses: Option<PathBuf>,
+
     /// Maximum total pixel area allowed for a single export request. The
     /// estimated pixel count is `bbox_width_px * bbox_height_px` at the
     /// requested zoom (scale is ignored — it does not significantly affect

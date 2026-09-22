@@ -1,9 +1,10 @@
 use crate::render::{
     ContourCountries, Feature, HillshadingHierarchy,
+    attribution::{Attribution, FALLBACK_KEY},
     ctx::Ctx,
-    layer_render_error::LayerRenderResult,
+    layer_render_error::{LayerRenderError, LayerRenderResult},
     layers::{
-        bridge_areas, contours, dry_land::DryLand, hillshading,
+        bridge_areas, contours, dry_land::DryLand, hillshading, hillshading::MaskBits,
         hillshading_datasets::HillshadingDatasets,
     },
 };
@@ -17,6 +18,8 @@ pub struct ShadingParams<'a> {
     pub contour_countries: Option<&'a ContourCountries>,
     pub do_shading: bool,
     pub dry_land: Option<&'a DryLand>,
+    /// Collects the code of every dataset that ends up with a pixel on the tile.
+    pub attribution: &'a mut Attribution,
 }
 
 pub fn render(
@@ -34,6 +37,7 @@ pub fn render(
         contour_countries,
         do_shading,
         dry_land,
+        attribution,
     } = params;
 
     let fade_alpha = 1.0f64.min(1.0 - (ctx.zoom as f64 - 7.0).ln() / 5.0);
@@ -53,16 +57,21 @@ pub fn render(
                 )?,
             ))
         })
-        .collect::<Result<_, crate::render::layer_render_error::LayerRenderError>>()?;
+        .collect::<Result<_, LayerRenderError>>()?;
 
-    let tile_covered = {
-        let mut present_mut: Vec<&mut ImageSurface> = country_masks
-            .iter_mut()
-            .filter_map(|(_, s)| s.as_mut())
-            .collect();
+    // The masks are already resampled to tile resolution, so these bits live in the
+    // same coordinate space as the pixels being credited: a dataset contributes
+    // exactly when a bit of its mask survives the `DestOut` subtraction below.
+    let mask_bits: HashMap<&'static str, MaskBits> = country_masks
+        .iter_mut()
+        .filter_map(|(country, surface)| {
+            let surface = surface.as_mut()?;
 
-        hillshading::mask_covers_tile(&mut present_mut)?
-    };
+            Some(MaskBits::from_surface(surface).map(|bits| (*country, bits)))
+        })
+        .collect::<Result<_, LayerRenderError>>()?;
+
+    let tile_covered = MaskBits::union(mask_bits.values()).is_some_and(|union| union.is_full());
 
     if ctx.zoom >= 15 {
         bridge_areas::render(ctx, context, bridge_rows, true)?; // mask
@@ -81,7 +90,7 @@ pub fn render(
                 continue;
             };
 
-            let Some(shading_surface) = hillshading::load_surface(
+            let Some(mut shading_surface) = hillshading::load_surface(
                 ctx,
                 country,
                 hillshading_datasets,
@@ -90,6 +99,25 @@ pub fn render(
             else {
                 continue;
             };
+
+            let better: Vec<&MaskBits> = entry
+                .better
+                .iter()
+                .filter_map(|better| mask_bits.get(better))
+                .collect();
+
+            // Against the shading's own alpha as well as the mask, the same test the
+            // fallback below makes: having data somewhere in the tile is not the same
+            // as having drawn anything here. The one thing this cannot see is the
+            // dry-land clip `pipeline` wraps the whole layer in, so a dataset whose
+            // only pixels on this tile fall on water is still credited.
+            if let Some(bits) = mask_bits.get(country) {
+                let painted = MaskBits::from_surface(&mut shading_surface)?;
+
+                if bits.has_any_shared_outside(&painted, &better) {
+                    attribution.add_shading(country);
+                }
+            }
 
             context.push_group(); // country-contours-and-shading
 
@@ -123,12 +151,21 @@ pub fn render(
 
             context.set_operator(cairo::Operator::Out);
 
-            if let Some(surface) = hillshading::load_surface(
+            if let Some(mut surface) = hillshading::load_surface(
                 ctx,
-                "_",
+                FALLBACK_KEY,
                 hillshading_datasets,
                 hillshading::Mode::Shading,
             )? {
+                // The fallback is what is left after `Out`, so its own alpha decides:
+                // a tile the country masks leave uncovered may still have no fallback
+                // data there.
+                let covered: Vec<&MaskBits> = mask_bits.values().collect();
+
+                if MaskBits::from_surface(&mut surface)?.has_any_outside(&covered) {
+                    attribution.add_shading(FALLBACK_KEY);
+                }
+
                 hillshading::paint_surface(ctx, context, &surface, fade_alpha)?;
             }
 
@@ -172,6 +209,23 @@ pub fn render(
                 continue;
             };
 
+            let cutting: Vec<&MaskBits> = entry
+                .better
+                .iter()
+                .filter(|better| countries_with_contour_data.contains(*better))
+                .filter_map(|better| mask_bits.get(better))
+                .collect();
+
+            // The region this country's contours may draw in is non-empty and it has
+            // rows; whether a line actually falls inside it is not checked, so a tile
+            // whose rows all miss the region is over-credited.
+            if mask_bits
+                .get(country)
+                .is_some_and(|bits| bits.has_any_outside(&cutting))
+            {
+                attribution.add_contours(country);
+            }
+
             // Build combined mask on a CPU ImageSurface (DestOut is fine here — not on SVG context).
             let combined = ImageSurface::create(Format::ARgb32, scaled_w, scaled_h)?;
             {
@@ -206,19 +260,20 @@ pub fn render(
         // Fallback: render contours outside the masks of countries that have contour data.
         // Countries with hillshading only (e.g. "fi") are intentionally excluded — their
         // neighbouring country's contours already cover their area (see above).
-        let contour_covered = {
-            let mut present_mut: Vec<&mut ImageSurface> = country_masks
-                .iter_mut()
-                .filter(|(c, _)| countries_with_contour_data.contains(c))
-                .filter_map(|(_, s)| s.as_mut())
-                .collect();
-            hillshading::mask_covers_tile(&mut present_mut)?
-        };
+        let contour_covered = MaskBits::union(
+            mask_bits
+                .iter()
+                .filter(|(country, _)| countries_with_contour_data.contains(*country))
+                .map(|(_, bits)| bits),
+        )
+        .is_some_and(|union| union.is_full());
 
         if !contour_covered
             && let Some(rows) = contour_rows.remove(&None)
             && !rows.is_empty()
         {
+            attribution.add_contours(FALLBACK_KEY);
+
             let complement = ImageSurface::create(Format::ARgb32, scaled_w, scaled_h)?;
             {
                 let cc = Context::new(&complement)?;

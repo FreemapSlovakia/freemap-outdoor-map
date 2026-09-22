@@ -1,8 +1,13 @@
 use crate::render::{
-    PlaceTypeOverrides, image_format::ImageFormat, layers, render_request::RenderRequest,
-    svg_repo::SvgRepo, xyz::bbox_size_in_pixels,
+    PlaceTypeOverrides,
+    attribution::{self, Attribution},
+    image_format::ImageFormat,
+    layers,
+    render_request::RenderRequest,
+    svg_repo::SvgRepo,
+    xyz::bbox_size_in_pixels,
 };
-use cairo::{Format, ImageSurface, PdfSurface, Surface, SvgSurface};
+use cairo::{Format, ImageSurface, PdfMetadata, PdfSurface, Surface, SvgSurface};
 use deadpool_postgres::Pool;
 use image::codecs::jpeg::JpegEncoder;
 use image::{ExtendedColorType, ImageEncoder};
@@ -21,6 +26,15 @@ pub enum RenderError {
     ImageEncoding(Box<dyn std::error::Error + Send + Sync>),
 }
 
+/// A finished render: the encoded image, and the codes of the datasets that
+/// contributed pixels to it. The codes are also embedded in the image itself
+/// (JPEG `COM`, PNG `tEXt`, PDF keywords), so a tile carries its own attribution
+/// for as long as it is cached.
+pub struct RenderOutput {
+    pub bytes: Vec<u8>,
+    pub attribution: Attribution,
+}
+
 pub fn render(
     request: &RenderRequest,
     shading: layers::Shading<'_>,
@@ -28,7 +42,7 @@ pub fn render(
     pool: Pool,
     handle: Handle,
     svg_repo: &mut SvgRepo,
-) -> Result<Vec<u8>, RenderError> {
+) -> Result<RenderOutput, RenderError> {
     let _span = tracy_client::span!("render_tile");
 
     let size = bbox_size_in_pixels(request.bbox, request.zoom as f64);
@@ -56,13 +70,16 @@ pub fn render(
                 Vec::new(),
             )?;
 
-            render(&surface)?;
+            let attribution = render(&surface)?;
 
-            Ok(*surface
-                .finish_output_stream()
-                .expect("finished output stream")
-                .downcast::<Vec<u8>>()
-                .expect("vector of bytes"))
+            Ok(RenderOutput {
+                bytes: *surface
+                    .finish_output_stream()
+                    .expect("finished output stream")
+                    .downcast::<Vec<u8>>()
+                    .expect("vector of bytes"),
+                attribution,
+            })
         }
         ImageFormat::Pdf => {
             let scale = request.scale;
@@ -73,13 +90,22 @@ pub fn render(
                 Vec::new(),
             )?;
 
-            render(&surface)?;
+            let attribution = render(&surface)?;
 
-            Ok(*surface
-                .finish_output_stream()
-                .expect("finished output stream")
-                .downcast::<Vec<u8>>()
-                .expect("vector of bytes"))
+            // The document info dictionary is written at finish, so this reaches the
+            // file even though the codes are only known once the map is drawn.
+            if !attribution.is_empty() {
+                surface.set_metadata(PdfMetadata::Keywords, &attribution.encode())?;
+            }
+
+            Ok(RenderOutput {
+                bytes: *surface
+                    .finish_output_stream()
+                    .expect("finished output stream")
+                    .downcast::<Vec<u8>>()
+                    .expect("vector of bytes"),
+                attribution,
+            })
         }
         ImageFormat::Png => {
             let scale = request.scale;
@@ -92,7 +118,7 @@ pub fn render(
                 (size.height as f64 * scale) as i32,
             )?;
 
-            render(&surface)?;
+            let attribution = render(&surface)?;
 
             let _span = tracy_client::span!("render_tile::write_to_png");
 
@@ -100,7 +126,14 @@ pub fn render(
                 .write_to_png(&mut buffer)
                 .map_err(|err| RenderError::ImageEncoding(Box::new(err)))?;
 
-            Ok(buffer)
+            if !attribution.is_empty() {
+                attribution::insert_png_text(&mut buffer, &attribution.encode());
+            }
+
+            Ok(RenderOutput {
+                bytes: buffer,
+                attribution,
+            })
         }
         ImageFormat::Jpeg => {
             let scale = request.scale;
@@ -111,7 +144,7 @@ pub fn render(
                 (size.height as f64 * scale) as i32,
             )?;
 
-            render(&surface)?;
+            let attribution = render(&surface)?;
 
             let width = surface.width() as u32;
             let height = surface.height() as u32;
@@ -140,7 +173,14 @@ pub fn render(
                 .write_image(&rgb_data, width, height, ExtendedColorType::Rgb8)
                 .map_err(|err| RenderError::ImageEncoding(Box::new(err)))?;
 
-            Ok(buffer)
+            if !attribution.is_empty() {
+                attribution::insert_jpeg_com(&mut buffer, &attribution.encode());
+            }
+
+            Ok(RenderOutput {
+                bytes: buffer,
+                attribution,
+            })
         }
     }
 }

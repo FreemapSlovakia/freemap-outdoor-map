@@ -239,6 +239,17 @@ For environment variables you can use `.env` file. See [.env.sample](./.env.samp
 For production it is advisable to use a proxy server.
 For Nginx you can find configuration in [outdoor.tiles.freemap.sk](./etc/nginx/sites-available/outdoor.tiles.freemap.sk).
 
+It proxies tiles rather than serving them off disk with `try_files`, and runs with
+`MAPRENDER_SERVE_CACHED=true`. The renderer is the only thing that can read a tile's
+attribution out of its `COM` segment, so a tile served past it arrives without its
+`Server-Timing` (see [Attribution](#attribution)) — and with `serve_cached` the renderer
+handles the cache hit and the miss in one place, so the proxy needs no `try_files`
+fallback and no `?rerender` special case. The cost is that a cache hit goes through the
+renderer's read instead of `sendfile`.
+
+`Server-Timing`'s `src` metric says which of the two a response was, so cache behaviour is
+still visible from `curl -I` — and now from the browser too.
+
 ## Systemd service
 
 In production, freemap-outdoor-map should run as a system service.
@@ -348,6 +359,129 @@ DELETE /export?token=6f41b0ebf3bef99cad07c1041fac3339
 ### WMTS
 
 Endpoint: `/service`
+
+### Attribution
+
+Every rendered tile carries the datasets that contributed a pixel to it, as a JPEG `COM`
+segment inserted as the first segment (`FF D8 | FF FE | len_hi len_lo | payload`), so a
+reader takes them from a fixed offset without a JPEG parser.
+
+The API names a dataset by a namespaced code — `osm`, `shading:<key>`, `contours:<key>`,
+where `<key>` is a `--hillshading-hierarchy` / `--contour-countries` key or `_` for a global
+fallback source. Codes are namespaced because a region's shading and its contours can come
+from different sources under different licences.
+
+The stored payload is the same list with the namespace shortened to one character, so it
+stays small on every cached tile: 9 bytes for a tile inside Slovakia, 31 for the nine
+sources of a tile on a triple border. The keys go in verbatim — they are the configuration's
+own identifiers, so there is no second numbering that could drift from the tiles already on
+disk, and they cannot contain the separator because `--hillshading-hierarchy` and
+`--contour-countries` split on `,` themselves.
+
+Codes are sorted by their long form, so the namespaces group and a given set of sources
+always encodes to the same bytes:
+
+```
+csk,o,ssk                        →  contours:sk, osm, shading:sk
+c_,cat,ccz,csk,o,s_,sat,scz,ssk  →  osm and eight terrain sources
+```
+
+Read `sat` as `s` + `at` (Austrian shading), not as a word — every code is one namespace
+character followed by the key.
+
+Which datasets a tile credits is decided from the resampled masks and shading surfaces the
+render itself used, in the same coordinate space as the pixels being credited: three pixels
+of Czech shading inside Slovakia are three bits of the `cz` mask, and both sources are
+credited. Two things it does not see, both of which can only over-credit: the dry-land clip
+the whole layer is drawn under, so a dataset whose only pixels on a tile fall on water is
+still named; and whether a contour line really falls inside the region a country's contours
+may draw in, rather than just that the region and the rows both exist.
+
+Exported PNG and PDF carry the same list — in a `tEXt` chunk keyed `map-attribution`, and in
+the document keywords.
+
+**For live browsing**, every tile response also carries the same short codes in a header:
+
+```http
+Server-Timing: src;desc="cache", attr;desc="csk o ssk"
+Timing-Allow-Origin: *
+```
+
+`Server-Timing` is the one response header JavaScript can read off an `<img>`, through
+`PerformanceResourceTiming.serverTiming`, so a page credits exactly the datasets painted in
+front of it without fetching tile bytes or taking over the tile lifecycle. Without
+`Timing-Allow-Origin` a cross-origin page gets an empty `serverTiming` and no error anywhere,
+so it goes on every tile response.
+
+Metrics are comma-separated, which is why the code list inside `attr` is not:
+
+- `src` is `cache`, `render` or `outside-coverage` — where the body came from.
+- `attr` is the codes, present exactly when they are known: on a fresh render, on a cache
+  hit, on the `304` of a revalidated tile, and on the out-of-coverage gray tile, where
+  `desc=""` says "nothing to credit" rather than "unknown". A tile cached before tiles
+  carried attribution gets no `attr` at all, and turns over on its own.
+
+The `COM` segment is storage — it is what a cached tile carries its codes in between
+renders, and what an exported file carries with it. The header is delivery.
+
+**Code dictionary:**
+
+```http
+GET /licenses
+```
+
+Resolves each code to the sources behind it — a list, because one dataset can be several
+models (Belgium's relief is two):
+
+```json
+{
+  "osm": [{ "title": "© OpenStreetMap contributors", "url": "https://osm.org/copyright" }],
+  "shading:sk": [{ "title": "DMR 5.0: ÚGKK SR", "url": "…" }],
+  "contours:sk": [{ "title": "DMR 5.0: ÚGKK SR", "url": "…" }]
+}
+```
+
+`osm` is built in. Everything else comes from each dataset's own `attribution.json`, next to
+its `final.tif` under `--hillshading-base-path`:
+
+```json
+{
+  "covers": ["shading", "contours"],
+  "sources": [{ "title": "DMR 5.0: ÚGKK SR", "url": "https://…" }]
+}
+```
+
+The licence belongs with the data: the script that downloads a DEM knows its terms, adding
+a dataset is creating its directory, and deleting one takes its licence with it — there is
+no central list to drift. `covers` says which namespaces these sources answer for, and
+defaults to `["shading"]` alone: contours normally come from this very DEM, but a region
+that took them from elsewhere must not silently credit this dataset for them. Leaving a code
+unresolved is the lesser error, and the server names it at startup either way:
+
+```
+attribution: nothing resolves contours:pl — add "contours" to `covers` in the pl dataset's
+             attribution.json, or list the code in --licenses
+```
+
+[scripts/write-dtm-attribution.nu](./scripts/write-dtm-attribution.nu) writes these files
+for every dataset present, and names any it has no entry for:
+
+```sh
+nu scripts/write-dtm-attribution.nu /fm/data2/hillshading
+```
+
+`--licenses` (`MAPRENDER_LICENSES`) is optional on top: a JSON file of the same
+`code -> sources` shape that replaces whatever a dataset said, for a code with no dataset
+directory or a correction that should not touch the data volume.
+
+Titles are not localized — they are the rights-holder's own attribution string and the
+licence's name — so one `ETag` covers the document for every client. It is served with
+`Cache-Control: no-cache`, so a client revalidates and a newly added dataset never leaves it
+holding a code it cannot resolve.
+
+**Export attribution:** an export's codes come back on the poll the client already makes, in
+the `X-Attribution` response header of `HEAD /export` and `GET /export` — the same short
+spelling as the tile header and the embedded metadata, `o,ssk,csk`.
 
 ## Notes
 

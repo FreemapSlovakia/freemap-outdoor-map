@@ -67,6 +67,6 @@ pub async fn get(
                 LegendMode::Taginfo => "image/svg+xml",
             },
         )
-        .body(Body::from(rendered))
+        .body(Body::from(rendered.bytes))
         .expect("body should be built")
 }

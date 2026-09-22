@@ -1,5 +1,8 @@
 use crate::{
-    app::{server::export_route::ExportState, tile_processing_worker::TileProcessingWorker},
+    app::{
+        server::{export_route::ExportState, licenses_route::LicenseCatalog},
+        tile_processing_worker::TileProcessingWorker,
+    },
     render::{RenderLayer, RenderWorkerPool},
 };
 use geo::Geometry;
@@ -16,6 +19,7 @@ pub struct TileVariantState {
 pub struct AppState {
     pub(crate) render_worker_pool: Arc<RenderWorkerPool>,
     pub(crate) export_state: Arc<ExportState>,
+    pub(crate) licenses: Arc<LicenseCatalog>,
     pub(crate) tile_variants: Arc<Vec<TileVariantState>>,
     pub(crate) default_render: HashSet<RenderLayer>,
     pub(crate) tile_worker: Option<TileProcessingWorker>,
