@@ -17,7 +17,11 @@ use axum::{
 use geo::Rect;
 use httpdate::parse_http_date;
 use image::{ColorType, codecs::jpeg::JpegEncoder};
-use std::{os::unix::fs::MetadataExt, sync::LazyLock, time::SystemTime};
+use std::{
+    os::unix::fs::MetadataExt,
+    sync::LazyLock,
+    time::{Duration, SystemTime},
+};
 use tokio::{
     fs,
     io::{self, AsyncReadExt},
@@ -174,7 +178,7 @@ pub async fn serve_tile(
                 if let Some(ims) = headers.get(header::IF_MODIFIED_SINCE)
                     && let Ok(ims_time) = parse_http_date(ims.to_str().unwrap_or(""))
                     && let Some(mtime) = mtime
-                    && mtime <= ims_time
+                    && whole_seconds(mtime) <= ims_time
                 {
                     // `Cache-Control: no-cache` makes every revisited tile revalidate,
                     // so this is the common path for a returning viewport and has to
@@ -286,6 +290,19 @@ pub async fn serve_tile(
     )
     .body(Body::from(rendered.bytes))
     .expect("body should be built")
+}
+
+/// A file mtime rounded down to what `Last-Modified` can express.
+///
+/// The tile's mtime is set from `SystemTime::now()` and keeps its nanoseconds,
+/// but the header is whole seconds — so comparing the two directly makes a client
+/// echoing back our own `Last-Modified` look stale by a fraction of a second, and
+/// every revalidation ships the whole tile instead of a `304`.
+fn whole_seconds(time: SystemTime) -> SystemTime {
+    time.duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(time, |since| {
+            SystemTime::UNIX_EPOCH + Duration::from_secs(since.as_secs())
+        })
 }
 
 /// The codes a cached tile carries, from its head bytes alone — the `COM` segment
@@ -485,5 +502,22 @@ mod tests {
         assert_eq!(parse_y_suffix("91000@xx"), None);
         assert_eq!(parse_y_suffix("nine"), None);
         assert_eq!(parse_y_suffix(""), None);
+    }
+
+    #[test]
+    fn a_client_echoing_our_last_modified_counts_as_fresh() {
+        use super::whole_seconds;
+        use std::time::{Duration, SystemTime};
+
+        let mtime = SystemTime::UNIX_EPOCH + Duration::from_nanos(1_757_000_000_734_000_000);
+        // What `Last-Modified` said, and so what comes back in If-Modified-Since.
+        let sent = SystemTime::UNIX_EPOCH + Duration::from_secs(1_757_000_000);
+
+        assert!(mtime > sent, "the raw mtime looks newer than the header");
+        assert!(whole_seconds(mtime) <= sent, "…but the tile is unchanged");
+
+        // A genuinely older client copy is still stale.
+        let older = SystemTime::UNIX_EPOCH + Duration::from_secs(1_756_999_999);
+        assert!(whole_seconds(mtime) > older);
     }
 }
