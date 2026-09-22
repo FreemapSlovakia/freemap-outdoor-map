@@ -293,6 +293,12 @@ pub struct Cli {
         default_value_t = 30
     )]
     pub export_abandon_grace_secs: u64,
+
+    /// Keep a finished export this many seconds before dropping the job and its
+    /// temporary file. Only the client that failed to delete its own job needs
+    /// it, so it is generous rather than tight.
+    #[arg(long, env = "MAPRENDER_EXPORT_RETENTION_SECS", default_value_t = 900)]
+    pub export_retention_secs: u64,
 }
 
 impl Cli {

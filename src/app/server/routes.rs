@@ -40,6 +40,7 @@ pub struct ServerOptions {
     pub max_export_pixels: u64,
     pub max_parallel_exports: usize,
     pub export_abandon_grace: std::time::Duration,
+    pub export_retention: std::time::Duration,
     pub licenses: LicenseCatalog,
 }
 
@@ -73,11 +74,7 @@ pub async fn start_server(
 
     let app_state = AppState {
         render_worker_pool,
-        export_state: Arc::new(ExportState::new(
-            options.max_parallel_exports,
-            options.max_export_pixels,
-            options.export_abandon_grace,
-        )),
+        export_state: Arc::new(ExportState::new(&options)),
         licenses: Arc::new(options.licenses),
         tile_variants: Arc::new(tile_variants),
         default_render,

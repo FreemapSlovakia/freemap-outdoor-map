@@ -356,6 +356,10 @@ GET /export?token=6f41b0ebf3bef99cad07c1041fac3339
 DELETE /export?token=6f41b0ebf3bef99cad07c1041fac3339
 ```
 
+A client that has taken its file deletes the job. A finished job that nobody deletes is
+dropped along with its temporary file `--export-retention-secs`
+(`MAPRENDER_EXPORT_RETENTION_SECS`, 900 by default) after it finished.
+
 ### WMTS
 
 Endpoint: `/service`

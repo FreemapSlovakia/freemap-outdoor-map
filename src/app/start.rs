@@ -224,7 +224,8 @@ pub fn start() {
             tile_variants,
             max_export_pixels: cli.max_export_pixels,
             max_parallel_exports: cli.max_parallel_exports,
-            export_abandon_grace: std::time::Duration::from_secs(cli.export_abandon_grace_secs),
+            export_abandon_grace: Duration::from_secs(cli.export_abandon_grace_secs),
+            export_retention: Duration::from_secs(cli.export_retention_secs),
             licenses,
         },
     )) {

@@ -1,5 +1,5 @@
 use crate::{
-    app::server::app_state::AppState,
+    app::server::{app_state::AppState, routes::ServerOptions},
     render::{
         Attribution, CustomLayer, CustomLayerOrder, Decorations, Glow, ImageFormat, LabelStyle,
         RenderLayer, RenderRequest, RenderWorkerPool, bbox_size_in_pixels,
@@ -20,7 +20,8 @@ use serde_json::json;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Write as _,
-    path::PathBuf,
+    io::ErrorKind,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -29,7 +30,7 @@ use std::{
 };
 use tokio::{
     fs,
-    sync::{Mutex, Notify, Semaphore},
+    sync::{Mutex, Notify, Semaphore, watch},
     time::sleep,
 };
 use tokio_util::io::ReaderStream;
@@ -39,28 +40,45 @@ pub struct ExportState {
     semaphore: Arc<Semaphore>,
     max_pixels: u64,
     abandon_grace: Duration,
+    retention: Duration,
 }
 
 impl ExportState {
-    pub(crate) fn new(max_parallel: usize, max_pixels: u64, abandon_grace: Duration) -> Self {
+    pub(crate) fn new(options: &ServerOptions) -> Self {
         Self {
-            jobs: Mutex::new(HashMap::new()),
-            semaphore: Arc::new(Semaphore::new(max_parallel.max(1))),
-            max_pixels,
-            abandon_grace,
+            jobs: Mutex::default(),
+            semaphore: Arc::new(Semaphore::new(options.max_parallel_exports.max(1))),
+            max_pixels: options.max_export_pixels,
+            abandon_grace: options.export_abandon_grace,
+            retention: options.export_retention,
         }
     }
 }
 
-struct ExportJob {
+/// Where the finished render lands and how it is served back.
+struct ExportOutput {
     file_path: PathBuf,
     filename: String,
     content_type: &'static str,
-    status: Arc<Mutex<ExportStatus>>,
-    notify: Arc<Notify>,
-    poller_count: Arc<AtomicUsize>,
-    poller_change: Arc<Notify>,
-    handle: tokio::task::JoinHandle<()>,
+}
+
+struct ExportJob {
+    token: String,
+    output: ExportOutput,
+    status: Mutex<ExportStatus>,
+    notify: Notify,
+    poller_count: AtomicUsize,
+    poller_change: Notify,
+    cancel: watch::Sender<bool>,
+}
+
+/// The temp file belongs to the job, so it goes when the last holder — a
+/// streaming download, or the job's own task — lets go. No code path has to
+/// remember to unlink it.
+impl Drop for ExportJob {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.output.file_path);
+    }
 }
 
 enum ExportStatus {
@@ -360,22 +378,17 @@ pub async fn post(
         })
     });
 
-    let job = spawn_export_job(
-        state.render_worker_pool.clone(),
-        state.export_state.semaphore.clone(),
-        state.export_state.abandon_grace,
-        file_path.clone(),
-        filename.clone(),
-        content_type,
+    spawn_export_job(
+        &state,
+        token.clone(),
+        ExportOutput {
+            file_path,
+            filename,
+            content_type,
+        },
         render_request,
-    );
-
-    state
-        .export_state
-        .jobs
-        .lock()
-        .await
-        .insert(token.clone(), job);
+    )
+    .await;
 
     Response::builder()
         .status(StatusCode::OK)
@@ -392,7 +405,7 @@ pub async fn head(
         return not_found();
     };
 
-    let _poller = PollerGuard::new(job.poller_count.clone(), job.poller_change.clone());
+    let _poller = PollerGuard::new(&job);
 
     match wait_job(&job).await {
         Ok(attribution) => Response::builder()
@@ -412,7 +425,7 @@ pub async fn get(State(state): State<AppState>, Query(query): Query<TokenQuery>)
         return not_found();
     };
 
-    let _poller = PollerGuard::new(job.poller_count.clone(), job.poller_change.clone());
+    let _poller = PollerGuard::new(&job);
 
     let attribution = match wait_job(&job).await {
         Ok(attribution) => attribution,
@@ -424,11 +437,19 @@ pub async fn get(State(state): State<AppState>, Query(query): Query<TokenQuery>)
         }
     };
 
-    let Ok(file) = fs::File::open(&job.file_path).await else {
-        return Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body(Body::empty())
-            .expect("read error body");
+    let file = match fs::File::open(&job.output.file_path).await {
+        Ok(file) => file,
+        // Retention can drop the file between the lookup and here; the token is
+        // on its way out either way, so answer as if it had already expired.
+        Err(err) if err.kind() == ErrorKind::NotFound => return not_found(),
+        Err(err) => {
+            eprintln!("export file unreadable: {err}");
+
+            return Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::empty())
+                .expect("read error body");
+        }
     };
 
     let stream = ReaderStream::new(file);
@@ -436,10 +457,10 @@ pub async fn get(State(state): State<AppState>, Query(query): Query<TokenQuery>)
 
     Response::builder()
         .status(StatusCode::OK)
-        .header("Content-Type", job.content_type)
+        .header("Content-Type", job.output.content_type)
         .header(
             "Content-Disposition",
-            format!("attachment; filename=\"{}\"", job.filename),
+            format!("attachment; filename=\"{}\"", job.output.filename),
         )
         .header(ATTRIBUTION_HEADER, attribution.encode())
         .body(body)
@@ -460,9 +481,10 @@ pub async fn delete(
         return not_found();
     };
 
-    job.handle.abort();
-
-    let _ = fs::remove_file(&job.file_path).await;
+    // Cancelling lets the job wind itself down; the file goes with it. Aborting
+    // the task here would race the render instead: the write is a blocking op
+    // that no cancellation stops, so it would recreate a file removed here.
+    let _ = job.cancel.send(true);
 
     Response::builder()
         .status(StatusCode::NO_CONTENT)
@@ -535,94 +557,92 @@ fn lon_lat_to_3857(lon: f64, lat: f64) -> (f64, f64) {
     (x, y)
 }
 
-struct PollerGuard {
-    count: Arc<AtomicUsize>,
-    notify: Arc<Notify>,
+struct PollerGuard<'a> {
+    job: &'a ExportJob,
 }
 
-impl PollerGuard {
-    fn new(count: Arc<AtomicUsize>, notify: Arc<Notify>) -> Self {
-        count.fetch_add(1, Ordering::SeqCst);
-        notify.notify_waiters();
-        Self { count, notify }
+impl<'a> PollerGuard<'a> {
+    fn new(job: &'a ExportJob) -> Self {
+        job.poller_count.fetch_add(1, Ordering::SeqCst);
+        job.poller_change.notify_waiters();
+        Self { job }
     }
 }
 
-impl Drop for PollerGuard {
+impl Drop for PollerGuard<'_> {
     fn drop(&mut self) {
-        self.count.fetch_sub(1, Ordering::SeqCst);
-        self.notify.notify_waiters();
+        self.job.poller_count.fetch_sub(1, Ordering::SeqCst);
+        self.job.poller_change.notify_waiters();
     }
 }
 
-fn spawn_export_job(
-    worker_pool: Arc<RenderWorkerPool>,
-    semaphore: Arc<Semaphore>,
-    abandon_grace: Duration,
-    file_path: PathBuf,
-    filename: String,
-    content_type: &'static str,
+/// Spawns the render and the job's own wind-down: a client that has taken its
+/// file deletes the job, and `retention` is the backstop for one that never
+/// comes back, without which the map would grow for the life of the process.
+async fn spawn_export_job(
+    state: &AppState,
+    token: String,
+    output: ExportOutput,
     request: RenderRequest,
-) -> Arc<ExportJob> {
-    let status = Arc::new(Mutex::new(ExportStatus::Pending));
-    let notify = Arc::new(Notify::new());
-    let poller_count = Arc::new(AtomicUsize::new(0));
-    let poller_change = Arc::new(Notify::new());
+) {
+    let (cancel, mut cancel_rx) = watch::channel(false);
 
-    let status_clone = Arc::clone(&status);
-    let notify_clone = Arc::clone(&notify);
-    let poller_count_clone = Arc::clone(&poller_count);
-    let poller_change_clone = Arc::clone(&poller_change);
-    let file_path_clone = file_path.clone();
-
-    let handle = tokio::spawn(async move {
-        let Some(permit) = wait_for_permit(
-            semaphore,
-            poller_count_clone,
-            poller_change_clone,
-            abandon_grace,
-        )
-        .await
-        else {
-            let mut guard = status_clone.lock().await;
-            *guard = ExportStatus::Done(Err(ExportError::Abandoned));
-            drop(guard);
-            notify_clone.notify_waiters();
-            return;
-        };
-
-        let result = run_export(worker_pool, file_path_clone, request)
-            .await
-            .map_err(|err| {
-                eprintln!("export render failed: {err}");
-                ExportError::Render
-            });
-
-        drop(permit);
-
-        let mut guard = status_clone.lock().await;
-        *guard = ExportStatus::Done(result);
-        drop(guard);
-        notify_clone.notify_waiters();
+    let job = Arc::new(ExportJob {
+        token,
+        output,
+        status: Mutex::new(ExportStatus::Pending),
+        notify: Notify::new(),
+        poller_count: AtomicUsize::new(0),
+        poller_change: Notify::new(),
+        cancel,
     });
 
-    Arc::new(ExportJob {
-        file_path,
-        filename,
-        content_type,
-        status,
-        notify,
-        poller_count,
-        poller_change,
-        handle,
-    })
+    // Register before the task starts. The task drops the job by token, and a
+    // short retention would otherwise let it run before this insert, stranding
+    // an entry whose file is already gone.
+    let key = job.token.clone();
+    let entry = Arc::clone(&job);
+
+    state.export_state.jobs.lock().await.insert(key, entry);
+
+    let export_state = Arc::clone(&state.export_state);
+    let worker_pool = Arc::clone(&state.render_worker_pool);
+
+    tokio::spawn(async move {
+        let result = match wait_for_permit(&job, &export_state, &mut cancel_rx).await {
+            Some(_permit) => run_export(worker_pool, &job.output.file_path, request)
+                .await
+                .map_err(|err| {
+                    eprintln!("export render failed: {err}");
+                    ExportError::Render
+                }),
+            None => Err(ExportError::Abandoned),
+        };
+
+        let mut guard = job.status.lock().await;
+        *guard = ExportStatus::Done(result);
+        drop(guard);
+        job.notify.notify_waiters();
+
+        tokio::select! {
+            () = sleep(export_state.retention) => {}
+            () = cancelled(&mut cancel_rx) => {}
+        }
+
+        export_state.jobs.lock().await.remove(&job.token);
+    });
+}
+
+/// Resolves once the job is cancelled. The task holds the job, and with it the
+/// sender, so the channel cannot close while this is awaited.
+async fn cancelled(cancel: &mut watch::Receiver<bool>) {
+    let _ = cancel.wait_for(|cancelled| *cancelled).await;
 }
 
 async fn wait_for_permit(
-    semaphore: Arc<Semaphore>,
-    poller_count: Arc<AtomicUsize>,
-    poller_change: Arc<Notify>,
-    abandon_grace: Duration,
+    job: &ExportJob,
+    export_state: &ExportState,
+    cancel: &mut watch::Receiver<bool>,
 ) -> Option<tokio::sync::OwnedSemaphorePermit> {
     // Abandon the job once no client has been actively polling for
     // `abandon_grace`. The grace also covers the gap between POST and
@@ -632,31 +652,32 @@ async fn wait_for_permit(
         loop {
             // Subscribe before reading state to avoid missing a change
             // notification that arrives between the check and the await.
-            let changed = poller_change.notified();
+            let changed = job.poller_change.notified();
             tokio::pin!(changed);
             changed.as_mut().enable();
 
-            if poller_count.load(Ordering::SeqCst) > 0 {
+            if job.poller_count.load(Ordering::SeqCst) > 0 {
                 changed.await;
                 continue;
             }
 
             tokio::select! {
-                () = sleep(abandon_grace) => return,
+                () = sleep(export_state.abandon_grace) => return,
                 () = &mut changed => {}
             }
         }
     };
 
     tokio::select! {
-        res = semaphore.acquire_owned() => res.ok(),
+        res = export_state.semaphore.clone().acquire_owned() => res.ok(),
         () = watchdog => None,
+        () = cancelled(cancel) => None,
     }
 }
 
 async fn run_export(
     worker_pool: Arc<RenderWorkerPool>,
-    file_path: PathBuf,
+    file_path: &Path,
     request: RenderRequest,
 ) -> Result<Attribution, String> {
     let image = worker_pool
