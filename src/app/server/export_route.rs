@@ -177,10 +177,11 @@ pub enum ExportLayer {
     BridgeAreas,
     SolarPlants,
     Trees,
+    Cutlines,
 }
 
 impl ExportLayer {
-    const ALL: [Self; 17] = [
+    const ALL: [Self; 18] = [
         Self::Shading,
         Self::Contours,
         Self::BicycleTrails,
@@ -198,6 +199,7 @@ impl ExportLayer {
         Self::BridgeAreas,
         Self::SolarPlants,
         Self::Trees,
+        Self::Cutlines,
     ];
 
     const fn render_layer(self) -> RenderLayer {
@@ -219,6 +221,7 @@ impl ExportLayer {
             Self::BridgeAreas => RenderLayer::BridgeAreas,
             Self::SolarPlants => RenderLayer::SolarPlants,
             Self::Trees => RenderLayer::Trees,
+            Self::Cutlines => RenderLayer::Cutlines,
         }
     }
 }

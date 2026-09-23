@@ -2,7 +2,8 @@ pub use attribution::{ATTRIBUTION_HEADER, Attribution, FALLBACK_KEY, OSM as OSM_
 pub use coverage::{TileCoverageRelation, tile_touches_coverage};
 pub use feature::{Feature, FeatureError, GeomError, LegendValue};
 pub use image_format::{ImageFormat, WebpQuality};
-pub use legend::{LegendMeta, LegendMode, legend_metadata, legend_render_request};
+pub use layers::key_enabled;
+pub use legend::{LegendMode, legend_metadata, legend_render_request};
 pub use render_config::{
     ContourCountries, FeatureLineMaskCountries, HillshadingHierarchy, PlaceTypeOverride,
     PlaceTypeOverrides, RenderConfig,

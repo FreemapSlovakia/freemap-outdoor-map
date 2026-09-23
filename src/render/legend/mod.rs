@@ -54,6 +54,9 @@ pub struct LegendItem<'a> {
     /// Landcover drawn underneath so the symbol is legible. Kept apart from `data` so it can
     /// be rendered on its own as the "nothing to see here" baseline (see the zoom range test).
     pub background: LegendItemData,
+    /// The extra this item is a sample of, where its layer draws several and a
+    /// variant may want only some — the five route types share one layer.
+    pub requires: Option<RenderLayer>,
     pub zoom: u8,
     /// Zooms at which the map actually shows this feature. Mirrors the gating in
     /// `layers::pipeline` and the layer render fns; kept honest by `zoom_range_test`.
@@ -72,10 +75,22 @@ pub struct LegendItemBuilder<'a> {
     pub probe_lower_edge: bool,
     pub data: LegendItemData,
     pub background: LegendItemData,
+    pub requires: Option<RenderLayer>,
     pub for_taginfo: bool,
 }
 
 impl LegendItem<'_> {
+    /// Whether the selection draws any layer this item's sample is made of.
+    pub fn drawn_by(&self, layers: &Layers) -> bool {
+        if let Some(required) = self.requires {
+            return layers.draws(required);
+        }
+
+        self.data
+            .keys()
+            .any(|layer| crate::render::key_enabled(layers, layer, layer))
+    }
+
     /// The item's own features drawn on top of its background landcover.
     pub fn render_data(&self) -> LegendItemData {
         let mut data = self.background.clone();
@@ -108,6 +123,7 @@ impl<'a> LegendItem<'a> {
             probe_lower_edge: true,
             data: HashMap::new(),
             background: HashMap::new(),
+            requires: None,
             for_taginfo: opts.for_taginfo,
         }
     }
@@ -123,6 +139,7 @@ impl<'a> LegendItemBuilder<'a> {
             },
             data: self.data,
             background: self.background,
+            requires: self.requires,
             zoom: self.zoom,
             zooms: self.zooms,
             probe_lower_edge: self.probe_lower_edge,
@@ -179,6 +196,12 @@ impl<'a> LegendItemBuilder<'a> {
             .or_default()
             .push(props_builder.props);
 
+        self
+    }
+
+    /// Narrow the item to one extra, where its layer draws several.
+    const fn requires(mut self, layer: RenderLayer) -> Self {
+        self.requires = Some(layer);
         self
     }
 
@@ -299,7 +322,9 @@ fn legend_items(zoom: Option<u8>, for_taginfo: bool) -> &'static [LegendItem<'st
 
 /// Metadata for every legend item, or — with `zoom` — only for those the map actually
 /// draws at that zoom.
-pub fn legend_metadata(zoom: Option<u8>) -> Vec<LegendMeta<'static>> {
+/// `variant` lists only what that tile route draws; `None` lists the whole
+/// catalogue.
+pub fn legend_metadata(zoom: Option<u8>, variant: Option<&Layers>) -> Vec<LegendMeta<'static>> {
     let zoom = zoom.map(clamp_zoom);
 
     // Zoom only decides which items are listed, never what their metadata says, so this reads
@@ -307,6 +332,7 @@ pub fn legend_metadata(zoom: Option<u8>) -> Vec<LegendMeta<'static>> {
     legend_items(None, false)
         .iter()
         .filter(|item| zoom.is_none_or(|zoom| item.zooms.contains(&zoom)))
+        .filter(|item| variant.is_none_or(|layers| item.drawn_by(layers)))
         .map(|item| item.meta.clone())
         .collect()
 }
@@ -316,12 +342,41 @@ pub fn legend_render_request(
     zoom: Option<u8>,
     scale: f64,
     mode: LegendMode,
+    variant: Option<&Layers>,
 ) -> Option<RenderRequest> {
     let items = legend_items(zoom, mode == LegendMode::Taginfo);
 
     let item = items.iter().find(|item| item.meta.id == id)?;
 
-    Some(render_request(item.render_data(), item.zoom, scale, mode))
+    if variant.is_some_and(|layers| !item.drawn_by(layers)) {
+        return None;
+    }
+
+    // An overlay carries no ground, so its samples are drawn on none either.
+    let (data, layers) = match variant {
+        Some(layers) if !layers.is_whole_map() => (item.data.clone(), layers.clone()),
+        Some(layers) => (item.render_data(), layers.clone()),
+        None => (item.render_data(), whole_catalogue()),
+    };
+
+    Some(render_request(data, item.zoom, scale, mode, layers))
+}
+
+/// Every optional layer with a legend item of its own; one left out here draws
+/// nothing at any zoom, and the zoom-range test is what says so. A variant
+/// renders with its own selection instead, so its samples look as they do on
+/// the tile.
+fn whole_catalogue() -> Layers {
+    Layers::map(HashSet::from([
+        RenderLayer::CountryBorders,
+        RenderLayer::RoutesBicycle,
+        RenderLayer::RoutesHiking,
+        RenderLayer::RoutesHorse,
+        RenderLayer::RoutesSki,
+        RenderLayer::SacScale,
+        RenderLayer::Smoothness,
+        RenderLayer::Waymarking,
+    ]))
 }
 
 fn render_request(
@@ -329,6 +384,7 @@ fn render_request(
     zoom: u8,
     scale: f64,
     mode: LegendMode,
+    layers: Layers,
 ) -> RenderRequest {
     let bbox = match mode {
         LegendMode::Normal => {
@@ -360,17 +416,7 @@ fn render_request(
             LegendMode::Normal => ImageFormat::Png,
             LegendMode::Taginfo => ImageFormat::Svg,
         },
-        // Every optional layer with a legend item of its own; one left out here
-        // draws nothing at any zoom, and the zoom-range test is what says so.
-        Layers::map(HashSet::from([
-            RenderLayer::CountryBorders,
-            RenderLayer::RoutesBicycle,
-            RenderLayer::RoutesHiking,
-            RenderLayer::RoutesHorse,
-            RenderLayer::RoutesSki,
-            RenderLayer::SacScale,
-            RenderLayer::Smoothness,
-        ])),
+        layers,
         None,
     );
 

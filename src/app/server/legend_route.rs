@@ -1,9 +1,10 @@
 use crate::{
     app::server::app_state::AppState,
-    render::{LegendMeta, LegendMode, legend_metadata, legend_render_request},
+    render::{LegendMode, legend_metadata, legend_render_request},
 };
 use axum::{
     Json,
+    response::IntoResponse,
     body::Body,
     extract::{Path, Query, State},
     http::{Response, StatusCode},
@@ -14,32 +15,71 @@ use serde::Deserialize;
 pub struct LegendMetadataQuery {
     /// List only the items the map draws at this zoom; defaults to listing all of them.
     zoom: Option<u8>,
+    /// List only what this tile route draws, by its URL path (`/`, `/o/sac`, …);
+    /// defaults to the whole catalogue.
+    variant: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub struct LegendQuery {
     scale: Option<f64>,
     mode: Option<LegendMode>,
+    /// Draw the sample as this tile route draws it — an overlay's samples carry
+    /// no ground, and it has no item for anything it does not draw.
+    variant: Option<String>,
     /// Render the item as it appears at this zoom; defaults to the item's preferred zoom.
     zoom: Option<u8>,
 }
 
 pub async fn get_metadata(
-    Query(LegendMetadataQuery { zoom }): Query<LegendMetadataQuery>,
-) -> Json<Vec<LegendMeta<'static>>> {
-    Json(legend_metadata(zoom))
+    State(state): State<AppState>,
+    Query(LegendMetadataQuery { zoom, variant }): Query<LegendMetadataQuery>,
+) -> Response<Body> {
+    let layers = match variant {
+        Some(ref path) => match state.variant_by_path(path) {
+            Some(variant) => Some(variant.layers.clone()),
+            None => return unknown_variant(),
+        },
+        None => None,
+    };
+
+    Json(legend_metadata(zoom, layers.as_ref())).into_response()
+}
+
+fn unknown_variant() -> Response<Body> {
+    Response::builder()
+        .status(StatusCode::NOT_FOUND)
+        .body(Body::from("no such tile variant"))
+        .expect("body should be built")
 }
 
 pub async fn get(
     State(state): State<AppState>,
     Path(id): Path<String>,
-    Query(LegendQuery { scale, mode, zoom }): Query<LegendQuery>,
+    Query(LegendQuery {
+        scale,
+        mode,
+        zoom,
+        variant,
+    }): Query<LegendQuery>,
 ) -> Response<Body> {
     let mode = mode.unwrap_or(LegendMode::Normal);
 
-    let Some(render_request) =
-        legend_render_request(id.as_str(), zoom, scale.unwrap_or(1f64), mode)
-    else {
+    let layers = match variant {
+        Some(ref path) => match state.variant_by_path(path) {
+            Some(variant) => Some(variant.layers.clone()),
+            None => return unknown_variant(),
+        },
+        None => None,
+    };
+
+    let Some(render_request) = legend_render_request(
+        id.as_str(),
+        zoom,
+        scale.unwrap_or(1f64),
+        mode,
+        layers.as_ref(),
+    ) else {
         return Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::from("legend item not found"))

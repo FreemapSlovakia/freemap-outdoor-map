@@ -555,6 +555,8 @@ pub fn render(
 
     let mut prefetcher = Prefetcher::new(pool, handle, ctx.clone(), request.layers.clone());
 
+    let cutlines = to_render.draws(RenderLayer::Cutlines);
+
     // Built from the land and water the sea and water fills project anyway.
     let dry_land: Rc<RefCell<Option<layers::dry_land::DryLand>>> = Rc::default();
 
@@ -626,8 +628,8 @@ pub fn render(
     // borrow the cached rows. The lowest stage gate is zoom 11 (stage 3).
     let feature_lines_slot = if zoom >= 11 {
         prefetcher
-            .shared_query("feature_lines", |ctx, conn| {
-                async move { layers::feature_lines::query(&ctx, &conn).await }.boxed()
+            .shared_query("feature_lines", move |ctx, conn| {
+                async move { layers::feature_lines::query(&ctx, &conn, cutlines).await }.boxed()
             })
     } else {
         None

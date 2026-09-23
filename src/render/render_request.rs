@@ -33,6 +33,7 @@ pub enum RenderLayer {
     BridgeAreas,
     SolarPlants,
     Trees,
+    Cutlines,
 }
 
 #[derive(Deserialize, Debug, Clone, Copy)]
@@ -127,6 +128,7 @@ impl RenderLayer {
                 | Self::BridgeAreas
                 | Self::SolarPlants
                 | Self::Trees
+                | Self::Cutlines
         )
     }
 }

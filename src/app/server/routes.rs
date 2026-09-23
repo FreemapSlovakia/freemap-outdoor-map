@@ -62,6 +62,7 @@ pub async fn start_server(
         .tile_variants
         .iter()
         .map(|variant| TileVariantState {
+            url_path: variant.url_path.clone(),
             tile_cache_base_path: variant.tile_cache_base_path.clone(),
             coverage_geometry: variant.coverage_geometry.clone().map(Arc::new),
             layers: variant.layers.clone(),

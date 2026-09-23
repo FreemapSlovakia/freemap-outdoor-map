@@ -8,7 +8,7 @@
 
 use super::{
     LegendItem, LegendItemData, LegendMode, MAX_LEGEND_ZOOM, legend_items, render_request,
-    set_mapping_path_for_test,
+    set_mapping_path_for_test, whole_catalogue,
 };
 use crate::render::{layers::Shading, renderer, set_fonts_path, svg_repo::SvgRepo};
 use deadpool_postgres::{Config, Pool, Runtime};
@@ -32,7 +32,7 @@ fn render(
     pool: &Pool,
     handle: &Handle,
 ) -> Vec<u8> {
-    let request = render_request(data, zoom, 1.0, LegendMode::Normal);
+    let request = render_request(data, zoom, 1.0, LegendMode::Normal, whole_catalogue());
 
     renderer::render(
         &request,
