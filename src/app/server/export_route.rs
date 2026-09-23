@@ -165,10 +165,12 @@ pub enum ExportLayer {
     SkiTrails,
     SacScale,
     Waymarking,
+    Landcover,
+    Sea,
 }
 
 impl ExportLayer {
-    const ALL: [Self; 8] = [
+    const ALL: [Self; 10] = [
         Self::Shading,
         Self::Contours,
         Self::BicycleTrails,
@@ -177,6 +179,8 @@ impl ExportLayer {
         Self::SkiTrails,
         Self::SacScale,
         Self::Waymarking,
+        Self::Landcover,
+        Self::Sea,
     ];
 
     const fn render_layer(self) -> RenderLayer {
@@ -189,8 +193,23 @@ impl ExportLayer {
             Self::SkiTrails => RenderLayer::RoutesSki,
             Self::SacScale => RenderLayer::SacScale,
             Self::Waymarking => RenderLayer::Waymarking,
+            Self::Landcover => RenderLayer::Landcover,
+            Self::Sea => RenderLayer::Sea,
         }
     }
+}
+
+/// How an export reads its `layers` list.
+#[derive(Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ExportLayerMode {
+    /// The map, with `layers` toggling the optional ones.
+    #[default]
+    Map,
+    /// An overlay of nothing but `layers`.
+    Only,
+    /// The map bar `layers` — an overlay for something supplying its own ground.
+    Except,
 }
 
 #[derive(Deserialize, Debug)]
@@ -199,11 +218,10 @@ pub struct ExportFeatures {
     /// Toggleable layers that are enabled. Absent keeps the server defaults; a
     /// present set explicitly turns each toggleable layer on (in set) or off.
     layers: Option<HashSet<ExportLayer>>,
-    /// Draw an overlay — nothing but `layers`, over a transparent background —
-    /// instead of the map. Needs an alpha-capable `format`, and the server
-    /// defaults do not apply: what is not listed is not drawn.
+    /// What `layers` means. Both overlay modes need an alpha-capable `format`,
+    /// and neither applies the server defaults.
     #[serde(default)]
-    only: bool,
+    layer_mode: ExportLayerMode,
     /// Custom `GeoJSON` overlay layer and its rendering options. Absent means no
     /// overlay.
     custom_layer: Option<ExportCustomLayer>,
@@ -302,12 +320,17 @@ pub async fn post(
 
     let file_path = std::env::temp_dir().join(&filename);
 
-    let only = request.features.as_ref().is_some_and(|features| features.only);
+    let layer_mode = request
+        .features
+        .as_ref()
+        .map_or(ExportLayerMode::Map, |features| features.layer_mode);
 
-    let mut render = if only {
-        HashSet::new()
-    } else {
+    // An overlay names its own layers outright, in or out; the server defaults
+    // describe the map and would leak into either reading of the list.
+    let mut render = if layer_mode == ExportLayerMode::Map {
         state.default_render.clone()
+    } else {
+        HashSet::new()
     };
 
     if let Some(features) = &request.features
@@ -324,10 +347,10 @@ pub async fn post(
         }
     }
 
-    let layers = if only {
-        Layers::Only(render)
-    } else {
-        Layers::Map(render)
+    let layers = match layer_mode {
+        ExportLayerMode::Map => Layers::Map(render),
+        ExportLayerMode::Only => Layers::Only(render),
+        ExportLayerMode::Except => Layers::Except(render),
     };
 
     let mut render_request = RenderRequest::new(rect, request.zoom, scale, format, layers, None);

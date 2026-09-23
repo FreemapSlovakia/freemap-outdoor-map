@@ -124,6 +124,7 @@ fn key_layers(key: &str) -> &'static [RenderLayer] {
 
     match key {
         "sea" => &[L::Sea],
+        "landcovers" => &[L::Landcover],
         // Cuts bridges out of the shading and the contours alike.
         "bridge_for_shading" => &[L::Shading, L::Contours],
         "contours" => &[L::Contours],
@@ -169,6 +170,7 @@ impl<'a> Prefetcher<'a> {
         match self.selection {
             Layers::Map(_) => true,
             Layers::Only(ref set) => key_layers(key).iter().any(|layer| set.contains(layer)),
+            Layers::Except(ref set) => !key_layers(key).iter().any(|layer| set.contains(layer)),
         }
     }
 
@@ -415,13 +417,13 @@ pub fn render(
 
     let to_render = &request.layers;
 
-    let do_shading = to_render.contains(RenderLayer::Shading) && shading.hierarchy.is_some();
+    let do_shading = to_render.draws(RenderLayer::Shading) && shading.hierarchy.is_some();
 
     let feature_line_mask_countries = shading
         .feature_line_mask_countries
         .map_or(&[] as &[String], FeatureLineMaskCountries::countries);
 
-    let do_contours = to_render.contains(RenderLayer::Contours)
+    let do_contours = to_render.draws(RenderLayer::Contours)
         && shading.hierarchy.is_some()
         && shading.contour_countries.is_some();
 
@@ -442,7 +444,7 @@ pub fn render(
     let attribution: Rc<RefCell<Attribution>> = Rc::default();
 
     let coverage_geometry = if ctx.legend.is_none()
-        && !request.layers.is_only()
+        && request.layers.is_map()
         && matches!(request.format, ImageFormat::Jpeg | ImageFormat::Png)
         && let Some(ref coverage_geometry) = request.coverage_geometry
     {
@@ -891,7 +893,7 @@ pub fn render(
         );
     }
 
-    if zoom >= 8 && to_render.contains(RenderLayer::CountryBorders) {
+    if zoom >= 8 && to_render.draws(RenderLayer::CountryBorders) {
         prefetcher.add(
             "borders",
             Some("country_borders"),
@@ -964,7 +966,7 @@ pub fn render(
         });
     }
 
-    if (9..=11).contains(&zoom) && to_render.contains(RenderLayer::Geonames) {
+    if (9..=11).contains(&zoom) && to_render.draws(RenderLayer::Geonames) {
         prefetcher.add(
             "geonames",
             None,
@@ -1258,7 +1260,7 @@ pub fn render(
         );
     }
 
-    if zoom < 8 && to_render.contains(RenderLayer::CountryNames) {
+    if zoom < 8 && to_render.draws(RenderLayer::CountryNames) {
         let rect = ctx.bbox.project_to_tile(&ctx.tile_projector);
 
         prefetcher.push(move |_params| {
@@ -1288,7 +1290,7 @@ pub fn render(
 
     // Icons and their labels in one stage: on an overlay there are no other POIs
     // for them to interleave with, so they only have to miss each other.
-    if zoom >= layers::pois::WAYMARKING_MIN_ZOOM && to_render.contains(RenderLayer::Waymarking) {
+    if zoom >= layers::pois::WAYMARKING_MIN_ZOOM && to_render.draws(RenderLayer::Waymarking) {
         let kst = to_render.contains(RenderLayer::RoutesHikingKst);
         let ctx = ctx.clone();
 
@@ -1314,7 +1316,7 @@ pub fn render(
 
     // Last of the map layers: the grade qualifies everything drawn below it, and
     // as an overlay it has nothing of its own to hide behind.
-    if zoom >= layers::sac_scale::MIN_ZOOM && to_render.contains(RenderLayer::SacScale) {
+    if zoom >= layers::sac_scale::MIN_ZOOM && to_render.draws(RenderLayer::SacScale) {
         prefetcher.add(
             "sac_scale",
             None,

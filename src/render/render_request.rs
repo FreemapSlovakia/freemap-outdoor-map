@@ -25,6 +25,7 @@ pub enum RenderLayer {
     RoutesSki,
     SacScale,
     Waymarking,
+    Landcover,
 }
 
 #[derive(Deserialize, Debug, Clone, Copy)]
@@ -102,21 +103,40 @@ pub struct AttributionDecoration {
     pub overrides: HashMap<String, String>,
 }
 
-/// Which layers a request draws. `Only` leaves everything it does not name
-/// unpainted, so it needs an alpha-capable format to be of any use.
+/// Which layers a request draws. `Only` and `Except` both leave part of the
+/// surface unpainted, so they need an alpha-capable format to be of any use.
 #[derive(Debug, Clone)]
 pub enum Layers {
     /// The whole base map, plus the optional layers named.
     Map(HashSet<RenderLayer>),
     /// Nothing but the layers named.
     Only(HashSet<RenderLayer>),
+    /// The whole base map bar the layers named — an overlay for something that
+    /// supplies its own ground, an aerial image above all.
+    Except(HashSet<RenderLayer>),
 }
 
 impl Layers {
+    /// Raw membership, for the values that pick a variant rather than name a
+    /// layer of their own: `RoutesHikingKst` is the KST map, not a thing drawn,
+    /// so it stays opt-in whatever the mode.
     pub fn contains(&self, layer: RenderLayer) -> bool {
-        let (Self::Map(set) | Self::Only(set)) = self;
+        let (Self::Map(set) | Self::Only(set) | Self::Except(set)) = self;
 
         set.contains(&layer)
+    }
+
+    /// Whether `layer` is drawn. `Except` inverts membership, so a layer gated
+    /// on this reads right in all three modes where `contains` would not.
+    pub fn draws(&self, layer: RenderLayer) -> bool {
+        match self {
+            Self::Map(set) | Self::Only(set) => set.contains(&layer),
+            Self::Except(set) => !set.contains(&layer),
+        }
+    }
+
+    pub const fn is_map(&self) -> bool {
+        matches!(self, Self::Map(_))
     }
 
     pub const fn is_only(&self) -> bool {

@@ -73,21 +73,21 @@ fn get_routes_query(
     let mut rights = Vec::<&str>::new();
 
     let bool_hiking_kst = render.contains(RenderLayer::RoutesHikingKst);
-    let bool_hiking = render.contains(RenderLayer::RoutesHiking) || bool_hiking_kst;
+    let bool_hiking = render.draws(RenderLayer::RoutesHiking) || bool_hiking_kst;
 
     if bool_hiking || bool_hiking_kst {
         lefts.extend_from_slice(&["hiking", "foot", "running"]);
     }
 
-    if render.contains(RenderLayer::RoutesHorse) {
+    if render.draws(RenderLayer::RoutesHorse) {
         lefts.push("horse");
     }
 
-    if render.contains(RenderLayer::RoutesBicycle) {
+    if render.draws(RenderLayer::RoutesBicycle) {
         rights.extend_from_slice(&["bicycle", "mtb"]);
     }
 
-    if render.contains(RenderLayer::RoutesSki) {
+    if render.draws(RenderLayer::RoutesSki) {
         rights.extend_from_slice(&["ski", "piste"]);
     }
 
@@ -123,9 +123,9 @@ fn get_routes_query(
         format!("{} AND ", conditions.join(" AND "))
     };
 
-    let bool_horse = render.contains(RenderLayer::RoutesHorse);
-    let bool_bicycle = render.contains(RenderLayer::RoutesBicycle);
-    let bool_ski = render.contains(RenderLayer::RoutesSki);
+    let bool_horse = render.draws(RenderLayer::RoutesHorse);
+    let bool_bicycle = render.draws(RenderLayer::RoutesBicycle);
+    let bool_ski = render.draws(RenderLayer::RoutesSki);
 
     format!("
         SELECT
@@ -333,7 +333,7 @@ pub fn render_marking(
         let df = 1.25;
 
         for color in &COLORS {
-            if to_render.contains(RenderLayer::RoutesHorse) {
+            if to_render.draws(RenderLayer::RoutesHorse) {
                 let off = row.get_i32(&format!("r_{}", color.0))?;
 
                 if off > 0 {
@@ -358,7 +358,7 @@ pub fn render_marking(
                 }
             }
 
-            if to_render.contains(RenderLayer::RoutesSki) {
+            if to_render.draws(RenderLayer::RoutesSki) {
                 let off = row.get_i32(&format!("s_{}", color.0))?;
 
                 if off > 0 {
@@ -385,7 +385,7 @@ pub fn render_marking(
                 }
             }
 
-            if to_render.contains(RenderLayer::RoutesBicycle) {
+            if to_render.draws(RenderLayer::RoutesBicycle) {
                 let off = row.get_i32(&format!("b_{}", color.0))?;
 
                 if off > 0 {
@@ -413,7 +413,7 @@ pub fn render_marking(
                 }
             }
 
-            if to_render.contains(RenderLayer::RoutesHiking)
+            if to_render.draws(RenderLayer::RoutesHiking)
                 || to_render.contains(RenderLayer::RoutesHikingKst)
             {
                 {
