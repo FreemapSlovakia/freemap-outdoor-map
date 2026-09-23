@@ -1317,18 +1317,6 @@ pub fn render(
 
     prefetcher.run(svg_repo, shading.datasets, collision)?;
 
-    // Decorations (scale bar, north arrow, attribution) are drawn last so they
-    // sit on top of everything, and never on legend renders.
-    if ctx.legend.is_none()
-        && let Some(decorations) = &request.decorations
-    {
-        layers::decorations::render(&ctx, context, decorations)?;
-    }
-
-    if let Some(hillshading_datasets) = shading.datasets {
-        hillshading_datasets.evict_unused();
-    }
-
     let mut attribution = Rc::try_unwrap(attribution)
         .expect("all layer render_fns already dropped")
         .into_inner();
@@ -1337,6 +1325,19 @@ pub fn render(
     // render draws no map data at all.
     if ctx.legend.is_none() {
         attribution.add_osm();
+    }
+
+    // Decorations (scale bar, north arrow, attribution) are drawn last so they
+    // sit on top of everything, and never on legend renders. The attribution
+    // names the datasets above, so it has to follow them.
+    if ctx.legend.is_none()
+        && let Some(decorations) = &request.decorations
+    {
+        layers::decorations::render(&ctx, context, decorations, &attribution)?;
+    }
+
+    if let Some(hillshading_datasets) = shading.datasets {
+        hillshading_datasets.evict_unused();
     }
 
     Ok(attribution)

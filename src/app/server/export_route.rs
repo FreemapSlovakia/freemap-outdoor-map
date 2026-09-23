@@ -1,8 +1,8 @@
 use crate::{
     app::server::{app_state::AppState, routes::ServerOptions},
     render::{
-        Attribution, CustomLayer, CustomLayerOrder, Decorations, Glow, ImageFormat, LabelStyle,
-        RenderLayer, RenderRequest, RenderWorkerPool, bbox_size_in_pixels,
+        Attribution, AttributionDecoration, CustomLayer, CustomLayerOrder, Decorations, Glow,
+        ImageFormat, LabelStyle, RenderLayer, RenderRequest, RenderWorkerPool, bbox_size_in_pixels,
     },
 };
 use axum::{
@@ -116,7 +116,38 @@ pub struct ExportRequest {
 pub struct ExportDecorations {
     scale_bar: Option<bool>,
     north_arrow: Option<String>,
-    attribution: Option<String>,
+    attribution: Option<ExportAttribution>,
+}
+
+/// Asks for the attribution line. Its text is not the client's to send: only the
+/// render knows which datasets it drew from, so the client contributes what the
+/// renderer cannot know and the renderer appends the rest.
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportAttribution {
+    /// Whatever the exported features earn — routers above all. Drawn after this
+    /// map's own credit, in the order given.
+    #[serde(default)]
+    extra: Vec<String>,
+    /// Titles the client words itself, by dataset code, replacing `/licenses`'.
+    /// Only OpenStreetMap's is translated; the rest are the rights-holders' own
+    /// strings, the same in every language.
+    #[serde(default)]
+    titles: HashMap<String, String>,
+}
+
+impl ExportAttribution {
+    /// `/export` takes no credentials, and every credit sent is measured and
+    /// drawn, so a caller cannot hand over an unbounded list of them.
+    fn within_limits(&self) -> bool {
+        const MAX_ENTRIES: usize = 32;
+        const MAX_LEN: usize = 200;
+
+        self.extra.len() <= MAX_ENTRIES
+            && self.titles.len() <= MAX_ENTRIES
+            && self.extra.iter().all(|credit| credit.len() <= MAX_LEN)
+            && self.titles.values().all(|title| title.len() <= MAX_LEN)
+    }
 }
 
 /// Client-toggleable map layers. Each maps to one [`RenderLayer`]; the set sent
@@ -352,6 +383,16 @@ pub async fn post(
         None
     };
 
+    let credits_over_limit = request
+        .decorations
+        .as_ref()
+        .and_then(|d| d.attribution.as_ref())
+        .is_some_and(|a| !a.within_limits());
+
+    if credits_over_limit {
+        return bad_request();
+    }
+
     render_request.decorations = request.decorations.as_ref().and_then(|d| {
         let trimmed = |s: &Option<String>| {
             s.as_deref()
@@ -362,7 +403,22 @@ pub async fn post(
 
         let scale_bar = d.scale_bar.unwrap_or(false);
         let north_arrow = trimmed(&d.north_arrow);
-        let attribution = trimmed(&d.attribution);
+
+        let attribution = d.attribution.as_ref().map(|a| AttributionDecoration {
+            extra: a
+                .extra
+                .iter()
+                .map(|credit| single_line(credit))
+                .filter(|credit| !credit.is_empty())
+                .collect(),
+            catalog: state.licenses.titles(),
+            overrides: a
+                .titles
+                .iter()
+                .map(|(code, title)| (code.trim().to_owned(), single_line(title)))
+                .filter(|(_, title)| !title.is_empty())
+                .collect(),
+        });
 
         if !scale_bar && north_arrow.is_none() && attribution.is_none() {
             return None;
@@ -490,6 +546,25 @@ pub async fn delete(
         .status(StatusCode::NO_CONTENT)
         .body(Body::empty())
         .expect("delete body")
+}
+
+/// A credit as one drawn line. `draw_text` honours an embedded newline while
+/// the wrap measures only the widest part, so a caller could otherwise push the
+/// block off the canvas. No-break spaces are left alone — the credits use them.
+fn single_line(text: &str) -> String {
+    text.chars()
+        .map(|c| {
+            if c.is_control() || c == '\u{2028}' || c == '\u{2029}' {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect::<String>()
+        .split(' ')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn generate_token() -> String {

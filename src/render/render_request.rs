@@ -7,7 +7,7 @@ use geo::Geometry;
 use geo::Rect;
 use geojson::Feature;
 use serde::Deserialize;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 #[derive(Debug, Hash, ValueEnum, EnumSetType)]
@@ -78,8 +78,26 @@ pub struct CustomLayer {
 pub struct Decorations {
     pub scale_bar: bool,
     pub north_arrow: Option<String>,
-    pub attribution: Option<String>,
+    pub attribution: Option<AttributionDecoration>,
     pub center_lat: f64,
+}
+
+/// What to draw the attribution line from. The datasets are not in here: only
+/// the finished render knows which of them contributed a pixel, so the text is
+/// composed at drawing time from the render's own codes.
+#[derive(Debug, Clone)]
+pub struct AttributionDecoration {
+    /// Credits the renderer cannot know — whatever the exported features earn.
+    /// Drawn after this map's own credit, in the order given.
+    pub extra: Vec<String>,
+    /// Dataset code to the titles crediting it, for every code there is.
+    pub catalog: Arc<BTreeMap<String, Vec<String>>>,
+    /// Titles the caller words itself, by code. Only `map` — this renderer's
+    /// own credit — and OpenStreetMap's are honoured, because the catalog holds
+    /// those in English alone. Every other title is a rights-holder's own
+    /// string in every language, and one code can carry several of them, which
+    /// a single replacement could not stand in for.
+    pub overrides: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone)]

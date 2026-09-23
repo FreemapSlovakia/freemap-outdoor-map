@@ -9,6 +9,7 @@ use std::{
     collections::BTreeMap,
     hash::{DefaultHasher, Hash, Hasher},
     path::Path,
+    sync::Arc,
 };
 
 /// One source behind a dataset. A dataset can have several — Belgium's relief is
@@ -63,6 +64,15 @@ const CONTOURS: &str = "contours";
 pub struct LicenseCatalog {
     body: Bytes,
     etag: String,
+    titles: Arc<BTreeMap<String, Vec<String>>>,
+}
+
+impl LicenseCatalog {
+    /// The same dictionary reduced to what a burnt-in attribution needs: the
+    /// titles alone, since a drawn line cannot carry a URL.
+    pub fn titles(&self) -> Arc<BTreeMap<String, Vec<String>>> {
+        Arc::clone(&self.titles)
+    }
 }
 
 impl LicenseCatalog {
@@ -169,9 +179,20 @@ impl LicenseCatalog {
         let mut hasher = DefaultHasher::new();
         body.hash(&mut hasher);
 
+        let titles = licenses
+            .iter()
+            .map(|(code, sources)| {
+                (
+                    code.clone(),
+                    sources.iter().map(|source| source.title.clone()).collect(),
+                )
+            })
+            .collect();
+
         Self {
             etag: format!("\"{:016x}\"", hasher.finish()),
             body: Bytes::from(body),
+            titles: Arc::new(titles),
         }
     }
 }

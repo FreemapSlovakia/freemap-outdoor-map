@@ -1,4 +1,5 @@
 use crate::render::{
+    attribution::{Attribution, FALLBACK_KEY, OSM as OSM_CODE},
     colors::{self, ContextExt},
     ctx::Ctx,
     draw::{
@@ -6,7 +7,7 @@ use crate::render::{
         font_system::with_font_system,
         text::{TextOptions, draw_text},
     },
-    render_request::Decorations,
+    render_request::{AttributionDecoration, Decorations},
 };
 use cairo::{Context, LineCap, LineJoin};
 use cosmic_text::{Attrs, Buffer, Family, Metrics, Shaping};
@@ -20,32 +21,143 @@ const MARGIN: f64 = 12.0;
 /// All coordinates are in logical (CSS) pixels: the caller's Cairo context is
 /// already scaled by the request's `scale`, and `ctx.size` is the logical size,
 /// so the bottom-right corner is `(ctx.size.width, ctx.size.height)`.
-pub fn render(ctx: &Ctx, context: &Context, decorations: &Decorations) -> cairo::Result<()> {
-    if decorations.scale_bar {
-        draw_scale_bar(ctx, context, decorations.center_lat)?;
-    }
+pub fn render(
+    ctx: &Ctx,
+    context: &Context,
+    decorations: &Decorations,
+    attribution: &Attribution,
+) -> cairo::Result<()> {
+    let scale_bar_right = if decorations.scale_bar {
+        draw_scale_bar(ctx, context, decorations.center_lat)?
+    } else {
+        0.0
+    };
 
     if let Some(label) = &decorations.north_arrow {
         draw_north_arrow(ctx, context, label)?;
     }
 
-    if let Some(attribution) = &decorations.attribution {
-        draw_attribution(ctx, context, attribution)?;
+    if let Some(decoration) = &decorations.attribution {
+        let credits = compose_attribution(decoration, attribution);
+
+        if !credits.is_empty() {
+            draw_attribution(ctx, context, &credits, scale_bar_right)?;
+        }
     }
 
     Ok(())
 }
 
+/// Where a code sits in the credit line: what every render draws from, then the
+/// datasets that answered for somewhere, then the global models that filled what
+/// those did not cover. Mirrors the order the web client shows.
+fn rank(code: &str) -> u8 {
+    if code == OSM_CODE {
+        0
+    } else if code.ends_with(&format!(":{FALLBACK_KEY}")) {
+        2
+    } else {
+        1
+    }
+}
+
+/// Code the renderer's own credit is addressed by. Not a dataset — this is the
+/// map being drawn — but it takes a `titles` override like one, so a portal
+/// serving this map under its own name can say so.
+const MAP_CODE: &str = "map";
+
+/// What that credit says when the caller offers nothing.
+const FREEMAP: &str = "©\u{a0}Freemap Slovakia";
+
+/// The credits for one render: this map, then the caller's own — whatever it
+/// drew that the renderer cannot know — then the datasets that contributed a
+/// pixel. A title is named once however many codes carry it, under the
+/// strongest claim it has.
+fn compose_attribution(decoration: &AttributionDecoration, attribution: &Attribution) -> Vec<String> {
+    let mut ranked: Vec<(u8, &str)> = Vec::new();
+
+    for code in attribution.codes() {
+        let Some(catalog) = decoration.catalog.get(code) else {
+            continue;
+        };
+
+        // Only OpenStreetMap's credit is a phrase to translate. Every other
+        // title is a rights-holder's own name, and a code can carry several of
+        // them — Belgium's relief is two regional models — which one
+        // replacement string cannot stand in for without dropping the rest.
+        let titles: Vec<&str> = match decoration.overrides.get(code) {
+            Some(title) if code == OSM_CODE => vec![title.as_str()],
+            _ => catalog.iter().map(String::as_str).collect(),
+        };
+
+        for title in titles {
+            match ranked.iter_mut().find(|(_, held)| *held == title) {
+                Some(held) => held.0 = held.0.min(rank(code)),
+                None => ranked.push((rank(code), title)),
+            }
+        }
+    }
+
+    ranked.sort_by_cached_key(|(rank, title)| (*rank, collation_key(title)));
+
+    let mut credits = vec![
+        decoration
+            .overrides
+            .get(MAP_CODE)
+            .map_or(FREEMAP, String::as_str)
+            .to_owned(),
+    ];
+
+    credits.extend(decoration.extra.iter().cloned());
+
+    for (_, title) in ranked {
+        if !credits.iter().any(|credit| credit == title) {
+            credits.push(title.to_owned());
+        }
+    }
+
+    credits
+}
+
+/// Approximates the `localeCompare` the web client orders the same credits by:
+/// case folded, and an accent sorting with its base letter rather than after
+/// every unaccented title. A locale that alphabetizes an accented letter in its
+/// own right — Slovak sorts `Č` after `C` — still parts company with this.
+fn collation_key(title: &str) -> String {
+    title
+        .chars()
+        .flat_map(char::to_lowercase)
+        .map(|c| match c {
+            'á' | 'à' | 'â' | 'ä' | 'ã' | 'å' | 'ā' | 'ă' | 'ą' => 'a',
+            'ç' | 'ć' | 'č' => 'c',
+            'ď' | 'đ' => 'd',
+            'é' | 'è' | 'ê' | 'ë' | 'ē' | 'ė' | 'ę' | 'ě' => 'e',
+            'ğ' => 'g',
+            'í' | 'ì' | 'î' | 'ï' | 'ī' | 'į' => 'i',
+            'ĺ' | 'ľ' | 'ł' => 'l',
+            'ń' | 'ň' | 'ñ' => 'n',
+            'ó' | 'ò' | 'ô' | 'ö' | 'õ' | 'ø' | 'ō' | 'ő' => 'o',
+            'ŕ' | 'ř' => 'r',
+            'ś' | 'ş' | 'š' => 's',
+            'ť' | 'ţ' => 't',
+            'ú' | 'ù' | 'û' | 'ü' | 'ū' | 'ů' | 'ű' => 'u',
+            'ý' | 'ÿ' => 'y',
+            'ź' | 'ż' | 'ž' => 'z',
+            other => other,
+        })
+        .collect()
+}
+
 /// A metric scale bar in the bottom-left corner. The bar length corresponds to a
 /// "nice" ground distance (1/2/5 × 10ⁿ) close to a target on-screen width. Units
 /// are the universal SI symbols (m/km), so no localization is needed.
-fn draw_scale_bar(ctx: &Ctx, context: &Context, center_lat: f64) -> cairo::Result<()> {
+fn draw_scale_bar(ctx: &Ctx, context: &Context, center_lat: f64) -> cairo::Result<f64> {
     // `meters_per_pixel` is in Web-Mercator metres, which are stretched by
     // 1/cos(latitude); correct to ground metres so the bar reads true distance.
     let ground_mpp = ctx.meters_per_pixel() * center_lat.to_radians().cos();
 
     if !(ground_mpp.is_finite() && ground_mpp > 0.0) {
-        return Ok(());
+        return Ok(0.0);
     }
 
     const TARGET_PX: f64 = 120.0;
@@ -107,7 +219,11 @@ fn draw_scale_bar(ctx: &Ctx, context: &Context, center_lat: f64) -> cairo::Resul
         },
     )?;
 
-    Ok(())
+    // The label is centered over the bar, so it is what reaches furthest right
+    // whenever it is wider than the bar itself.
+    let label_w = measure_text_width(&label, 13.0);
+
+    Ok((x0 + bar_px).max(x0 + bar_px / 2.0 + label_w / 2.0))
 }
 
 /// A static north arrow in the top-right corner. Exports are always north-up
@@ -164,37 +280,89 @@ fn draw_north_arrow(ctx: &Ctx, context: &Context, label: &str) -> cairo::Result<
     Ok(())
 }
 
-/// Attribution text, right-aligned in the bottom-right corner.
-fn draw_attribution(ctx: &Ctx, context: &Context, attribution: &str) -> cairo::Result<()> {
+/// Attribution text, right-aligned in the bottom-right corner, wrapped onto as
+/// many lines as the image width needs and stacked upwards from the margin.
+///
+/// `scale_bar_right` is how far the scale bar reaches from the left edge, or
+/// `0.0` when none was drawn: it narrows the width the lines wrap to, so they
+/// keep clear of the bar they share the bottom of the image with. A single
+/// credit wider than what is left still overflows it — no name is broken in
+/// half to fit.
+fn draw_attribution(
+    ctx: &Ctx,
+    context: &Context,
+    credits: &[String],
+    scale_bar_right: f64,
+) -> cairo::Result<()> {
     const SIZE: f64 = 14.0;
+    const LINE_HEIGHT: f64 = SIZE * 1.25;
+    const GAP: f64 = 8.0;
 
-    let width = measure_text_width(attribution, SIZE);
+    let left = if scale_bar_right > 0.0 {
+        scale_bar_right + GAP
+    } else {
+        MARGIN
+    };
 
-    draw_text(
-        context,
-        None,
-        // `draw_text` centers on the point, so offset the anchor to right-align the
-        // text against the right margin and sit it just above the bottom margin.
-        &Point::new(
-            ctx.size.width as f64 - MARGIN - width / 2.0,
-            ctx.size.height as f64 - MARGIN - SIZE / 2.0,
-        ),
-        attribution,
-        &TextOptions {
-            placements: &[(0.0, 0.0)],
-            flo: FontAndLayoutOptions {
-                size: SIZE,
-                // Never wrap: attribution is a single line, right-aligned to
-                // match the measured width above.
-                max_width: f64::INFINITY,
+    let available = (ctx.size.width as f64 - MARGIN - left).max(1.0);
+
+    let lines = wrap_attribution(credits, SIZE, available);
+
+    // The block grows upward from the bottom margin, so a caller sending enough
+    // credits would paper over the map and run off the top. Keep what fits.
+    let fits = ((ctx.size.height as f64 - MARGIN - MARGIN) / LINE_HEIGHT) as usize;
+    let lines = &lines[lines.len().saturating_sub(fits.max(1))..];
+
+    for (i, line) in lines.iter().enumerate() {
+        // Measured per line, because `draw_text` centers on the point and only an
+        // offset of half the line's own width right-aligns it.
+        let width = measure_text_width(line, SIZE);
+
+        let from_bottom = (lines.len() - 1 - i) as f64 * LINE_HEIGHT;
+
+        draw_text(
+            context,
+            None,
+            &Point::new(
+                ctx.size.width as f64 - MARGIN - width / 2.0,
+                ctx.size.height as f64 - MARGIN - SIZE / 2.0 - from_bottom,
+            ),
+            line,
+            &TextOptions {
+                placements: &[(0.0, 0.0)],
+                flo: FontAndLayoutOptions {
+                    size: SIZE,
+                    // Wrapped above instead, so each line can be right-aligned
+                    // against its own measured width.
+                    max_width: f64::INFINITY,
+                    ..Default::default()
+                },
+                halo_width: 2.0,
                 ..Default::default()
             },
-            halo_width: 2.0,
-            ..Default::default()
-        },
-    )?;
+        )?;
+    }
 
     Ok(())
+}
+
+/// Greedily packs the credits into lines no wider than `available`, joining
+/// them with ", ". A single credit too wide for that is left to overflow rather
+/// than broken mid-name.
+fn wrap_attribution(credits: &[String], size: f64, available: f64) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+
+    for credit in credits {
+        match lines.last_mut() {
+            Some(line) if measure_text_width(&format!("{line}, {credit}"), size) <= available => {
+                line.push_str(", ");
+                line.push_str(credit);
+            }
+            _ => lines.push(credit.clone()),
+        }
+    }
+
+    lines
 }
 
 /// Round `raw` (in metres) down to a "nice" cartographic value: 1, 2 or 5 times
@@ -245,6 +413,80 @@ fn measure_text_width(text: &str, size: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{
+        collections::{BTreeMap, HashMap},
+        sync::Arc,
+    };
+
+    /// The burnt-in line and the web client's list are read side by side, so
+    /// they have to agree: the caller's own credits, then OSM, then the datasets
+    /// alphabetically, then the global fallback.
+    #[test]
+    fn credits_read_from_the_map_outwards() {
+        let titles: BTreeMap<String, Vec<String>> = [
+            ("osm", vec!["© OpenStreetMap contributors"]),
+            ("shading:at", vec!["ALS DTM Austria"]),
+            ("shading:sk", vec!["DMR 5.0: ÚGKK SR"]),
+            // The same DEM contoured, which must not be named twice.
+            ("contours:sk", vec!["DMR 5.0: ÚGKK SR"]),
+            ("shading:_", vec!["GEDTM30"]),
+        ]
+        .into_iter()
+        .map(|(code, titles)| {
+            (
+                code.to_owned(),
+                titles.into_iter().map(str::to_owned).collect(),
+            )
+        })
+        .collect();
+
+        let mut attribution = Attribution::default();
+        attribution.add_shading("_");
+        attribution.add_shading("sk");
+        attribution.add_contours("sk");
+        attribution.add_shading("at");
+        attribution.add_osm();
+
+        let decoration = AttributionDecoration {
+            extra: vec!["OSRM / FOSSGIS e.\u{a0}V.".to_owned()],
+            catalog: Arc::new(titles),
+            // The app says OpenStreetMap's credit in the reader's language.
+            overrides: [(
+                "osm".to_owned(),
+                "©\u{a0}prispievatelia OpenStreetMap".to_owned(),
+            )]
+            .into_iter()
+            .collect(),
+        };
+
+        assert_eq!(
+            compose_attribution(&decoration, &attribution),
+            [
+                FREEMAP,
+                "OSRM / FOSSGIS e.\u{a0}V.",
+                "©\u{a0}prispievatelia OpenStreetMap",
+                "ALS DTM Austria",
+                "DMR 5.0: ÚGKK SR",
+                "GEDTM30",
+            ]
+        );
+    }
+
+    /// A code the catalog cannot name adds nothing to the drawn line: the export
+    /// reports it separately, and a raw code means nothing burnt into a picture.
+    #[test]
+    fn an_unresolvable_code_adds_nothing() {
+        let mut attribution = Attribution::default();
+        attribution.add_shading("at");
+
+        let decoration = AttributionDecoration {
+            extra: Vec::new(),
+            catalog: Arc::new(BTreeMap::new()),
+            overrides: HashMap::new(),
+        };
+
+        assert_eq!(compose_attribution(&decoration, &attribution), [FREEMAP]);
+    }
 
     #[test]
     #[allow(clippy::float_cmp)] // nice_distance returns exact 1/2/5 multiples

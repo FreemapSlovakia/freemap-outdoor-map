@@ -40,6 +40,12 @@ impl Attribution {
         self.0.is_empty()
     }
 
+    /// The long codes, in the namespace order the set sorts them by. What reads
+    /// them for display orders them itself — see [`FALLBACK_KEY`].
+    pub fn codes(&self) -> impl Iterator<Item = &str> {
+        self.0.iter().map(String::as_str)
+    }
+
     /// The form stored in the image, which every cached tile carries: the codes
     /// comma-separated, each with its namespace shortened to one character — `o`,
     /// `s<key>`, `c<key>`. A tile near a triple border lists nine sources in 31

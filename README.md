@@ -488,6 +488,45 @@ holding a code it cannot resolve.
 the `X-Attribution` response header of `HEAD /export` and `GET /export` — the same short
 spelling as the tile header and the embedded metadata, `o,ssk,csk`.
 
+**The burnt-in attribution line** is composed here, not sent. Only the finished render knows
+which datasets contributed a pixel, so a client that composed the text would be guessing from
+the countries in view — which is the approximation this whole mechanism replaces. Ask for the
+line with `decorations.attribution`, and put under it only what this renderer cannot arrive
+at. Its own credit and the datasets it used are its to add.
+
+```jsonc
+"decorations": {
+  "scaleBar": true,
+  "northArrow": "S",            // localized letter, omitted to skip the arrow
+  "attribution": {              // omitted to skip the line
+    // Whatever the exported features earn: the renderer is handed the route as
+    // plain geometry, so nothing tells it which router drew one.
+    "extra": ["OSRM / FOSSGIS e. V."],
+    // Titles the client words itself, by code, replacing `/licenses`'. `map` is
+    // this renderer's own credit — not a dataset, but addressable the same way,
+    // so a portal serving this map under its own name can say so; it defaults
+    // to "© Freemap Slovakia". Of the datasets only OpenStreetMap's title is
+    // translated — the rest are rights-holders' own strings, the same in every
+    // language.
+    "titles": {
+      "map": "© Freemap Slovakia",
+      "osm": "© prispievatelia OpenStreetMap"
+    }
+  }
+}
+```
+
+Only `map` and `osm` are reworded: every other title is a rights-holder's own name, and a
+code can carry several of them. At most 32 entries of at most 200 bytes are accepted in
+`extra` and in `titles`; more is a 400.
+
+It reads: this map, then `extra` in the order given, then the datasets — OpenStreetMap, the
+ones that answered for somewhere alphabetically, and the global models that filled the rest
+last. The web client lists the same credits in nearly that order — it collates titles by the
+reader's locale, where this line folds an accent onto its base letter — so the two read side
+by side. A code the dictionary cannot name is left out of the drawn line rather than shown raw;
+the `X-Attribution` header still reports it, and the startup warnings say what to fix.
+
 ## Notes
 
 Buffer polygon for imposm:

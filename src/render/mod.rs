@@ -8,7 +8,8 @@ pub use render_config::{
     PlaceTypeOverrides, RenderConfig,
 };
 pub use render_request::{
-    CustomLayer, CustomLayerOrder, Decorations, Glow, LabelStyle, RenderLayer, RenderRequest,
+    AttributionDecoration, CustomLayer, CustomLayerOrder, Decorations, Glow, LabelStyle,
+    RenderLayer, RenderRequest,
 };
 pub use render_worker_pool::RenderWorkerPool;
 pub use xyz::bbox_size_in_pixels;
