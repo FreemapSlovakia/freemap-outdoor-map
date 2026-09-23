@@ -738,6 +738,46 @@ static OFFSETS: LazyLock<[(f64, f64); 33]> = LazyLock::new(|| {
     offsets
 });
 
+/// Italian route markers (segnavia) are mapped so densely - one node per painted
+/// blaze along a trail, some 20 m apart - that at the zoom the type is otherwise
+/// drawn from they bury the rest of the map. So in Italy they are held back to
+/// the deepest zoom, where the trail is magnified enough to carry one marker per
+/// blaze; everywhere else `route_marker` means a sparse, signpost-like object and
+/// keeps its own zoom. Nothing else is suppressed by country here, so the rule is
+/// spelled out rather than configured.
+const IT_ROUTE_MARKER_MIN_ZOOM: u8 = 20;
+
+/// The country rule above, as a SQL condition. Needs the `countries` table (see
+/// sql/countries.sql), and is emitted only at the zooms that need it: outside them
+/// the markers are either wanted or already dropped, so the lookup would be dead
+/// weight. `type_omitted_elsewhere` says the caller's own type filter has already
+/// dropped `route_marker` at the zooms it is not drawn at.
+fn route_marker_cond(zoom: u8, type_omitted_elsewhere: bool) -> &'static str {
+    if !drawn_at("route_marker", zoom) {
+        return if type_omitted_elsewhere {
+            ""
+        } else {
+            "AND type <> 'route_marker'"
+        };
+    }
+
+    if zoom < IT_ROUTE_MARKER_MIN_ZOOM {
+        "AND (
+            type <> 'route_marker' OR
+            NOT EXISTS (
+                SELECT 1
+                FROM countries c
+                WHERE
+                    c.country = 'it' AND
+                    c.geometry && osm_pois.geometry AND
+                    ST_Intersects(c.geometry, osm_pois.geometry)
+            )
+        )"
+    } else {
+        ""
+    }
+}
+
 pub async fn query(
     ctx: &Ctx,
     client: &tokio_postgres::Client,
@@ -892,34 +932,7 @@ pub async fn query(
             format!("AND (NOT ({UNNAMED_SADDLE}) OR {NUMERIC_ELE})")
         };
 
-        // Italian route markers (segnavia) are mapped so densely - one node per painted
-        // blaze along a trail, some 20 m apart - that at the zoom the type is otherwise
-        // drawn from they bury the rest of the map. So in Italy they are held back to
-        // the deepest zoom, where the trail is magnified enough to carry one marker per
-        // blaze; everywhere else `route_marker` means a sparse, signpost-like object and
-        // keeps its own zoom. Nothing else is suppressed by country here, so the rule is
-        // spelled out rather than configured. Needs the `countries` table (see
-        // sql/countries.sql), and is added only at the zooms in between: outside them
-        // either `{w}` has already omitted the type or the markers are wanted, so the
-        // lookup would be dead weight.
-        const IT_ROUTE_MARKER_MIN_ZOOM: u8 = 20;
-
-        let route_marker_cond = if zoom < IT_ROUTE_MARKER_MIN_ZOOM && drawn_at("route_marker", zoom)
-        {
-            "AND (
-                type <> 'route_marker' OR
-                NOT EXISTS (
-                    SELECT 1
-                    FROM countries c
-                    WHERE
-                        c.country = 'it' AND
-                        c.geometry && osm_pois.geometry AND
-                        ST_Intersects(c.geometry, osm_pois.geometry)
-                )
-            )"
-        } else {
-            ""
-        };
+        let route_marker_cond = route_marker_cond(zoom, true);
 
         z14_sql = format!(
             "
