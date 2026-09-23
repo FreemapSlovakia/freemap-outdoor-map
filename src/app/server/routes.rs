@@ -73,8 +73,8 @@ pub async fn start_server(
     // not a menu of extras, so it would mean nothing there.
     let default_render = options
         .tile_variants
-        .first()
-        .and_then(|variant| match &variant.layers {
+        .iter()
+        .find_map(|variant| match &variant.layers {
             Layers::Map(set) => Some(set.clone()),
             _ => None,
         })

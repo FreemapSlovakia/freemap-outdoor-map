@@ -173,6 +173,28 @@ fn key_layers(key: &str) -> Option<&'static [RenderLayer]> {
     })
 }
 
+/// Whether the layer registered under `name` (filed under `legend_key`) draws.
+///
+/// Kept apart from [`Prefetcher`] so the legend can ask the same question of a
+/// variant's selection without building a pipeline.
+pub fn key_enabled(selection: &Layers, name: &str, legend_key: &str) -> bool {
+    let layers = key_layers(name)
+        .or_else(|| key_layers(legend_key))
+        .unwrap_or(&[]);
+
+    match selection {
+        Layers::Map(_) => true,
+        Layers::Only(set) => layers.iter().any(|layer| set.contains(layer)),
+        // Only when every layer the key covers is named: `routes` covers all five
+        // route types, and excluding one must not take the other four with it.
+        // The per-type filtering is `draws`'s job, inside the layer. An empty arm
+        // carries nothing excludable, so it always draws.
+        Layers::Except(set) => {
+            layers.is_empty() || !layers.iter().all(|layer| set.contains(layer))
+        }
+    }
+}
+
 struct Prefetcher<'a> {
     pool: Pool,
     handle: Handle,
@@ -201,15 +223,7 @@ impl<'a> Prefetcher<'a> {
     /// fallback, so a stage can opt out of the group it is filed under. Contours
     /// rely on the fallback: their names are per-country.
     fn enabled(&self, name: &str, legend_key: &str) -> bool {
-        let layers = key_layers(name)
-            .or_else(|| key_layers(legend_key))
-            .unwrap_or(&[]);
-
-        match self.selection {
-            Layers::Map(_) => true,
-            Layers::Only(ref set) => layers.iter().any(|layer| set.contains(layer)),
-            Layers::Except(ref set) => !layers.iter().any(|layer| set.contains(layer)),
-        }
+        key_enabled(&self.selection, name, legend_key)
     }
 
     /// Add a layer with a DB query.
@@ -496,7 +510,10 @@ pub fn render(
 
     let coverage_geometry = if ctx.legend.is_none()
         && request.layers.is_map()
-        && matches!(request.format, ImageFormat::Jpeg | ImageFormat::Png)
+        && matches!(
+            request.format,
+            ImageFormat::Jpeg | ImageFormat::Png | ImageFormat::Webp(_)
+        )
         && let Some(ref coverage_geometry) = request.coverage_geometry
     {
         context.set_source_rgb(0.82, 0.80, 0.78);
@@ -516,7 +533,23 @@ pub fn render(
 
     let label_margin = do_contours && zoom >= layers::contours::LABEL_MIN_ZOOM;
 
-    if request.legend.is_none() {
+    let draw_sea = key_enabled(&request.layers, "sea", "sea");
+
+    // The sea layer is also the only producer of `dry_land`, which masks shading
+    // and contours off the water. An overlay that drops the fill but keeps the
+    // contours still needs the mask, so the stage runs under a name with no arm
+    // of its own and renders nothing.
+    let sea_stage = if draw_sea {
+        Some("sea")
+    } else if do_shading || do_contours {
+        Some("dry_land")
+    } else {
+        None
+    };
+
+    if request.legend.is_none()
+        && let Some(sea_stage) = sea_stage
+    {
         let margin = if label_margin {
             layers::dry_land::LABEL_MARGIN_PX
         } else {
@@ -527,13 +560,15 @@ pub fn render(
         let ctx_ref = &ctx;
 
         prefetcher.add(
-            "sea",
+            sea_stage,
             None,
             move |ctx, conn| async move { layers::sea::query(&ctx, &conn, margin).await }.boxed(),
             move |rows, _params| {
                 let land = layers::sea::project(ctx_ref, &rows)?;
 
-                layers::sea::render(context, &land)?;
+                if draw_sea {
+                    layers::sea::render(context, &land)?;
+                }
 
                 if (do_shading || do_contours) && zoom >= layers::dry_land::MIN_ZOOM {
                     *dry_land.borrow_mut() = Some(layers::dry_land::DryLand::new(land));

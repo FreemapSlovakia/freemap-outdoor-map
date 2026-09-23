@@ -146,9 +146,6 @@ impl Layers {
         matches!(self, Self::Map(_))
     }
 
-    pub const fn is_only(&self) -> bool {
-        matches!(self, Self::Only(_))
-    }
 }
 
 #[derive(Debug, Clone)]

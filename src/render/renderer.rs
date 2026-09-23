@@ -114,10 +114,18 @@ pub fn render(
 
             let encoder = webp::Encoder::from_rgba(&rgba, width, height);
 
-            let encoded = match quality {
-                WebpQuality::Lossless => encoder.encode_lossless(),
-                WebpQuality::Lossy(q) => encoder.encode(q),
+            // `encode`/`encode_lossless` unwrap internally, and a render worker has
+            // no unwind guard — one oversized surface would kill it for the life of
+            // the process. libwebp caps a side at 16383 px, which an export's
+            // `scale` can exceed.
+            let (lossless, q) = match quality {
+                WebpQuality::Lossless => (true, 75.0),
+                WebpQuality::Lossy(q) => (false, q),
             };
+
+            let encoded = encoder
+                .encode_simple(lossless, q)
+                .map_err(|err| RenderError::ImageEncoding(format!("{err:?}").into()))?;
 
             Ok(RenderOutput {
                 bytes: encoded.to_vec(),

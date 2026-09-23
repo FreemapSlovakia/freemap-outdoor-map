@@ -372,6 +372,13 @@ impl Cli {
             return Err("tile URL paths must be unique".into());
         }
 
+        if !(0.0..=100.0).contains(&self.webp_quality) {
+            return Err(format!(
+                "webp-quality {} is outside 0..=100",
+                self.webp_quality
+            ));
+        }
+
         if self.min_zoom > self.max_zoom {
             return Err(format!(
                 "min-zoom {} is greater than max-zoom {}",

@@ -5,7 +5,7 @@ use crate::{
         tile_processor::{cached_tile_path, read_attribution},
     },
     render::{
-        ATTRIBUTION_HEADER, Attribution, RenderRequest, TileCoverageRelation,
+        ATTRIBUTION_HEADER, Attribution, ImageFormat, RenderRequest, TileCoverageRelation,
         tile_touches_coverage,
     },
 };
@@ -16,7 +16,7 @@ use axum::{
 };
 use geo::Rect;
 use httpdate::parse_http_date;
-use image::{ColorType, codecs::jpeg::JpegEncoder};
+use image::{ColorType, ExtendedColorType, ImageEncoder, codecs::jpeg::JpegEncoder};
 use std::{
     io::{self, Read},
     os::unix::fs::MetadataExt,
@@ -27,16 +27,35 @@ use tokio::task;
 
 const TILE_CACHE_CONTROL: &str = "no-cache";
 
+const BLANK_TILE_SIZE: u32 = 256;
+
 /// What an alpha-capable variant serves outside its coverage: a tile that adds
-/// nothing, rather than the map's own "no data" grey.
+/// nothing, rather than the map's own "no data" grey. One per format — the bytes
+/// have to match the `Content-Type` the variant sends.
 static BLANK_TILE_WEBP: LazyLock<Vec<u8>> = LazyLock::new(|| {
-    const TILE_SIZE: u32 = 256;
+    let pixels = vec![0u8; (BLANK_TILE_SIZE * BLANK_TILE_SIZE * 4) as usize];
 
-    let pixels = vec![0u8; (TILE_SIZE * TILE_SIZE * 4) as usize];
-
-    webp::Encoder::from_rgba(&pixels, TILE_SIZE, TILE_SIZE)
-        .encode_lossless()
+    webp::Encoder::from_rgba(&pixels, BLANK_TILE_SIZE, BLANK_TILE_SIZE)
+        .encode_simple(true, 75.0)
+        .expect("encode blank webp tile")
         .to_vec()
+});
+
+static BLANK_TILE_PNG: LazyLock<Vec<u8>> = LazyLock::new(|| {
+    let pixels = vec![0u8; (BLANK_TILE_SIZE * BLANK_TILE_SIZE * 4) as usize];
+
+    let mut encoded = Vec::new();
+
+    image::codecs::png::PngEncoder::new(&mut encoded)
+        .write_image(
+            &pixels,
+            BLANK_TILE_SIZE,
+            BLANK_TILE_SIZE,
+            ExtendedColorType::Rgba8,
+        )
+        .expect("encode blank png tile");
+
+    encoded
 });
 
 static GRAY_TILE_JPEG: LazyLock<Vec<u8>> = LazyLock::new(|| {
@@ -158,10 +177,10 @@ pub async fn serve_tile(
         {
             // Outside coverage nothing is drawn, so the codes are known to be none —
             // which is not the same as the unknown of a tile cached without them.
-            let blank: &'static [u8] = if variant.format.has_alpha() {
-                BLANK_TILE_WEBP.as_slice()
-            } else {
-                GRAY_TILE_JPEG.as_slice()
+            let blank: &'static [u8] = match variant.format {
+                ImageFormat::Webp(_) => BLANK_TILE_WEBP.as_slice(),
+                ImageFormat::Png => BLANK_TILE_PNG.as_slice(),
+                _ => GRAY_TILE_JPEG.as_slice(),
             };
 
             return annotate(
