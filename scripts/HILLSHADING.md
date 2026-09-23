@@ -46,6 +46,24 @@ Two rules, both learned the hard way:
   (vertical walls, metre-scale structure), *not* the higher but glacially
   rounded Erzgebirge.
 
+Two ways the roughness scan lies, both of which have picked the wrong window:
+
+- **Roughness finds man-made steps before it finds mountains.** Quarry benches,
+  spoil heaps, lignite pits and terraced suburbs all beat real terrain, because
+  a bench edge is a true discontinuity. Sachsen-Anhalt's top seven included a
+  quarry, a spoil heap and an active open-cast mine; Niedersachsen's single
+  roughest window in the whole state was an open pit, and Saxony's "Bastei"
+  sample was a Dresden suburb. **Render every candidate and look at it** before
+  it reaches a sample list — the number alone cannot tell terrain from earthworks.
+- **Voids must be excluded from the metric, not filled.** Substituting the
+  window mean for nodata puts a cliff at every void edge, and the high-pass
+  residual reads that cliff as terrain. Flat farmland on the Brandenburg border
+  scored 0.159 that way, above most of the Harz. Score only 3x3 neighbourhoods
+  that are entirely valid. The roughness figures in `sample-zoom-de-ni.nu`
+  predate this and are inflated wherever a window met a border or a lake; that
+  zoom decision rested on the rendered comparison, so it stands, but the
+  roughness column does not.
+
 Also beware: the PNG crops the sampler writes for eyeballing must be resampled
 with `-r cubic`. `-r nearest` makes every zoom look equally blocky and has
 actively misled a comparison before. `sample-zoom-en.nu` had this defect.
