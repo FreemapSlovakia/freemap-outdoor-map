@@ -123,10 +123,6 @@ pub struct Cli {
     )]
     pub allowed_scales: Vec<f64>,
 
-    /// Quality for the lossy WebP variants, 0..=100.
-    #[arg(long, env = "MAPRENDER_WEBP_QUALITY", default_value_t = 80.0)]
-    pub webp_quality: f32,
-
     /// Serve cached tiles from the filesystem.
     #[arg(
         long,
@@ -223,6 +219,13 @@ impl Cli {
     }
 
     fn validate(&self) -> Result<(), String> {
+        if self.min_zoom > self.max_zoom {
+            return Err(format!(
+                "min-zoom {} is greater than max-zoom {}",
+                self.min_zoom, self.max_zoom
+            ));
+        }
+
         if let Some(hierarchy) = self.hillshading_hierarchy.as_ref() {
             let keys: HashSet<&str> = hierarchy.entries().iter().map(|e| e.country).collect();
 

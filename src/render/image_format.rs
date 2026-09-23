@@ -13,7 +13,8 @@ pub enum WebpQuality {
 #[derive(Debug, Clone, Copy)]
 pub enum ImageFormat {
     Png,
-    Jpeg,
+    /// Quality 1..=100.
+    Jpeg(u8),
     Webp(WebpQuality),
     Pdf,
     Svg,
@@ -23,7 +24,7 @@ impl ImageFormat {
     pub const fn content_type(self) -> &'static str {
         match self {
             Self::Png => "image/png",
-            Self::Jpeg => "image/jpeg",
+            Self::Jpeg(_) => "image/jpeg",
             Self::Webp(_) => "image/webp",
             Self::Pdf => "application/pdf",
             Self::Svg => "image/svg+xml",
@@ -39,7 +40,7 @@ impl ImageFormat {
     pub const fn extension(self) -> &'static str {
         match self {
             Self::Png => "png",
-            Self::Jpeg => "jpeg",
+            Self::Jpeg(_) => "jpeg",
             Self::Webp(_) => "webp",
             Self::Pdf => "pdf",
             Self::Svg => "svg",

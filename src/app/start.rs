@@ -271,7 +271,7 @@ fn build_tile_variants(cli: &Cli) -> Result<Vec<TileVariantOptions>, String> {
 
     variants
         .iter()
-        .map(|variant| tile_variant_input_to_server_variant(variant, cli.webp_quality))
+        .map(tile_variant_input_to_server_variant)
         .collect()
 }
 
@@ -281,14 +281,13 @@ fn build_tile_processing_variants(cli: &Cli) -> Vec<VariantConfig> {
         .map(|variant| VariantConfig {
             tile_cache_base_path: variant.tile_cache_base_path.clone(),
             tile_index: variant.tile_index.clone(),
-            ext: variant.format.image_format(cli.webp_quality).extension(),
+            ext: variant.format.extension(),
         })
         .collect()
 }
 
 fn tile_variant_input_to_server_variant(
     variant: &TileVariant,
-    webp_quality: f32,
 ) -> Result<TileVariantOptions, String> {
     let coverage_geometry =
         match variant.coverage_geojson.as_ref() {
@@ -302,7 +301,7 @@ fn tile_variant_input_to_server_variant(
         url_path: variant.url_path.clone(),
         tile_cache_base_path: variant.tile_cache_base_path.clone(),
         layers: variant.layers.clone(),
-        format: variant.format.image_format(webp_quality),
+        format: variant.format,
         coverage_geometry,
     })
 }

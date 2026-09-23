@@ -109,7 +109,8 @@ pub struct ExportRequest {
     zoom: u8,
     bbox: [f64; 4],
     format: Option<String>,
-    /// Quality for `webp-lossy`, 0..=100. Ignored by every other format.
+    /// Quality for the lossy formats, `jpeg` and `webp-lossy`, 0..=100.
+    /// Ignored by the others.
     quality: Option<f32>,
     scale: Option<f64>,
     features: Option<ExportFeatures>,
@@ -177,7 +178,9 @@ pub enum ExportLayer {
 }
 
 impl ExportLayer {
-    const ALL: [Self; 11] = [
+    /// The extras `layers` toggles. `GroundCover` and `Buildings` are base
+    /// layers, so they are named in `omit` and never here.
+    const TOGGLEABLE: [Self; 9] = [
         Self::Shading,
         Self::Contours,
         Self::BicycleTrails,
@@ -187,8 +190,6 @@ impl ExportLayer {
         Self::SacScale,
         Self::Smoothness,
         Self::Waymarking,
-        Self::GroundCover,
-        Self::Buildings,
     ];
 
     const fn render_layers(self) -> &'static [RenderLayer] {
@@ -217,8 +218,10 @@ impl ExportLayer {
     }
 }
 
+// A client sending a field this no longer has - `layerMode`, say - should hear
+// about it rather than quietly get the whole map.
 #[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExportFeatures {
     /// Toggleable layers that are enabled. Absent keeps the server defaults; a
     /// present set explicitly turns each toggleable layer on (in set) or off.
@@ -345,7 +348,7 @@ pub async fn post(
     if let Some(features) = &request.features
         && let Some(layers) = &features.layers
     {
-        for export_layer in ExportLayer::ALL {
+        for export_layer in ExportLayer::TOGGLEABLE {
             for render_layer in export_layer.render_layers() {
                 if layers.contains(&export_layer) {
                     render.insert(*render_layer);
@@ -648,8 +651,13 @@ fn generate_token() -> String {
     })
 }
 
-/// `quality` only reaches `webp-lossy`. An export is a file someone keeps, so
-/// plain `webp` is the lossless one and asking for loss is explicit.
+/// `quality` reaches the lossy formats only. An export is a file someone keeps,
+/// so plain `webp` is the lossless one and asking for loss is explicit.
+/// 90 is what every tile has been encoded at since before the knob existed.
+fn jpeg(quality: Option<f32>) -> ImageFormat {
+    ImageFormat::Jpeg(quality.unwrap_or(90.0) as u8)
+}
+
 fn parse_format(
     format: Option<&str>,
     quality: Option<f32>,
@@ -665,8 +673,8 @@ fn parse_format(
     match format {
         "pdf" => Ok((ImageFormat::Pdf, "pdf", "application/pdf")),
         "svg" => Ok((ImageFormat::Svg, "svg", "image/svg+xml")),
-        "jpeg" => Ok((ImageFormat::Jpeg, "jpeg", "image/jpeg")),
-        "jpg" => Ok((ImageFormat::Jpeg, "jpg", "image/jpeg")),
+        "jpeg" => Ok((jpeg(quality), "jpeg", "image/jpeg")),
+        "jpg" => Ok((jpeg(quality), "jpg", "image/jpeg")),
         "png" => Ok((ImageFormat::Png, "png", "image/png")),
         "webp" => Ok((
             ImageFormat::Webp(WebpQuality::Lossless),

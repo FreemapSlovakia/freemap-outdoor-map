@@ -156,7 +156,7 @@ pub fn render(
                 attribution,
             })
         }
-        ImageFormat::Jpeg => {
+        ImageFormat::Jpeg(quality) => {
             let scale = request.scale;
 
             let mut surface = ImageSurface::create(
@@ -190,7 +190,7 @@ pub fn render(
 
             let mut buffer = Vec::new();
 
-            JpegEncoder::new_with_quality(&mut buffer, 90)
+            JpegEncoder::new_with_quality(&mut buffer, quality)
                 .write_image(&rgb_data, width, height, ExtendedColorType::Rgb8)
                 .map_err(|err| RenderError::ImageEncoding(Box::new(err)))?;
 

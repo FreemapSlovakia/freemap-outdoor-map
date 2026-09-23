@@ -539,7 +539,7 @@ pub fn render(
         && request.layers.is_whole_map()
         && matches!(
             request.format,
-            ImageFormat::Jpeg | ImageFormat::Png | ImageFormat::Webp(_)
+            ImageFormat::Jpeg(_) | ImageFormat::Png | ImageFormat::Webp(_)
         )
         && let Some(ref coverage_geometry) = request.coverage_geometry
     {

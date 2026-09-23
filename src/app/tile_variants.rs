@@ -1,5 +1,5 @@
 use crate::render::{ImageFormat, Layers, RenderLayer, WebpQuality};
-use clap::ValueEnum;
+use clap::ValueEnum as _;
 use std::{collections::HashSet, path::PathBuf, str::FromStr};
 
 /// One tile route: a URL prefix, what it draws, in what format, and where it
@@ -8,43 +8,42 @@ use std::{collections::HashSet, path::PathBuf, str::FromStr};
 pub struct TileVariant {
     pub url_path: String,
     pub layers: Layers,
-    pub format: TileFormat,
+    pub format: ImageFormat,
     pub tile_cache_base_path: Option<PathBuf>,
     pub tile_index: Option<PathBuf>,
     pub coverage_geojson: Option<PathBuf>,
 }
 
-/// A variant's output format. Lossy WebP only pays on an overlay dense enough
-/// that lossless has no sparsity to exploit; a sparse one encodes smaller
-/// lossless, and without the fringing a photo codec leaves around text.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum TileFormat {
-    #[default]
-    Jpeg,
-    Png,
-    Webp,
-    WebpLossy,
-}
+/// What each lossy format encodes at when the entry does not say.
+const DEFAULT_JPEG_QUALITY: f32 = 90.0;
+const DEFAULT_WEBP_QUALITY: f32 = 80.0;
 
-impl TileFormat {
-    pub const fn image_format(self, webp_quality: f32) -> ImageFormat {
-        match self {
-            Self::Jpeg => ImageFormat::Jpeg,
-            Self::Png => ImageFormat::Png,
-            Self::Webp => ImageFormat::Webp(WebpQuality::Lossless),
-            Self::WebpLossy => ImageFormat::Webp(WebpQuality::Lossy(webp_quality)),
-        }
-    }
+/// Parse a format token, with an optional `=<quality>` for the lossy ones.
+///
+/// Lossy WebP only pays on an overlay dense enough that lossless has no
+/// sparsity to exploit; a sparse one encodes smaller lossless, and without the
+/// fringing a photo codec leaves around text.
+fn parse_format(token: &str) -> Option<Result<ImageFormat, String>> {
+    let (name, quality) = token.split_once('=').map_or((token, None), |(name, q)| (name, Some(q)));
 
-    fn parse(token: &str) -> Option<Self> {
-        Some(match token {
-            "jpeg" => Self::Jpeg,
-            "png" => Self::Png,
-            "webp" => Self::Webp,
-            "webp-lossy" => Self::WebpLossy,
-            _ => return None,
+    let lossy = |default: f32| {
+        quality.map_or(Ok(default), |q| match q.parse::<f32>() {
+            Ok(q) if (0.0..=100.0).contains(&q) => Ok(q),
+            Ok(q) => Err(format!("quality {q} is outside 0..=100")),
+            Err(_) => Err(format!("quality '{q}' is not a number")),
         })
-    }
+    };
+
+    let lossless =
+        || quality.map_or(Ok(()), |_| Err(format!("format '{name}' takes no quality")));
+
+    Some(match name {
+        "jpeg" => lossy(DEFAULT_JPEG_QUALITY).map(|q| ImageFormat::Jpeg(q as u8)),
+        "webp-lossy" => lossy(DEFAULT_WEBP_QUALITY).map(|q| ImageFormat::Webp(WebpQuality::Lossy(q))),
+        "png" => lossless().map(|()| ImageFormat::Png),
+        "webp" => lossless().map(|()| ImageFormat::Webp(WebpQuality::Lossless)),
+        _ => return None,
+    })
 }
 
 /// Every tile route, parsed from one setting.
@@ -52,7 +51,8 @@ impl TileFormat {
 /// Entries are separated by `;` and may span lines. An entry is a URL path
 /// followed by space-separated fields in any order:
 ///
-/// - `jpeg` / `png` / `webp` / `webp-lossy` — output format, `jpeg` by default.
+/// - `jpeg[=<quality>]` / `png` / `webp` / `webp-lossy[=<quality>]` — output
+///   format, `jpeg` by default; quality defaults to 90 and 80 respectively.
 /// - `overlay` — do not draw the layers the map draws by itself.
 /// - `+<layer>[,<layer>…]` — extras to draw.
 /// - `-<layer>[,<layer>…]` — base layers to drop.
@@ -126,7 +126,7 @@ impl FromStr for TileVariants {
                     add: HashSet::new(),
                     omit: HashSet::new(),
                 },
-                format: TileFormat::default(),
+                format: ImageFormat::Jpeg(DEFAULT_JPEG_QUALITY as u8),
                 tile_cache_base_path: None,
                 tile_index: None,
                 coverage_geojson: None,
@@ -147,13 +147,14 @@ impl FromStr for TileVariants {
                     variant.tile_index = Some(PathBuf::from(path));
                 } else if let Some(path) = field.strip_prefix("coverage=") {
                     variant.coverage_geojson = Some(PathBuf::from(path));
-                } else if let Some(format) = TileFormat::parse(field) {
+                } else if let Some(format) = parse_format(field) {
                     if format_seen {
                         return Err(format!("tile variant '{entry}' names two formats"));
                     }
 
                     format_seen = true;
-                    variant.format = format;
+                    variant.format = format
+                        .map_err(|err| format!("tile variant '{entry}': {err}"))?;
                 } else {
                     return Err(format!("unknown field '{field}' in tile variant '{entry}'"));
                 }
@@ -167,7 +168,7 @@ impl FromStr for TileVariants {
             // An overlay leaves most of the surface unpainted; an opaque format
             // renders that as solid black rather than as nothing.
             if !variant.layers.is_whole_map()
-                && !variant.format.image_format(1.0).has_alpha()
+                && !variant.format.has_alpha()
             {
                 return Err(format!(
                     "tile variant '{}' is an overlay, so it needs an alpha-capable format",
@@ -208,13 +209,13 @@ mod tests {
         assert_eq!(v.len(), 3);
 
         assert_eq!(v[0].url_path, "/");
-        assert_eq!(v[0].format, TileFormat::Jpeg);
+        assert_eq!(v[0].format.extension(), "jpeg");
         assert!(v[0].layers.base_map);
         assert!(v[0].layers.draws(RenderLayer::Shading));
         assert_eq!(v[0].coverage_geojson.as_deref(), Some("/c.geojson".as_ref()));
 
         assert!(!v[1].layers.base_map);
-        assert_eq!(v[1].format, TileFormat::Webp);
+        assert_eq!(v[1].format.extension(), "webp");
         assert!(v[1].layers.draws(RenderLayer::SacScale));
         assert!(!v[1].layers.draws(RenderLayer::Sea));
 
