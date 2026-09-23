@@ -314,6 +314,11 @@ pub fn render_marking(
 
     let zoom = ctx.zoom;
 
+    // An overlay draws no highway to clear, so the marks sit on the path itself.
+    // The per-colour fan-out below keeps its spacing either way, or a way carrying
+    // several routes would show only the last colour drawn.
+    let clear_highway = !to_render.is_only();
+
     for row in rows {
         let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
 
@@ -322,6 +327,8 @@ pub fn render_marking(
             12 => (2.0, 1.5),
             13.. => (3.0, 2.0),
         }; // offset from highway
+
+        let zo = if clear_highway { zo } else { 0.0 };
 
         let df = 1.25;
 
