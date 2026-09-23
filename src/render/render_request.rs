@@ -24,6 +24,7 @@ pub enum RenderLayer {
     RoutesBicycle,
     RoutesSki,
     SacScale,
+    Waymarking,
 }
 
 #[derive(Deserialize, Debug, Clone, Copy)]

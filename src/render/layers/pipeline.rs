@@ -131,6 +131,7 @@ fn key_layers(key: &str) -> &'static [RenderLayer] {
         "country_borders" => &[L::CountryBorders],
         "country_names" => &[L::CountryNames],
         "sac_scale" => &[L::SacScale],
+        "waymarking" => &[L::Waymarking],
         "routes" => &[
             L::RoutesHiking,
             L::RoutesHikingKst,
@@ -1282,6 +1283,32 @@ pub fn render(
             None,
             |ctx, conn| async move { layers::country_names::query(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::country_names::render(&ctx, context, rows),
+        );
+    }
+
+    // Icons and their labels in one stage: on an overlay there are no other POIs
+    // for them to interleave with, so they only have to miss each other.
+    if zoom >= layers::pois::WAYMARKING_MIN_ZOOM && to_render.contains(RenderLayer::Waymarking) {
+        let kst = to_render.contains(RenderLayer::RoutesHikingKst);
+        let ctx = ctx.clone();
+
+        prefetcher.add(
+            "waymarking",
+            None,
+            move |ctx, conn| {
+                async move { layers::pois::query_waymarking(&ctx, &conn, kst).await }.boxed()
+            },
+            move |rows, params| {
+                let to_label = layers::pois::render_icons(
+                    &ctx,
+                    context,
+                    rows,
+                    params.collision,
+                    params.svg_repo,
+                )?;
+
+                layers::pois::render_labels(&ctx, context, to_label, params.collision)
+            },
         );
     }
 

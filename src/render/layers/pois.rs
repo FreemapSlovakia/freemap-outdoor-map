@@ -778,6 +778,53 @@ fn route_marker_cond(zoom: u8, type_omitted_elsewhere: bool) -> &'static str {
     }
 }
 
+/// The shallowest zoom any waymarking definition draws from; below it
+/// [`render_icons`] would drop every row anyway.
+pub const WAYMARKING_MIN_ZOOM: u8 = 13;
+
+/// Guideposts and route markers on their own, for an overlay that carries the
+/// waymarking without the rest of the POIs. The columns are the ones
+/// [`render_icons`] reads, so the overlay reuses the POI renderers as they are.
+pub async fn query_waymarking(
+    ctx: &Ctx,
+    client: &tokio_postgres::Client,
+    kst_only: bool,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+    let zoom = ctx.zoom;
+
+    let kst_cond = if kst_only {
+        r"AND (type <> 'guidepost' OR tags->'operator' ~* '\ykst\y|\ytanap\y')"
+    } else {
+        ""
+    };
+
+    let route_marker_cond = route_marker_cond(zoom, false);
+
+    // A guidepost with no name is a different definition, drawn from a deeper zoom
+    // and with a smaller icon - the same split the main query makes.
+    #[cfg_attr(any(), rustfmt::skip)]
+    let sql = format!("
+        SELECT
+            osm_id,
+            geometry,
+            COALESCE(NULLIF(name, ''), tags->'ref', '') AS name,
+            hstore(ARRAY['ele', tags->'ele', 'access', tags->'access']) AS extra,
+            CASE
+                WHEN type = 'guidepost' AND name = '' THEN 'guidepost_noname'
+                ELSE type
+            END AS type
+        FROM
+            osm_pois
+        WHERE
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+            type IN ('guidepost', 'route_marker')
+            {route_marker_cond}
+            {kst_cond}
+    ");
+
+    client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params()).await
+}
+
 pub async fn query(
     ctx: &Ctx,
     client: &tokio_postgres::Client,
