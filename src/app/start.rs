@@ -1,7 +1,8 @@
 use crate::app::{
-    cli::{Cli, TileVariantInput},
+    cli::Cli,
     server::{LicenseCatalog, ServerOptions, TileVariantOptions, start_server},
     tile_invalidation,
+    tile_variants::TileVariant,
     tile_processing_worker::TileProcessingWorker,
     tile_processor::{TileProcessingConfig, VariantConfig},
 };
@@ -81,10 +82,7 @@ pub fn start() {
         licenses
     };
 
-    let tile_processing_variants = match build_tile_processing_variants(&cli) {
-        Ok(config) => config,
-        Err(err) => panic!("invalid tile processing configuration: {err}"),
-    };
+    let tile_processing_variants = build_tile_processing_variants(&cli);
 
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -269,29 +267,28 @@ fn spawn_connection_recycler(
 }
 
 fn build_tile_variants(cli: &Cli) -> Result<Vec<TileVariantOptions>, String> {
-    let variant_inputs = cli.tile_variant_inputs()?;
+    let variants = cli.tile_variant_inputs();
 
-    variant_inputs
-        .into_iter()
-        .map(tile_variant_input_to_server_variant)
+    variants
+        .iter()
+        .map(|variant| tile_variant_input_to_server_variant(variant, cli.webp_quality))
         .collect()
 }
 
-fn build_tile_processing_variants(cli: &Cli) -> Result<Vec<VariantConfig>, String> {
-    let variant_inputs = cli.tile_variant_inputs()?;
-
-    Ok(variant_inputs
-        .into_iter()
+fn build_tile_processing_variants(cli: &Cli) -> Vec<VariantConfig> {
+    cli.tile_variant_inputs()
+        .iter()
         .map(|variant| VariantConfig {
-            tile_cache_base_path: variant.tile_cache_base_path,
-            tile_index: variant.tile_index,
-            ext: variant.format.extension(),
+            tile_cache_base_path: variant.tile_cache_base_path.clone(),
+            tile_index: variant.tile_index.clone(),
+            ext: variant.format.image_format(cli.webp_quality).extension(),
         })
-        .collect())
+        .collect()
 }
 
 fn tile_variant_input_to_server_variant(
-    variant: TileVariantInput,
+    variant: &TileVariant,
+    webp_quality: f32,
 ) -> Result<TileVariantOptions, String> {
     let coverage_geometry =
         match variant.coverage_geojson.as_ref() {
@@ -302,10 +299,10 @@ fn tile_variant_input_to_server_variant(
         };
 
     Ok(TileVariantOptions {
-        url_path: variant.url_path,
-        tile_cache_base_path: variant.tile_cache_base_path,
-        layers: variant.layers,
-        format: variant.format,
+        url_path: variant.url_path.clone(),
+        tile_cache_base_path: variant.tile_cache_base_path.clone(),
+        layers: variant.layers.clone(),
+        format: variant.format.image_format(webp_quality),
         coverage_geometry,
     })
 }
