@@ -43,6 +43,7 @@ use lib/gdal.nu
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 const BASE = "https://www.geodatenportal.sachsen-anhalt.de/gfds_webshare/download/LVermGeo/Geodatenportal/Online-Bereitstellung-LVermGeo/DGM"
+const MOUNT = "/run/media/martin/2190983A5767510F"   # assert the drive, not the dataset dir
 const DEST = "/run/media/martin/2190983A5767510F/DGM1/Sachsen-Anhalt"
 const EXPECTED = 5465
 const EPSG = "EPSG:25832"
@@ -54,7 +55,7 @@ const PARTS = [
     {name: "DGM1_4.zip", size: 8629212980}
 ]
 
-gdal assert-mounted $DEST
+gdal assert-mounted $MOUNT
 
 # ── Fetch ─────────────────────────────────────────────────────────────────────
 
