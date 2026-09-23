@@ -6,7 +6,9 @@ pub use pipeline::RenderError;
 pub use pipeline::Shading;
 pub use pipeline::key_enabled;
 pub use pipeline::render;
-pub use pois::{Def, INACCESSIBLE_ZOOM_DELAY, POI_ORDER, POIS, SHOP_TYPES};
+pub use pois::{
+    Def, INACCESSIBLE_ZOOM_DELAY, POI_ORDER, POIS, SHOP_TYPES, WAYMARKING_LEGEND_TYPES,
+};
 
 mod aerialway_names;
 mod blur_edges;
@@ -44,8 +46,6 @@ mod protected_areas;
 mod road_access_restrictions;
 mod roads;
 mod routes;
-mod sac_scale;
-mod smoothness;
 mod sea;
 mod shading_and_contours;
 mod solar_power_plants;

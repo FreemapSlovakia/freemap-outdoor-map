@@ -1,4 +1,4 @@
-use crate::render::{ImageFormat, Layers, RenderLayer, WebpQuality};
+use crate::render::{DEFAULT_JPEG_QUALITY, ImageFormat, Layers, RenderLayer};
 use clap::ValueEnum as _;
 use std::{collections::HashSet, path::PathBuf, str::FromStr};
 
@@ -12,41 +12,6 @@ pub struct TileVariant {
     pub tile_cache_base_path: Option<PathBuf>,
     pub tile_index: Option<PathBuf>,
     pub coverage_geojson: Option<PathBuf>,
-}
-
-/// What each lossy format encodes at when the entry does not say.
-const DEFAULT_JPEG_QUALITY: f32 = 90.0;
-const DEFAULT_WEBP_QUALITY: f32 = 80.0;
-
-/// Parse a format token, with an optional `=<quality>` for the lossy ones.
-///
-/// Lossy WebP only pays on an overlay dense enough that lossless has no
-/// sparsity to exploit; a sparse one encodes smaller lossless, and without the
-/// fringing a photo codec leaves around text.
-fn parse_format(token: &str) -> Option<Result<ImageFormat, String>> {
-    let (name, quality) = token
-        .split_once('=')
-        .map_or((token, None), |(name, q)| (name, Some(q)));
-
-    let lossy = |default: f32| {
-        quality.map_or(Ok(default), |q| match q.parse::<f32>() {
-            Ok(q) if (0.0..=100.0).contains(&q) => Ok(q),
-            Ok(q) => Err(format!("quality {q} is outside 0..=100")),
-            Err(_) => Err(format!("quality '{q}' is not a number")),
-        })
-    };
-
-    let lossless = || quality.map_or(Ok(()), |_| Err(format!("format '{name}' takes no quality")));
-
-    Some(match name {
-        "jpeg" => lossy(DEFAULT_JPEG_QUALITY).map(|q| ImageFormat::Jpeg(q as u8)),
-        "webp-lossy" => {
-            lossy(DEFAULT_WEBP_QUALITY).map(|q| ImageFormat::Webp(WebpQuality::Lossy(q)))
-        }
-        "png" => lossless().map(|()| ImageFormat::Png),
-        "webp" => lossless().map(|()| ImageFormat::Webp(WebpQuality::Lossless)),
-        _ => return None,
-    })
 }
 
 /// Every tile route, parsed from one setting.
@@ -150,7 +115,7 @@ impl FromStr for TileVariants {
                     variant.tile_index = Some(PathBuf::from(path));
                 } else if let Some(path) = field.strip_prefix("coverage=") {
                     variant.coverage_geojson = Some(PathBuf::from(path));
-                } else if let Some(format) = parse_format(field) {
+                } else if let Some(format) = ImageFormat::parse(field) {
                     if format_seen {
                         return Err(format!("tile variant '{entry}' names two formats"));
                     }
@@ -191,6 +156,7 @@ impl FromStr for TileVariants {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::render::{DEFAULT_WEBP_QUALITY, WebpQuality};
 
     fn parse(s: &str) -> Result<Vec<TileVariant>, String> {
         TileVariants::from_str(s).map(|v| v.0)

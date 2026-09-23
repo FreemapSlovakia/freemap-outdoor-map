@@ -267,7 +267,7 @@ fn spawn_connection_recycler(
 }
 
 fn build_tile_variants(cli: &Cli) -> Result<Vec<TileVariantOptions>, String> {
-    let variants = cli.tile_variant_inputs();
+    let variants = cli.tile_variants.entries();
 
     variants
         .iter()
@@ -276,7 +276,7 @@ fn build_tile_variants(cli: &Cli) -> Result<Vec<TileVariantOptions>, String> {
 }
 
 fn build_tile_processing_variants(cli: &Cli) -> Vec<VariantConfig> {
-    cli.tile_variant_inputs()
+    cli.tile_variants.entries()
         .iter()
         .map(|variant| VariantConfig {
             tile_cache_base_path: variant.tile_cache_base_path.clone(),

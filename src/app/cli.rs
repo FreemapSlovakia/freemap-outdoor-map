@@ -1,5 +1,5 @@
 use crate::{
-    app::tile_variants::{TileVariant, TileVariants},
+    app::tile_variants::TileVariants,
     render::{
         ContourCountries, FeatureLineMaskCountries, HillshadingHierarchy, PlaceTypeOverrides,
     },
@@ -266,7 +266,4 @@ impl Cli {
         Ok(())
     }
 
-    pub fn tile_variant_inputs(&self) -> &[TileVariant] {
-        self.tile_variants.entries()
-    }
 }

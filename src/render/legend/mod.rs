@@ -54,9 +54,10 @@ pub struct LegendItem<'a> {
     /// Landcover drawn underneath so the symbol is legible. Kept apart from `data` so it can
     /// be rendered on its own as the "nothing to see here" baseline (see the zoom range test).
     pub background: LegendItemData,
-    /// The extra this item is a sample of, where its layer draws several and a
-    /// variant may want only some — the five route types share one layer.
-    pub requires: Option<RenderLayer>,
+    /// The layers this item is a sample of, where its own layer draws several
+    /// and a variant may want only some — the five route types share one layer.
+    /// Empty means "whatever its data keys say".
+    pub requires: &'static [RenderLayer],
     pub zoom: u8,
     /// Zooms at which the map actually shows this feature. Mirrors the gating in
     /// `layers::pipeline` and the layer render fns; kept honest by `zoom_range_test`.
@@ -75,15 +76,15 @@ pub struct LegendItemBuilder<'a> {
     pub probe_lower_edge: bool,
     pub data: LegendItemData,
     pub background: LegendItemData,
-    pub requires: Option<RenderLayer>,
+    pub requires: &'static [RenderLayer],
     pub for_taginfo: bool,
 }
 
 impl LegendItem<'_> {
     /// Whether the selection draws any layer this item's sample is made of.
     pub fn drawn_by(&self, layers: &Layers) -> bool {
-        if let Some(required) = self.requires {
-            return layers.draws(required);
+        if !self.requires.is_empty() {
+            return self.requires.iter().any(|layer| layers.draws(*layer));
         }
 
         self.data
@@ -123,7 +124,7 @@ impl<'a> LegendItem<'a> {
             probe_lower_edge: true,
             data: HashMap::new(),
             background: HashMap::new(),
-            requires: None,
+            requires: &[],
             for_taginfo: opts.for_taginfo,
         }
     }
@@ -199,9 +200,9 @@ impl<'a> LegendItemBuilder<'a> {
         self
     }
 
-    /// Narrow the item to one extra, where its layer draws several.
-    const fn requires(mut self, layer: RenderLayer) -> Self {
-        self.requires = Some(layer);
+    /// Narrow the item to the layers that draw it, where its own draws several.
+    const fn requires(mut self, layers: &'static [RenderLayer]) -> Self {
+        self.requires = layers;
         self
     }
 

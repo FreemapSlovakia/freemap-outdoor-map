@@ -3,7 +3,7 @@ use crate::{
     render::{
         ATTRIBUTION_HEADER, Attribution, AttributionDecoration, CustomLayer, CustomLayerOrder,
         Decorations, Glow, ImageFormat, LabelStyle, Layers, RenderLayer, RenderRequest,
-        RenderWorkerPool, WebpQuality, bbox_size_in_pixels,
+        RenderWorkerPool, bbox_size_in_pixels,
     },
 };
 use axum::{
@@ -17,6 +17,7 @@ use geo::Rect;
 use geojson::{Feature, GeoJson};
 use rand::TryRng;
 use serde::Deserialize;
+use clap::ValueEnum as _;
 use serde_json::json;
 use std::{
     collections::{HashMap, HashSet},
@@ -24,7 +25,7 @@ use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
     sync::{
-        Arc,
+        Arc, LazyLock,
         atomic::{AtomicUsize, Ordering},
     },
     time::Duration,
@@ -154,6 +155,16 @@ impl ExportAttribution {
     }
 }
 
+/// Every base layer but `Buildings` — derived from [`RenderLayer::is_base`] so a
+/// new one cannot be added to the renderer and forgotten here.
+static GROUND_COVER: LazyLock<Vec<RenderLayer>> = LazyLock::new(|| {
+    RenderLayer::value_variants()
+        .iter()
+        .copied()
+        .filter(|layer| layer.is_base() && *layer != RenderLayer::Buildings)
+        .collect()
+});
+
 /// Client-toggleable map layers. Each maps to one [`RenderLayer`]; the set sent
 /// in the request lists exactly which of these are enabled (membership = on).
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -190,7 +201,7 @@ impl ExportLayer {
         Self::Waymarking,
     ];
 
-    const fn render_layers(self) -> &'static [RenderLayer] {
+    fn render_layers(self) -> &'static [RenderLayer] {
         match self {
             Self::Shading => &[RenderLayer::Shading],
             Self::Contours => &[RenderLayer::Contours],
@@ -202,16 +213,8 @@ impl ExportLayer {
             Self::Smoothness => &[RenderLayer::Smoothness],
             Self::Waymarking => &[RenderLayer::Waymarking],
             Self::Buildings => &[RenderLayer::Buildings],
-            Self::GroundCover => &[
-                RenderLayer::Sea,
-                RenderLayer::Landcover,
-                RenderLayer::WaterAreas,
-                RenderLayer::PierAreas,
-                RenderLayer::BridgeAreas,
-                RenderLayer::SolarPlants,
-                RenderLayer::Trees,
-                RenderLayer::Cutlines,
-            ],
+            // Every base layer but `Buildings`, which stays its own switch.
+            Self::GroundCover => &GROUND_COVER,
         }
     }
 }
@@ -357,8 +360,10 @@ pub async fn post(
         }
 
         for export_layer in ExportLayer::TOGGLEABLE {
+            let on = layers.contains(&export_layer);
+
             for render_layer in export_layer.render_layers() {
-                if layers.contains(&export_layer) {
+                if on {
                     render.insert(*render_layer);
                 } else {
                     render.remove(render_layer);
@@ -664,41 +669,35 @@ fn generate_token() -> String {
 
 /// `quality` reaches the lossy formats only. An export is a file someone keeps,
 /// so plain `webp` is the lossless one and asking for loss is explicit.
-/// 90 is what every tile has been encoded at since before the knob existed.
-fn jpeg(quality: Option<f32>) -> ImageFormat {
-    ImageFormat::Jpeg(quality.unwrap_or(90.0) as u8)
-}
-
+///
+/// The raster names, their defaults and the quality rule belong to
+/// [`ImageFormat::parse`]; only the vector formats and the `jpg` spelling of the
+/// extension are the export's own.
 fn parse_format(
     format: Option<&str>,
     quality: Option<f32>,
 ) -> Result<(ImageFormat, &'static str, &'static str), Box<Response<Body>>> {
     let format = format.unwrap_or("pdf");
 
-    if let Some(quality) = quality
-        && !(0.0..=100.0).contains(&quality)
-    {
-        return Err(Box::new(bad_request()));
+    match format {
+        "pdf" => return Ok((ImageFormat::Pdf, "pdf", "application/pdf")),
+        "svg" => return Ok((ImageFormat::Svg, "svg", "image/svg+xml")),
+        _ => {}
     }
 
-    match format {
-        "pdf" => Ok((ImageFormat::Pdf, "pdf", "application/pdf")),
-        "svg" => Ok((ImageFormat::Svg, "svg", "image/svg+xml")),
-        "jpeg" => Ok((jpeg(quality), "jpeg", "image/jpeg")),
-        "jpg" => Ok((jpeg(quality), "jpg", "image/jpeg")),
-        "png" => Ok((ImageFormat::Png, "png", "image/png")),
-        "webp" => Ok((
-            ImageFormat::Webp(WebpQuality::Lossless),
-            "webp",
-            "image/webp",
-        )),
-        "webp-lossy" => Ok((
-            ImageFormat::Webp(WebpQuality::Lossy(quality.unwrap_or(80.0))),
-            "webp",
-            "image/webp",
-        )),
-        _ => Err(Box::new(bad_request())),
-    }
+    let token = quality.map_or_else(|| format.to_owned(), |q| format!("{format}={q}"));
+
+    let parsed = ImageFormat::parse(&token)
+        .ok_or_else(|| Box::new(bad_request()))?
+        .map_err(|_| Box::new(bad_request()))?;
+
+    let ext = if format == "jpg" {
+        "jpg"
+    } else {
+        parsed.extension()
+    };
+
+    Ok((parsed, ext, parsed.content_type()))
 }
 
 /// Parse a CSS color string (hex `#rgb`/`#rrggbb`/`#rrggbbaa` or

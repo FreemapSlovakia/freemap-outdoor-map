@@ -196,7 +196,7 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
             })
             .build(),
         LegendItem::builder("route_hiking", Category::RoadsAndPaths, 17, opts)
-            .requires(RenderLayer::RoutesHiking)
+            .requires(&[RenderLayer::RoutesHiking, RenderLayer::RoutesHikingKst])
             .add_tag_set(|ts| {
                 ts.add_tags(|tags| {
                     tags.add("type", "route")
@@ -230,7 +230,7 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
             })
             .build(),
         LegendItem::builder("route_hiking_local", Category::RoadsAndPaths, 17, opts)
-            .requires(RenderLayer::RoutesHiking)
+            .requires(&[RenderLayer::RoutesHiking, RenderLayer::RoutesHikingKst])
             .add_tag_set(|ts| {
                 ts.add_tags(|tags| {
                     tags.add("type", "route")
@@ -254,7 +254,7 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
             })
             .build(),
         LegendItem::builder("route_bicycle", Category::RoadsAndPaths, 17, opts)
-            .requires(RenderLayer::RoutesBicycle)
+            .requires(&[RenderLayer::RoutesBicycle])
             .add_tag_set(|ts| {
                 ts.add_tags(|tags| {
                     tags.add("type", "route")
@@ -278,7 +278,7 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
             })
             .build(),
         LegendItem::builder("route_ski", Category::RoadsAndPaths, 17, opts)
-            .requires(RenderLayer::RoutesSki)
+            .requires(&[RenderLayer::RoutesSki])
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add("type", "route").add("route", "ski")))
             .min_zoom(ROUTE_MARKING_FROM_ZOOM)
             .add_landcover("wood")
@@ -296,7 +296,7 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
             })
             .build(),
         LegendItem::builder("route_horse", Category::RoadsAndPaths, 17, opts)
-            .requires(RenderLayer::RoutesHorse)
+            .requires(&[RenderLayer::RoutesHorse])
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add("type", "route").add("route", "horse")))
             .min_zoom(ROUTE_MARKING_FROM_ZOOM)
             .add_landcover("wood")

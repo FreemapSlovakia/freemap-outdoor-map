@@ -1,6 +1,6 @@
 use crate::{
     app::server::app_state::AppState,
-    render::{LegendMode, legend_metadata, legend_render_request},
+    render::{Layers, LegendMode, legend_metadata, legend_render_request},
 };
 use axum::{
     Json,
@@ -35,22 +35,32 @@ pub async fn get_metadata(
     State(state): State<AppState>,
     Query(LegendMetadataQuery { zoom, variant }): Query<LegendMetadataQuery>,
 ) -> Response<Body> {
-    let layers = match variant {
-        Some(ref path) => match state.variant_by_path(path) {
-            Some(variant) => Some(variant.layers.clone()),
-            None => return unknown_variant(),
-        },
-        None => None,
+    let layers = match variant_layers(&state, variant.as_deref()) {
+        Ok(layers) => layers,
+        Err(response) => return *response,
     };
 
     Json(legend_metadata(zoom, layers.as_ref())).into_response()
 }
 
-fn unknown_variant() -> Response<Body> {
-    Response::builder()
-        .status(StatusCode::NOT_FOUND)
-        .body(Body::from("no such tile variant"))
-        .expect("body should be built")
+/// The selection a `?variant=` names, or the 404 to answer with.
+fn variant_layers(
+    state: &AppState,
+    variant: Option<&str>,
+) -> Result<Option<Layers>, Box<Response<Body>>> {
+    let Some(path) = variant else {
+        return Ok(None);
+    };
+
+    state
+        .variant_by_path(path)
+        .map(|variant| Some(variant.layers.clone()))
+        .ok_or_else(|| {
+            Box::new(Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::from("no such tile variant"))
+                .expect("body should be built"))
+        })
 }
 
 pub async fn get(
@@ -65,12 +75,9 @@ pub async fn get(
 ) -> Response<Body> {
     let mode = mode.unwrap_or(LegendMode::Normal);
 
-    let layers = match variant {
-        Some(ref path) => match state.variant_by_path(path) {
-            Some(variant) => Some(variant.layers.clone()),
-            None => return unknown_variant(),
-        },
-        None => None,
+    let layers = match variant_layers(&state, variant.as_deref()) {
+        Ok(layers) => layers,
+        Err(response) => return *response,
     };
 
     let Some(render_request) = legend_render_request(

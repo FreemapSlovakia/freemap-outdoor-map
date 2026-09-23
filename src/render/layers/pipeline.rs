@@ -1,4 +1,5 @@
 use crate::render::colors::ContextExt;
+use crate::render::draw::graded_dots;
 use crate::render::projectable::TileProjectable;
 use crate::render::render_request::CustomLayer;
 use crate::render::{
@@ -134,11 +135,10 @@ enum PendingLayer<'a> {
 
 /// Which [`RenderLayer`]s switch the layer registered under `key` on or off.
 ///
-/// `None` means the key is not addressable: it never draws in [`Layers::Only`],
-/// and no [`Layers::Except`] set can turn it off. An explicit `Some(&[])` says
-/// the same for a key that would otherwise inherit its legend group's arm — a
-/// label layer filed under the fill it labels, which an overlay wants kept when
-/// the fill goes.
+/// `None` means the key names nothing switchable, so the stage follows the base
+/// map. An explicit `Some(&[])` says the same for a key that would otherwise
+/// inherit its legend group's arm — a label layer filed under the fill it
+/// labels, which an overlay wants kept when the fill goes.
 fn key_layers(key: &str) -> Option<&'static [RenderLayer]> {
     use RenderLayer as L;
 
@@ -191,7 +191,7 @@ pub fn key_enabled(selection: &Layers, name: &str, legend_key: &str) -> bool {
         Some(layers) if !layers.is_empty() => {
             layers.iter().any(|layer| selection.draws(*layer))
         }
-        _ => selection.base_map(),
+        _ => selection.base_map,
     }
 }
 
@@ -234,6 +234,24 @@ impl<'a> Prefetcher<'a> {
         + 'static,
         render_fn: impl FnOnce(Vec<Feature>, Params) -> LayerRenderResult + 'a,
     ) {
+        self.add_gated(name, legend_name, true, query_fn, render_fn);
+    }
+
+    /// `gated` false for a query the pipeline needs for its own sake rather than
+    /// to draw with, which no layer selection may switch off.
+    fn add_gated(
+        &mut self,
+        name: &'static str,
+        legend_name: Option<&'static str>,
+        gated: bool,
+        query_fn: impl FnOnce(
+            Arc<Ctx>,
+            deadpool_postgres::Object,
+        ) -> BoxFuture<'static, Result<Vec<Row>, tokio_postgres::Error>>
+        + Send
+        + 'static,
+        render_fn: impl FnOnce(Vec<Feature>, Params) -> LayerRenderResult + 'a,
+    ) {
         if let Some(ref legend) = self.ctx.legend {
             let key = legend_name.unwrap_or(name);
 
@@ -253,7 +271,7 @@ impl<'a> Prefetcher<'a> {
             return;
         }
 
-        if !self.enabled(name, legend_name.unwrap_or(name)) {
+        if gated && !self.enabled(name, legend_name.unwrap_or(name)) {
             return;
         }
 
@@ -357,40 +375,6 @@ impl<'a> Prefetcher<'a> {
         self.layers.push(PendingLayer::Shared {
             name,
             slot,
-            render_fn: Box::new(render_fn),
-        });
-    }
-
-    /// A query the pipeline needs for its own sake rather than to draw with, so
-    /// no layer selection can switch it off. Legend renders still skip it: they
-    /// never touch the database.
-    fn add_ungated(
-        &mut self,
-        name: &'static str,
-        query_fn: impl FnOnce(
-            Arc<Ctx>,
-            deadpool_postgres::Object,
-        ) -> BoxFuture<'static, Result<Vec<Row>, tokio_postgres::Error>>
-        + Send
-        + 'static,
-        render_fn: impl FnOnce(Vec<Feature>, Params) -> LayerRenderResult + 'a,
-    ) {
-        if self.ctx.legend.is_some() {
-            return;
-        }
-
-        let pool = self.pool.clone();
-        let ctx = self.ctx.clone();
-
-        let jh = self.handle.spawn(async move {
-            let conn = db_pool_stats::get(&pool, name).await.map_err(LayerRenderError::from)?;
-            let rows = query_fn(ctx, conn).await.map_err(LayerRenderError::from)?;
-            Ok::<Vec<Feature>, LayerRenderError>(rows.into_iter().map(Feature::from).collect())
-        });
-
-        self.layers.push(PendingLayer::Query {
-            name,
-            jh,
             render_fn: Box::new(render_fn),
         });
     }
@@ -562,23 +546,13 @@ pub fn render(
 
     let label_margin = do_contours && zoom >= layers::contours::LABEL_MIN_ZOOM;
 
-    let draw_sea = key_enabled(&request.layers, "sea", "sea");
+    let draw_sea = to_render.draws(RenderLayer::Sea);
 
     // The sea layer is also the only producer of `dry_land`, which masks shading
     // and contours off the water. An overlay that drops the fill but keeps the
     // contours still needs the mask, so the stage runs under a name with no arm
     // of its own and renders nothing.
-    let sea_stage = if draw_sea {
-        Some("sea")
-    } else if do_shading || do_contours {
-        Some("dry_land")
-    } else {
-        None
-    };
-
-    if request.legend.is_none()
-        && let Some(sea_stage) = sea_stage
-    {
+    if request.legend.is_none() && (draw_sea || do_shading || do_contours) {
         let margin = if label_margin {
             layers::dry_land::LABEL_MARGIN_PX
         } else {
@@ -591,8 +565,10 @@ pub fn render(
         // `sea_stage` and `draw_sea` already say whether this runs and whether it
         // draws, so it does not go through the layer gate a second time — which
         // would drop the mask-only case, whose name has no arm of its own.
-        prefetcher.add_ungated(
-            sea_stage,
+        prefetcher.add_gated(
+            "sea",
+            None,
+            false,
             move |ctx, conn| async move { layers::sea::query(&ctx, &conn, margin).await }.boxed(),
             move |rows, _params| {
                 let land = layers::sea::project(ctx_ref, &rows)?;
@@ -1010,7 +986,7 @@ pub fn render(
         );
     }
 
-    if zoom >= 8 && to_render.draws(RenderLayer::CountryBorders) {
+    if zoom >= 8 {
         prefetcher.add(
             "borders",
             Some("country_borders"),
@@ -1020,9 +996,6 @@ pub fn render(
     }
 
     {
-        let to_render = to_render.clone();
-        let to_render1 = to_render.clone();
-
         let min_zoom = if to_render.draws(RenderLayer::RoutesHikingKst) {
             8
         } else {
@@ -1030,6 +1003,9 @@ pub fn render(
         };
 
         if zoom >= min_zoom {
+            let to_render = to_render.clone();
+            let to_render1 = to_render.clone();
+
             prefetcher.add(
                 "routes_marking",
                 Some("routes"),
@@ -1083,7 +1059,7 @@ pub fn render(
         });
     }
 
-    if (9..=11).contains(&zoom) && to_render.draws(RenderLayer::Geonames) {
+    if (9..=11).contains(&zoom) {
         prefetcher.add(
             "geonames",
             None,
@@ -1107,7 +1083,9 @@ pub fn render(
         );
     }
 
-    if zoom >= 13 {
+    // The group has to follow the same gate as the stages inside it: `push` has no
+    // name, so nothing else would stop an overlay compositing an empty group.
+    if zoom >= 13 && key_enabled(&request.layers, "valleys", "valleys_ridges") {
         let opacity = 0.5 - (zoom as f64 - 13.0) / 10.0;
 
         prefetcher.push(|_params| {
@@ -1407,7 +1385,7 @@ pub fn render(
 
     // Icons and their labels in one stage: on an overlay there are no other POIs
     // for them to interleave with, so they only have to miss each other.
-    if zoom >= layers::pois::WAYMARKING_MIN_ZOOM && to_render.draws(RenderLayer::Waymarking) {
+    if zoom >= layers::pois::WAYMARKING_MIN_ZOOM {
         let kst = to_render.draws(RenderLayer::RoutesHikingKst);
         let ctx = ctx.clone();
 
@@ -1433,23 +1411,29 @@ pub fn render(
 
     // Last of the map layers: the grade qualifies everything drawn below it, and
     // as an overlay it has nothing of its own to hide behind.
-    if zoom >= layers::sac_scale::MIN_ZOOM && to_render.draws(RenderLayer::SacScale) {
+    if zoom >= graded_dots::MIN_ZOOM {
         prefetcher.add(
             "sac_scale",
             None,
-            |ctx, conn| async move { layers::sac_scale::query(&ctx, &conn).await }.boxed(),
-            |rows, _params| layers::sac_scale::render(&ctx, context, rows),
+            |ctx, conn| {
+                async move { graded_dots::query(&graded_dots::SAC_SCALE, &ctx, &conn).await }
+                    .boxed()
+            },
+            |rows, _params| graded_dots::render(&graded_dots::SAC_SCALE, &ctx, context, rows),
         );
     }
 
     // Not in any variant's render list until the roads table is reimported:
     // without the column the query fails the whole render.
-    if zoom >= layers::smoothness::MIN_ZOOM && to_render.draws(RenderLayer::Smoothness) {
+    if zoom >= graded_dots::MIN_ZOOM {
         prefetcher.add(
             "smoothness",
             None,
-            |ctx, conn| async move { layers::smoothness::query(&ctx, &conn).await }.boxed(),
-            |rows, _params| layers::smoothness::render(&ctx, context, rows),
+            |ctx, conn| {
+                async move { graded_dots::query(&graded_dots::SMOOTHNESS, &ctx, &conn).await }
+                    .boxed()
+            },
+            |rows, _params| graded_dots::render(&graded_dots::SMOOTHNESS, &ctx, context, rows),
         );
     }
 

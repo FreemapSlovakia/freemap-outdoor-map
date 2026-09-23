@@ -154,7 +154,7 @@ pub fn feature_lines(
             } else if types[0] == "cutline" {
                 // Drawn by feature_lines but switched by a layer of its own, so
                 // a variant that omits cutlines must not list this sample.
-                item = item.requires(RenderLayer::Cutlines);
+                item = item.requires(&[RenderLayer::Cutlines]);
             }
 
             item.build()

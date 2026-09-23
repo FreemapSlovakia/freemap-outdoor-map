@@ -1,5 +1,8 @@
 use crate::render::{
-    layers::{Category, Def, INACCESSIBLE_ZOOM_DELAY, POI_ORDER, POIS, SHOP_TYPES},
+    layers::{
+        Category, Def, INACCESSIBLE_ZOOM_DELAY, POI_ORDER, POIS, SHOP_TYPES,
+        WAYMARKING_LEGEND_TYPES,
+    },
     legend::{
         BuildOpts, LegendItem, LegendItemBuilder, MAX_LEGEND_ZOOM, PropsBuilder, build_tags_map,
         leak_str,
@@ -477,7 +480,7 @@ impl LegendItemBuilder<'_> {
         // Waymarking is drawn by the POI layer on the map and by a layer of its
         // own on an overlay, so its samples are filed under both — or an overlay
         // carrying guideposts would have no legend item for them.
-        if WAYMARKING_TYPES.contains(&typ) {
+        if WAYMARKING_LEGEND_TYPES.contains(&typ) {
             item.add_feature("waymarking", feature)
         } else {
             item
@@ -485,5 +488,3 @@ impl LegendItemBuilder<'_> {
     }
 }
 
-/// The POI types `layers::pois::query_waymarking` selects.
-const WAYMARKING_TYPES: [&str; 3] = ["guidepost", "guidepost_noname", "route_marker"];

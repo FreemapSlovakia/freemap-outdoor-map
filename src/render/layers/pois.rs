@@ -782,6 +782,14 @@ fn route_marker_cond(zoom: u8, type_omitted_elsewhere: bool) -> &'static str {
 /// [`render_icons`] would drop every row anyway.
 pub const WAYMARKING_MIN_ZOOM: u8 = 13;
 
+/// The POI types the waymarking layer draws. The legend files its samples under
+/// these, so the list has one owner.
+pub const WAYMARKING_TYPES: [&str; 2] = ["guidepost", "route_marker"];
+
+/// As above, plus the type a nameless guidepost is given — not a thing to select
+/// on, but a legend sample carries it.
+pub const WAYMARKING_LEGEND_TYPES: [&str; 3] = ["guidepost", "guidepost_noname", "route_marker"];
+
 /// Guideposts and route markers on their own, for an overlay that carries the
 /// waymarking without the rest of the POIs. The columns are the ones
 /// [`render_icons`] reads, so the overlay reuses the POI renderers as they are.
@@ -800,6 +808,10 @@ pub async fn query_waymarking(
 
     let route_marker_cond = route_marker_cond(zoom, false);
 
+    let waymarking_types = WAYMARKING_TYPES
+        .map(|typ| format!("'{typ}'"))
+        .join(", ");
+
     // A guidepost with no name is a different definition, drawn from a deeper zoom
     // and with a smaller icon - the same split the main query makes.
     #[cfg_attr(any(), rustfmt::skip)]
@@ -817,7 +829,7 @@ pub async fn query_waymarking(
             osm_pois
         WHERE
             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
-            type IN ('guidepost', 'route_marker')
+            type IN ({waymarking_types})
             {route_marker_cond}
             {kst_cond}
     ");

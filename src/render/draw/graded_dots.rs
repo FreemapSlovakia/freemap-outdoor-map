@@ -1,6 +1,6 @@
 use crate::render::{
     Feature, FeatureError,
-    colors::{Color, ContextExt, WHITE},
+    colors::{self, Color, ContextExt, WHITE},
     ctx::Ctx,
     draw::path_geom::path_line_string,
     layer_render_error::LayerRenderResult,
@@ -21,17 +21,28 @@ const SPACING: f64 = 2.2;
 /// route, but an overlay sits above every other layer, where a translucent mark
 /// takes its colour from whatever happens to be beneath it.
 pub struct GradedDots {
-    /// Below this the generalized road tables have dropped the ways that carry
-    /// the grade, so there is nothing left to read it from.
-    pub min_zoom: u8,
     /// The `osm_roads` column holding the grade, as an imposm enumerate: 0 for
     /// untagged, then 1-based into `colors`.
     pub column: &'static str,
     pub colors: &'static [Color],
 }
 
-fn dot_diameter(dots: &GradedDots, zoom: u8) -> f64 {
-    (1.4f64.powf((zoom as f64).max(f64::from(dots.min_zoom)) - 14.0) * 5.0).min(14.0)
+/// Below this the generalized road tables have dropped the ways that carry a
+/// grade, so there is nothing left to read one from.
+pub const MIN_ZOOM: u8 = 12;
+
+pub const SAC_SCALE: GradedDots = GradedDots {
+    column: "sac_scale",
+    colors: &colors::SAC_SCALE,
+};
+
+pub const SMOOTHNESS: GradedDots = GradedDots {
+    column: "smoothness",
+    colors: &colors::SMOOTHNESS,
+};
+
+fn dot_diameter(zoom: u8) -> f64 {
+    (1.4f64.powf(f64::from(zoom) - 14.0) * 5.0).min(14.0)
 }
 
 pub async fn query(
@@ -40,7 +51,7 @@ pub async fn query(
     client: &tokio_postgres::Client,
 ) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     // Half a dot, plus its ring, bleeds in from either side.
-    let buffer_px = dot_diameter(dots, ctx.zoom).mul_add(0.5, OUTLINE_PX + 1.0);
+    let buffer_px = dot_diameter(ctx.zoom).mul_add(0.5, OUTLINE_PX + 1.0);
 
     let column = dots.column;
 
@@ -67,7 +78,9 @@ pub fn render(
     context: &Context,
     rows: Vec<Feature>,
 ) -> LayerRenderResult {
-    let diameter = dot_diameter(dots, ctx.zoom);
+    let _span = tracy_client::span!("graded_dots::render");
+
+    let diameter = dot_diameter(ctx.zoom);
 
     // A zero-length dash under a round cap is a dot; the gap sets their spacing.
     let dashes = [0.001, diameter * SPACING];
@@ -99,9 +112,14 @@ pub fn render(
 
     context.set_line_width(diameter);
 
-    // The query orders by grade, so where two paths meet the harder one is on top.
-    for (grade, geom) in &geoms {
-        let Ok(index) = usize::try_from(*grade - 1) else {
+    // Ordered by grade, so equal grades arrive in runs: one path and one stroke
+    // each, rather than one per way. The dots are opaque and of one width, so
+    // overlapping strokes of a run composite identically either way. Drawing the
+    // runs in order is also what puts the harder grade on top where paths meet.
+    let mut runs = geoms.chunk_by(|(a, _), (b, _)| a == b);
+
+    for run in &mut runs {
+        let Ok(index) = usize::try_from(run[0].0 - 1) else {
             continue;
         };
 
@@ -111,7 +129,9 @@ pub fn render(
 
         context.set_source_color(*color);
 
-        path_line_string(context, geom);
+        for (_, geom) in run {
+            path_line_string(context, geom);
+        }
 
         context.stroke()?;
     }

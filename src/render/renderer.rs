@@ -220,8 +220,12 @@ fn argb32_to_rgba(surface: &mut ImageSurface) -> (Vec<u8>, u32, u32) {
         for chunk in row.chunks_exact(4) {
             let (b, g, r, a) = (chunk[0], chunk[1], chunk[2], chunk[3]);
 
+            // Overlays are drawn opaque, so all but the antialiased edges take
+            // one of the two cheap arms; the divide is for the fringe.
             if a == 0 {
                 rgba.extend_from_slice(&[0, 0, 0, 0]);
+            } else if a == 255 {
+                rgba.extend_from_slice(&[r, g, b, 255]);
             } else {
                 let un = |c: u8| ((c as u32 * 255 + a as u32 / 2) / a as u32).min(255) as u8;
 

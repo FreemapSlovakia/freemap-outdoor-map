@@ -143,7 +143,7 @@ impl RenderLayer {
 ///
 /// Anything but `base_map: true` with an empty `omit` leaves part of the surface
 /// unpainted, so it needs an alpha-capable format to be of any use.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Layers {
     /// Whether the layers the map draws by itself are drawn at all.
     pub base_map: bool,
@@ -192,10 +192,6 @@ impl Layers {
     /// paints the whole surface.
     pub fn is_whole_map(&self) -> bool {
         self.base_map && self.omit.is_empty()
-    }
-
-    pub const fn base_map(&self) -> bool {
-        self.base_map
     }
 }
 
