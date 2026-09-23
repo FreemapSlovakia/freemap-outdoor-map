@@ -377,6 +377,12 @@ pub async fn post(
         ExportLayerMode::Except => Layers::Except(render),
     };
 
+    // Same reason as the variant check: an overlay in an opaque format comes out
+    // on solid black, which is not what anyone asking for one wants.
+    if !layers.is_map() && !format.has_alpha() {
+        return bad_request();
+    }
+
     let mut render_request = RenderRequest::new(rect, request.zoom, scale, format, layers, None);
 
     render_request.custom_layer = if let Some(custom_layer) = request

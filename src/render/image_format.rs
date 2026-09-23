@@ -30,6 +30,11 @@ impl ImageFormat {
         }
     }
 
+    /// Whether the format keeps an alpha channel, and so can carry an overlay.
+    pub const fn has_alpha(self) -> bool {
+        matches!(self, Self::Png | Self::Webp(_) | Self::Svg)
+    }
+
     /// The extension cached tiles are stored under.
     pub const fn extension(self) -> &'static str {
         match self {

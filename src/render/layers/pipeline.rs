@@ -175,6 +175,15 @@ fn key_layers(key: &str) -> Option<&'static [RenderLayer]> {
 
 /// Whether the layer registered under `name` (filed under `legend_key`) draws.
 ///
+/// Everything is on in [`Layers::Map`]. In [`Layers::Only`] a layer draws when
+/// the selection names one of the [`RenderLayer`]s its key covers; in
+/// [`Layers::Except`] unless it names *all* of them, so excluding one route type
+/// leaves the other four to the per-type filtering inside the layer.
+///
+/// The layer's own name is asked first and its legend group only as a fallback,
+/// so a stage can opt out of the group it is filed under. Contours rely on the
+/// fallback: their names are per-country.
+///
 /// Kept apart from [`Prefetcher`] so the legend can ask the same question of a
 /// variant's selection without building a pipeline.
 pub fn key_enabled(selection: &Layers, name: &str, legend_key: &str) -> bool {
@@ -214,14 +223,7 @@ impl<'a> Prefetcher<'a> {
         }
     }
 
-    /// Whether a layer draws at all. Everything is on in [`Layers::Map`]; in
-    /// [`Layers::Only`] a layer draws when the request names one of the
-    /// [`RenderLayer`]s that switch it on, and in [`Layers::Except`] unless it
-    /// does.
-    ///
-    /// The layer's own name is asked first and its legend group only as a
-    /// fallback, so a stage can opt out of the group it is filed under. Contours
-    /// rely on the fallback: their names are per-country.
+    /// See [`key_enabled`].
     fn enabled(&self, name: &str, legend_key: &str) -> bool {
         key_enabled(&self.selection, name, legend_key)
     }
@@ -364,6 +366,40 @@ impl<'a> Prefetcher<'a> {
         self.layers.push(PendingLayer::Shared {
             name,
             slot,
+            render_fn: Box::new(render_fn),
+        });
+    }
+
+    /// A query the pipeline needs for its own sake rather than to draw with, so
+    /// no layer selection can switch it off. Legend renders still skip it: they
+    /// never touch the database.
+    fn add_ungated(
+        &mut self,
+        name: &'static str,
+        query_fn: impl FnOnce(
+            Arc<Ctx>,
+            deadpool_postgres::Object,
+        ) -> BoxFuture<'static, Result<Vec<Row>, tokio_postgres::Error>>
+        + Send
+        + 'static,
+        render_fn: impl FnOnce(Vec<Feature>, Params) -> LayerRenderResult + 'a,
+    ) {
+        if self.ctx.legend.is_some() {
+            return;
+        }
+
+        let pool = self.pool.clone();
+        let ctx = self.ctx.clone();
+
+        let jh = self.handle.spawn(async move {
+            let conn = db_pool_stats::get(&pool, name).await.map_err(LayerRenderError::from)?;
+            let rows = query_fn(ctx, conn).await.map_err(LayerRenderError::from)?;
+            Ok::<Vec<Feature>, LayerRenderError>(rows.into_iter().map(Feature::from).collect())
+        });
+
+        self.layers.push(PendingLayer::Query {
+            name,
+            jh,
             render_fn: Box::new(render_fn),
         });
     }
@@ -559,9 +595,11 @@ pub fn render(
         let dry_land = dry_land.clone();
         let ctx_ref = &ctx;
 
-        prefetcher.add(
+        // `sea_stage` and `draw_sea` already say whether this runs and whether it
+        // draws, so it does not go through the layer gate a second time — which
+        // would drop the mask-only case, whose name has no arm of its own.
+        prefetcher.add_ungated(
             sea_stage,
-            None,
             move |ctx, conn| async move { layers::sea::query(&ctx, &conn, margin).await }.boxed(),
             move |rows, _params| {
                 let land = layers::sea::project(ctx_ref, &rows)?;
@@ -1376,7 +1414,7 @@ pub fn render(
 
     // Icons and their labels in one stage: on an overlay there are no other POIs
     // for them to interleave with, so they only have to miss each other.
-    if zoom >= layers::pois::WAYMARKING_MIN_ZOOM && to_render.draws(RenderLayer::Waymarking) {
+    if zoom >= layers::pois::WAYMARKING_MIN_ZOOM && to_render.contains(RenderLayer::Waymarking) {
         let kst = to_render.contains(RenderLayer::RoutesHikingKst);
         let ctx = ctx.clone();
 
@@ -1402,7 +1440,13 @@ pub fn render(
 
     // Last of the map layers: the grade qualifies everything drawn below it, and
     // as an overlay it has nothing of its own to hide behind.
-    if zoom >= layers::sac_scale::MIN_ZOOM && to_render.draws(RenderLayer::SacScale) {
+    //
+    // Asked with `contains`, not `draws`, like every layer the map itself never
+    // draws: `Except` turns on whatever it is not told to exclude, which would
+    // put the whole of `/o/sac` on top of the aerial overlay. So in an `Except`
+    // group naming one of these switches it *on*, against the sense of the rest
+    // of the list - which is the price of one list meaning two things.
+    if zoom >= layers::sac_scale::MIN_ZOOM && to_render.contains(RenderLayer::SacScale) {
         prefetcher.add(
             "sac_scale",
             None,
@@ -1411,11 +1455,8 @@ pub fn render(
         );
     }
 
-    // Opt-in in every mode, unlike the other overlays: `smoothness` has no column
-    // until the roads table is reimported, and the query fails the whole render
-    // rather than coming back empty. `Except` turns everything on by default, so
-    // `draws` here would break every aerial overlay. Switch it to `draws` once
-    // the column is in.
+    // As above, and doubly so until the roads table is reimported: without the
+    // column the query fails the whole render rather than coming back empty.
     if zoom >= layers::smoothness::MIN_ZOOM && to_render.contains(RenderLayer::Smoothness) {
         prefetcher.add(
             "smoothness",

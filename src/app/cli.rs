@@ -386,7 +386,16 @@ impl Cli {
             ));
         }
 
-        self.tile_variant_inputs()?;
+        for variant in self.tile_variant_inputs()? {
+            // An overlay leaves most of the surface unpainted; an opaque format
+            // renders that as solid black rather than as nothing.
+            if !variant.layers.is_map() && !variant.format.has_alpha() {
+                return Err(format!(
+                    "tile URL path '{}' is an overlay, so it needs an alpha-capable --tile-format",
+                    variant.url_path
+                ));
+            }
+        }
 
         if let Some(hierarchy) = self.hillshading_hierarchy.as_ref() {
             let keys: HashSet<&str> = hierarchy.entries().iter().map(|e| e.country).collect();
