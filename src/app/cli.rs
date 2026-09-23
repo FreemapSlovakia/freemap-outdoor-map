@@ -1,6 +1,6 @@
 use crate::render::{
-    ContourCountries, FeatureLineMaskCountries, HillshadingHierarchy, PlaceTypeOverrides,
-    RenderLayer,
+    ContourCountries, FeatureLineMaskCountries, HillshadingHierarchy, ImageFormat, Layers,
+    PlaceTypeOverrides, RenderLayer, WebpQuality,
 };
 use clap::{Parser, ValueEnum, error::ErrorKind};
 use std::{collections::HashSet, net::Ipv4Addr, path::PathBuf, str::FromStr};
@@ -45,13 +45,49 @@ impl RenderGroup {
     }
 }
 
+/// How a variant's `--render` group is read.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+pub enum LayerMode {
+    /// The map, with the group naming the optional layers to add.
+    #[default]
+    Map,
+    /// An overlay of nothing but the group.
+    Only,
+    /// The map bar the group, for overlaying something that draws its own ground.
+    Except,
+}
+
+/// A variant's output format. Lossy WebP only pays on an overlay dense enough
+/// that lossless has no sparsity to exploit; a sparse one encodes smaller
+/// lossless, and without the fringing a photo codec leaves around text.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+pub enum TileFormat {
+    #[default]
+    Jpeg,
+    Png,
+    Webp,
+    WebpLossy,
+}
+
+impl TileFormat {
+    pub const fn image_format(self, quality: f32) -> ImageFormat {
+        match self {
+            Self::Jpeg => ImageFormat::Jpeg,
+            Self::Png => ImageFormat::Png,
+            Self::Webp => ImageFormat::Webp(WebpQuality::Lossless),
+            Self::WebpLossy => ImageFormat::Webp(WebpQuality::Lossy(quality)),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct TileVariantInput {
     pub url_path: String,
     pub coverage_geojson: Option<PathBuf>,
     pub tile_cache_base_path: Option<PathBuf>,
     pub tile_index: Option<PathBuf>,
-    pub render: HashSet<RenderLayer>,
+    pub layers: Layers,
+    pub format: ImageFormat,
 }
 
 impl FromStr for RenderGroup {
@@ -205,6 +241,18 @@ pub struct Cli {
         default_value = "/"
     )]
     pub tile_url_path: Vec<TileUrlPath>,
+
+    /// How each variant's `--render` group is read, aligned with tile URL paths.
+    #[arg(long, env = "MAPRENDER_LAYER_MODE", value_delimiter = ',')]
+    pub layer_mode: Vec<LayerMode>,
+
+    /// Output format per variant, aligned with tile URL paths.
+    #[arg(long, env = "MAPRENDER_TILE_FORMAT", value_delimiter = ',')]
+    pub tile_format: Vec<TileFormat>,
+
+    /// Quality for the lossy WebP variants, 0..=100.
+    #[arg(long, env = "MAPRENDER_WEBP_QUALITY", default_value_t = 80.0)]
+    pub webp_quality: f32,
 
     /// Coverage geojson polygon files aligned with tile URL paths.
     #[arg(long, env = "MAPRENDER_COVERAGE_GEOJSON", value_delimiter = ',')]
@@ -373,16 +421,31 @@ impl Cli {
             "--tile-cache-base-path",
         )?;
         let index_by_variant = expand_optional_by_variant(&self.index, variants_len, "--index")?;
+        let mode_by_variant =
+            expand_optional_by_variant(&self.layer_mode, variants_len, "--layer-mode")?;
+        let format_by_variant =
+            expand_optional_by_variant(&self.tile_format, variants_len, "--tile-format")?;
 
         let mut result = Vec::with_capacity(variants_len);
 
         for i in 0..variants_len {
+            let set = render_by_variant[i].layers().clone();
+
+            let layers = match mode_by_variant[i].unwrap_or_default() {
+                LayerMode::Map => Layers::Map(set),
+                LayerMode::Only => Layers::Only(set),
+                LayerMode::Except => Layers::Except(set),
+            };
+
             result.push(TileVariantInput {
                 url_path: self.tile_url_path[i].as_str().to_string(),
                 coverage_geojson: coverage_by_variant[i].clone(),
                 tile_cache_base_path: cache_by_variant[i].clone(),
                 tile_index: index_by_variant[i].clone(),
-                render: render_by_variant[i].layers().clone(),
+                layers,
+                format: format_by_variant[i]
+                    .unwrap_or_default()
+                    .image_format(self.webp_quality),
             });
         }
 

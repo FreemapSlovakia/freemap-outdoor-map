@@ -3,7 +3,7 @@ use crate::{
         server::{export_route::ExportState, licenses_route::LicenseCatalog},
         tile_processing_worker::TileProcessingWorker,
     },
-    render::{RenderLayer, RenderWorkerPool},
+    render::{ImageFormat, Layers, RenderLayer, RenderWorkerPool},
 };
 use geo::Geometry;
 use std::{collections::HashSet, path::PathBuf, sync::Arc};
@@ -12,7 +12,8 @@ use std::{collections::HashSet, path::PathBuf, sync::Arc};
 pub struct TileVariantState {
     pub(crate) tile_cache_base_path: Option<PathBuf>,
     pub(crate) coverage_geometry: Option<Arc<Geometry>>,
-    pub(crate) render: HashSet<RenderLayer>,
+    pub(crate) layers: Layers,
+    pub(crate) format: ImageFormat,
 }
 
 #[derive(Clone)]

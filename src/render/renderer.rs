@@ -1,5 +1,8 @@
 use crate::render::{
-    PlaceTypeOverrides, attribution::Attribution, image_format::ImageFormat, layers,
+    PlaceTypeOverrides,
+    attribution::Attribution,
+    image_format::{ImageFormat, WebpQuality},
+    layers,
     render_request::RenderRequest, svg_repo::SvgRepo, xyz::bbox_size_in_pixels,
 };
 use cairo::{Format, ImageSurface, PdfSurface, Surface, SvgSurface};
@@ -94,6 +97,33 @@ pub fn render(
                 attribution,
             })
         }
+        ImageFormat::Webp(quality) => {
+            let scale = request.scale;
+
+            let mut surface = ImageSurface::create(
+                Format::ARgb32,
+                (size.width as f64 * scale) as i32,
+                (size.height as f64 * scale) as i32,
+            )?;
+
+            let attribution = render(&surface)?;
+
+            let _span = tracy_client::span!("render_tile::encode_webp");
+
+            let (rgba, width, height) = argb32_to_rgba(&mut surface);
+
+            let encoder = webp::Encoder::from_rgba(&rgba, width, height);
+
+            let encoded = match quality {
+                WebpQuality::Lossless => encoder.encode_lossless(),
+                WebpQuality::Lossy(q) => encoder.encode(q),
+            };
+
+            Ok(RenderOutput {
+                bytes: encoded.to_vec(),
+                attribution,
+            })
+        }
         ImageFormat::Png => {
             let scale = request.scale;
 
@@ -162,4 +192,35 @@ pub fn render(
             })
         }
     }
+}
+
+/// Cairo's `ARgb32` is premultiplied BGRA in native byte order; WebP wants
+/// straight RGBA. Undoing the premultiply is what keeps a half-transparent
+/// label its own colour instead of a darkened one.
+fn argb32_to_rgba(surface: &mut ImageSurface) -> (Vec<u8>, u32, u32) {
+    let width = surface.width() as u32;
+    let height = surface.height() as u32;
+    let stride = surface.stride() as usize;
+    let data = surface.data().expect("surface data");
+
+    let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+
+    for y in 0..height as usize {
+        let row_start = y * stride;
+        let row = &data[row_start..row_start + width as usize * 4];
+
+        for chunk in row.chunks_exact(4) {
+            let (b, g, r, a) = (chunk[0], chunk[1], chunk[2], chunk[3]);
+
+            if a == 0 {
+                rgba.extend_from_slice(&[0, 0, 0, 0]);
+            } else {
+                let un = |c: u8| ((c as u32 * 255 + a as u32 / 2) / a as u32).min(255) as u8;
+
+                rgba.extend_from_slice(&[un(r), un(g), un(b), a]);
+            }
+        }
+    }
+
+    (rgba, width, height)
 }

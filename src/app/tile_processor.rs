@@ -22,6 +22,8 @@ const MAX_ATTRIBUTION_LEN: usize = 1024;
 pub struct VariantConfig {
     pub(crate) tile_cache_base_path: Option<PathBuf>,
     pub(crate) tile_index: Option<PathBuf>,
+    /// The variant's format, so invalidation deletes the file the route wrote.
+    pub(crate) ext: &'static str,
 }
 
 #[derive(Clone)]
@@ -33,6 +35,7 @@ pub struct TileProcessingConfig {
 struct VariantRuntime {
     tile_cache_base_path: Option<PathBuf>,
     db: Option<sled::Db>,
+    ext: &'static str,
 }
 
 pub struct TileProcessor {
@@ -72,6 +75,7 @@ impl TileProcessor {
             variants.push(VariantRuntime {
                 tile_cache_base_path: variant.tile_cache_base_path,
                 db,
+                ext: variant.ext,
             });
         }
 
@@ -115,7 +119,7 @@ impl TileProcessor {
 
         Self::append_index_entry(variant.db.as_ref(), coord, scale);
 
-        let file_path = cached_tile_path(tile_cache_base_path, coord, scale);
+        let file_path = cached_tile_path(tile_cache_base_path, coord, scale, variant.ext);
 
         if let Some(parent) = file_path.parent()
             && let Err(err) = fs::create_dir_all(parent)
@@ -138,9 +142,11 @@ impl TileProcessor {
                 continue;
             };
 
+            let ext = variant.ext;
+
             let mut batch = Batch::default();
 
-            Self::remove_descendants(db, &mut batch, coord, base_path);
+            Self::remove_descendants(db, &mut batch, coord, base_path, ext);
 
             let mut current = coord;
             loop {
@@ -154,7 +160,7 @@ impl TileProcessor {
 
                 current = parent;
 
-                Self::remove_exact(db, &mut batch, current, base_path);
+                Self::remove_exact(db, &mut batch, current, base_path, ext);
             }
 
             if let Err(err) = db.apply_batch(batch) {
@@ -216,6 +222,7 @@ impl TileProcessor {
         batch: &mut Batch,
         coord: TileCoord,
         base_path: &std::path::Path,
+        ext: &str,
     ) {
         let key: Vec<u8> = coord.into();
 
@@ -223,7 +230,7 @@ impl TileProcessor {
             match item {
                 Ok(entry) => {
                     let entry_coord = entry.0.as_ref().into();
-                    Self::remove_files(entry_coord, entry.1.as_ref(), base_path);
+                    Self::remove_files(entry_coord, entry.1.as_ref(), base_path, ext);
                     batch.remove(entry.0);
                 }
                 Err(err) => {
@@ -238,6 +245,7 @@ impl TileProcessor {
         batch: &mut Batch,
         coord: TileCoord,
         base_path: &std::path::Path,
+        ext: &str,
     ) {
         let key: Vec<u8> = coord.into();
 
@@ -250,15 +258,15 @@ impl TileProcessor {
             }
         };
 
-        Self::remove_files(coord, scales.as_ref(), base_path);
+        Self::remove_files(coord, scales.as_ref(), base_path, ext);
         batch.remove(key);
     }
 
-    fn remove_files(coord: TileCoord, scales: &[u8], base_path: &std::path::Path) {
+    fn remove_files(coord: TileCoord, scales: &[u8], base_path: &std::path::Path, ext: &str) {
         let unique_scales: HashSet<u8> = scales.iter().copied().collect();
 
         for scale in unique_scales {
-            let path = cached_tile_path(base_path, coord, scale as f64);
+            let path = cached_tile_path(base_path, coord, scale as f64, ext);
 
             if let Err(err) = fs::remove_file(&path)
                 && err.kind() != io::ErrorKind::NotFound
@@ -326,11 +334,16 @@ pub fn read_attribution(file: impl AsFd) -> Option<Attribution> {
         .map(Attribution::decode)
 }
 
-pub fn cached_tile_path(base: &std::path::Path, coord: TileCoord, scale: f64) -> PathBuf {
+pub fn cached_tile_path(
+    base: &std::path::Path,
+    coord: TileCoord,
+    scale: f64,
+    ext: &str,
+) -> PathBuf {
     let mut path = base.to_owned();
     path.push(coord.zoom.to_string());
     path.push(coord.x.to_string());
-    path.push(format!("{}@{scale}.jpeg", coord.y));
+    path.push(format!("{}@{scale}.{ext}", coord.y));
     path
 }
 

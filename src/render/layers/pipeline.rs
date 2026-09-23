@@ -88,7 +88,23 @@ type FeatureQueryHandle = JoinHandle<Result<Vec<Feature>, LayerRenderError>>;
 /// A single query result reused across multiple render stages (e.g. `feature_lines`,
 /// drawn up to 5× in different draw-order positions from one DB fetch). The first
 /// stage to run awaits the query and caches the rows; the rest borrow them.
+type SharedQueryFn = Box<
+    dyn FnOnce(
+            Arc<Ctx>,
+            deadpool_postgres::Object,
+        ) -> BoxFuture<'static, Result<Vec<Row>, tokio_postgres::Error>>
+        + Send,
+>;
+
+/// A query several render stages read. It is spawned by the first stage that
+/// registers and turns out to be enabled, not at the point the query is
+/// declared: an overlay can keep one stage of a group while dropping the rest,
+/// and the query should follow the stages rather than the group it is named
+/// after. Registration all happens before anything runs, so the spawn is no
+/// less parallel for being deferred.
 struct SharedSlot {
+    name: &'static str,
+    query: RefCell<Option<SharedQueryFn>>,
     jh: RefCell<Option<FeatureQueryHandle>>,
     features: RefCell<Option<Vec<Feature>>>,
 }
@@ -136,7 +152,7 @@ fn key_layers(key: &str) -> Option<&'static [RenderLayer]> {
         "solar_power_plants" => &[L::SolarPlants],
         "trees" => &[L::Trees],
         // Names, not the fill they are filed under for the legend.
-        "landcover_names" | "water_area_names" => &[],
+        "landcover_names" | "water_area_names" | "winter_sports_boundaries" => &[],
         // Cuts bridges out of the shading and the contours alike.
         "bridge_for_shading" => &[L::Shading, L::Contours],
         "contours" => &[L::Contours],
@@ -249,8 +265,9 @@ impl<'a> Prefetcher<'a> {
         });
     }
 
-    /// Spawn a query whose rows are shared by several render stages via [`add_shared`].
-    /// Returns `None` in legend mode (no DB query is run; stages fall back to legend data).
+    /// Declare a query whose rows are shared by several render stages via
+    /// [`add_shared`]. Returns `None` in legend mode (no DB query is run; stages
+    /// fall back to legend data).
     fn shared_query(
         &self,
         name: &'static str,
@@ -261,12 +278,27 @@ impl<'a> Prefetcher<'a> {
         + Send
         + 'static,
     ) -> Option<Rc<SharedSlot>> {
-        if self.ctx.legend.is_some() || !self.enabled(name, name) {
+        if self.ctx.legend.is_some() {
             return None;
         }
 
+        Some(Rc::new(SharedSlot {
+            name,
+            query: RefCell::new(Some(Box::new(query_fn))),
+            jh: RefCell::new(None),
+            features: RefCell::new(None),
+        }))
+    }
+
+    /// Start a shared query, unless an earlier stage already did.
+    fn spawn_shared(&self, slot: &SharedSlot) {
+        let Some(query_fn) = slot.query.borrow_mut().take() else {
+            return;
+        };
+
         let pool = self.pool.clone();
         let ctx = self.ctx.clone();
+        let name = slot.name;
 
         let jh = self.handle.spawn(async move {
             let conn = db_pool_stats::get(&pool, name).await.map_err(LayerRenderError::from)?;
@@ -274,10 +306,7 @@ impl<'a> Prefetcher<'a> {
             Ok::<Vec<Feature>, LayerRenderError>(rows.into_iter().map(Feature::from).collect())
         });
 
-        Some(Rc::new(SharedSlot {
-            jh: RefCell::new(Some(jh)),
-            features: RefCell::new(None),
-        }))
+        *slot.jh.borrow_mut() = Some(jh);
     }
 
     /// Add a render stage that draws from a [`shared_query`] result.
@@ -311,17 +340,11 @@ impl<'a> Prefetcher<'a> {
             return;
         }
 
-        let Some(slot) = slot.cloned() else {
-            // An overlay can gate off the shared query while leaving a stage that
-            // reads it enabled. Drop the stage rather than draw from a query that
-            // never ran; in `Map` the query always runs, so this cannot happen.
-            assert!(
-                !self.selection.is_map(),
-                "shared slot must be present outside legend mode"
-            );
+        let slot = slot
+            .cloned()
+            .expect("shared slot must be present outside legend mode");
 
-            return;
-        };
+        self.spawn_shared(&slot);
 
         self.layers.push(PendingLayer::Shared {
             name,

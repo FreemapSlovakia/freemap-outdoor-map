@@ -5,7 +5,7 @@ use crate::{
         tile_processor::{cached_tile_path, read_attribution},
     },
     render::{
-        ATTRIBUTION_HEADER, Attribution, ImageFormat, Layers, RenderRequest, TileCoverageRelation,
+        ATTRIBUTION_HEADER, Attribution, RenderRequest, TileCoverageRelation,
         tile_touches_coverage,
     },
 };
@@ -26,6 +26,18 @@ use std::{
 use tokio::task;
 
 const TILE_CACHE_CONTROL: &str = "no-cache";
+
+/// What an alpha-capable variant serves outside its coverage: a tile that adds
+/// nothing, rather than the map's own "no data" grey.
+static BLANK_TILE_WEBP: LazyLock<Vec<u8>> = LazyLock::new(|| {
+    const TILE_SIZE: u32 = 256;
+
+    let pixels = vec![0u8; (TILE_SIZE * TILE_SIZE * 4) as usize];
+
+    webp::Encoder::from_rgba(&pixels, TILE_SIZE, TILE_SIZE)
+        .encode_lossless()
+        .to_vec()
+});
 
 static GRAY_TILE_JPEG: LazyLock<Vec<u8>> = LazyLock::new(|| {
     const TILE_SIZE: usize = 256;
@@ -122,9 +134,15 @@ pub async fn serve_tile(
             .expect("body should be built");
     }
 
-    let ext = ext.unwrap_or("jpeg");
+    let variant_ext = variant.format.extension();
 
-    if ext != "jpg" && ext != "jpeg" {
+    // The variant decides the format; the request may only name it, and "jpg"
+    // is allowed for the jpeg one because clients in the wild ask for both.
+    let ext_ok = ext.is_none_or(|ext| {
+        ext == variant_ext || (variant_ext == "jpeg" && ext == "jpg")
+    });
+
+    if !ext_ok {
         return Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::empty())
@@ -140,21 +158,27 @@ pub async fn serve_tile(
         {
             // Outside coverage nothing is drawn, so the codes are known to be none —
             // which is not the same as the unknown of a tile cached without them.
+            let blank: &'static [u8] = if variant.format.has_alpha() {
+                BLANK_TILE_WEBP.as_slice()
+            } else {
+                GRAY_TILE_JPEG.as_slice()
+            };
+
             return annotate(
                 Response::builder()
                     .status(StatusCode::OK)
-                    .header("Content-Type", "image/jpeg")
+                    .header("Content-Type", variant.format.content_type())
                     .header("Cache-Control", TILE_CACHE_CONTROL),
                 TileSource::OutsideCoverage,
                 Some(&Attribution::default()),
             )
-            .body(Body::from(Bytes::from_static(GRAY_TILE_JPEG.as_slice())))
+            .body(Body::from(Bytes::from(blank)))
             .expect("body should be built");
         }
     }
 
     let file_path = if let Some(ref tile_cache_base_path) = variant.tile_cache_base_path {
-        let file_path = cached_tile_path(tile_cache_base_path, coord, scale);
+        let file_path = cached_tile_path(tile_cache_base_path, coord, scale, variant_ext);
 
         enum ModifiedOrFresh {
             Modified(Vec<u8>, Option<SystemTime>, Option<Attribution>),
@@ -203,7 +227,7 @@ pub async fn serve_tile(
                     let mut builder = annotate(
                         Response::builder()
                             .status(StatusCode::OK)
-                            .header("Content-Type", "image/jpeg")
+                            .header("Content-Type", variant.format.content_type())
                             .header("Cache-Control", TILE_CACHE_CONTROL),
                         TileSource::Cache,
                         attribution.as_ref(),
@@ -247,8 +271,8 @@ pub async fn serve_tile(
         bbox,
         coord.zoom,
         scale,
-        ImageFormat::Jpeg,
-        Layers::Map(variant.render.clone()),
+        variant.format,
+        variant.layers.clone(),
         variant.coverage_geometry.clone(),
     );
 
@@ -285,7 +309,7 @@ pub async fn serve_tile(
     annotate(
         Response::builder()
             .status(StatusCode::OK)
-            .header("Content-Type", "image/jpeg")
+            .header("Content-Type", variant.format.content_type())
             .header("Cache-Control", TILE_CACHE_CONTROL)
             .header("Last-Modified", httpdate::fmt_http_date(render_started_at)),
         TileSource::Render,

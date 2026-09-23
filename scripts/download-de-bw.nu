@@ -59,10 +59,16 @@ const MOUNT = "/run/media/martin/2190983A5767510F"   # assert the drive, not the
 const DEST = "/run/media/martin/2190983A5767510F/DGM1/Baden-Wuerttemberg"
 const EPSG = "EPSG:25832"
 const UA   = "Mozilla/5.0 (X11; Linux x86_64)"
-# Concurrent archives through download+convert. Measured on 24 cores: 6 gave
-# 79 rasters/min and 10 gave 66 — the drive, not the CPU, is the limit, and
-# oversubscribing it costs throughput. Raise only alongside a measurement.
-const PAR  = 6
+# Converters draining the archive buffer. Measured on 24 cores while download
+# and conversion were still in lockstep: 6 gave 79 rasters/min and 10 gave 66,
+# so the drive, not the CPU, is the limit and oversubscribing it costs
+# throughput. Raise only alongside a measurement.
+const PAR = 8
+
+# Concurrent downloads. Independent of PAR now that the two run side by side;
+# the link reached 40 MB/s in bursts, which is well ahead of what the
+# converters can consume, so this only has to keep the buffer from emptying.
+const DL_PAR = 8
 const EXPECTED = 9371
 
 # Tile index, run-length encoded as "northing:easting-ranges", step 2 on both
@@ -243,79 +249,109 @@ def tile-done [have: record, e: int, n: int]: nothing -> bool {
       | all {|p| ($have | get -o $"($p.0)_($p.1)" | default false) }
 }
 
+
 let have0 = (have-set $DEST)
 let pending = ($tiles | where {|t| not (tile-done $have0 $t.e $t.n) })
 print $"==> ($pending | length) pending, ($tiles | length) total"
 
-$pending | chunks $PAR | each {|batch|
-    $batch | par-each -t $PAR {|t|
-        let stem = $"dgm1_32_($t.e)_($t.n)_2_bw"
-        let zip  = $"($DEST)/zips/($stem).zip"
+# DOWNLOAD AND CONVERSION RUN CONCURRENTLY, NOT IN LOCKSTEP. Fetching an
+# archive and then converting it in the same worker leaves the link idle for
+# as long as the conversion takes, and conversion is the slower of the two —
+# measured, the network sat at nothing between short 40 MB/s bursts. So one
+# aria2c is handed the whole list and left to fill a buffer of archives while
+# a separate pool drains it.
+#
+# aria2c marks work in progress with a sibling .aria2 control file and removes
+# it on completion, so "a .zip with no .aria2 beside it" is the ready signal.
+if ($pending | is-not-empty) {
+    let zipdir = $"($DEST)/zips"
+    rm -f $"($zipdir)/.dl-done"
 
-        # A zip left behind by an interrupted run is truncated and its aria2
-        # control file is gone, so it can neither be resumed nor trusted.
-        # Test before reuse and refetch in place rather than deferring to
-        # another pass.
-        if ($zip | path exists) and (do { ^unzip -tqq $zip } | complete).exit_code != 0 {
-            rm -f $zip
+    # Archives left by an interrupted run are truncated and have lost their
+    # control file, so they can neither be resumed nor trusted. Drop them here
+    # and they are simply fetched again.
+    for z in (glob $"($zipdir)/*.zip") {
+        if not ($"($z).aria2" | path exists) {
+            if (do { ^unzip -tqq $z } | complete).exit_code != 0 { rm -f $z }
         }
+    }
 
-        if not ($zip | path exists) {
-            let dl = (do {
-                ^aria2c -x4 -s4 --continue=true --auto-file-renaming=false --user-agent $UA --console-log-level=error --summary-interval=0 -d $"($DEST)/zips" -o $"($stem).zip" $"($BASE)/($stem).zip"
-            } | complete)
-            if $dl.exit_code != 0 {
-                print $"  FAILED download ($stem)"
+    ($pending | each {|t| $"($BASE)/dgm1_32_($t.e)_($t.n)_2_bw.zip" } | str join "\n")
+      | save -f $"($zipdir)/urls.txt"
+
+    # Detached, so the conversion loop below starts draining immediately.
+    (do {
+        ^bash -c $"nohup aria2c -i '($zipdir)/urls.txt' -j ($DL_PAR) -x4 -s4 --continue=true --auto-file-renaming=false --user-agent '($UA)' --console-log-level=error --summary-interval=0 -d '($zipdir)' > '($zipdir)/aria2.log' 2>&1; touch '($zipdir)/.dl-done' &"
+    } | complete) | ignore
+    print $"==> downloader started \(($DL_PAR) concurrent\), draining with ($PAR) converters"
+
+    mut done = false
+    mut idle = 0
+    while not $done {
+        let ready = (
+            glob $"($zipdir)/*.zip"
+              | where {|z| not ($"($z).aria2" | path exists) }
+        )
+
+        if ($ready | is-empty) {
+            if ($"($zipdir)/.dl-done" | path exists) {
+                $done = true
+            } else {
+                sleep 3sec
+                $idle = $idle + 1
+            }
+            continue
+        }
+        $idle = 0
+
+        $ready | par-each -t $PAR {|zip|
+            let stem = ($zip | path basename | str replace ".zip" "")
+
+            if (do { ^unzip -tqq $zip } | complete).exit_code != 0 {
+                print $"  CORRUPT ($stem) — dropping"
+                rm -f $zip
                 return
             }
-        }
 
-        if (do { ^unzip -tqq $zip } | complete).exit_code != 0 {
-            print $"  CORRUPT ($stem) after refetch — skipping"
-            rm -f $zip
-            return
-        }
+            # EXTRACT TO RAM, NOT TO THE DRIVE. The .xyz are 29 MB each and
+            # exist only to be converted, so unpacking them beside the rasters
+            # would push 1.06 TB through the USB filesystem and read it all
+            # back — which measured slower than the download itself.
+            let work = $"/dev/shm/bw_($stem)"
+            rm -rf $work
+            mkdir $work
+            (do { ^unzip -oqq $zip -d $work } | complete) | ignore
+            for f in (glob $"($work)/*/*") { mv -f $f $work }
 
-        # EXTRACT TO RAM, NOT TO THE DRIVE. The .xyz are 29 MB each and exist
-        # only to be converted, so unpacking them beside the rasters would push
-        # 1.06 TB through the USB filesystem and read it all back — which
-        # measured slower than the download itself. /dev/shm holds one archive's
-        # four sub-tiles (~120 MB) at a time.
-        let work = $"/dev/shm/bw_($stem)"
-        rm -rf $work
-        mkdir $work
-        (do { ^unzip -oqq $zip -d $work } | complete) | ignore
-
-        # Flatten whatever directory the archive used.
-        for f in (glob $"($work)/*/*") { mv -f $f $work }
-
-        for xyz in (glob $"($work)/*.xyz") {
-            let stem2 = ($xyz | path basename | str replace ".xyz" "")
-            let tif = $"($DEST)/($stem2).tif"
-            if not ($tif | path exists) {
-                # PREDICTOR=3 is fine here: this raster is read by GDAL only.
-                # shading-de-bw.nu rewrites its window DEM with PREDICTOR=1 for
-                # feature-preserving-smoothing, which ignores the tag.
-                let c = (do {
-                    ^gdal_translate -q -of GTiff -a_srs $EPSG -a_nodata -9999 -co COMPRESS=LZW -co PREDICTOR=3 -co TILED=YES $xyz $"($tif).tmp"
-                } | complete)
-                if $c.exit_code == 0 and ($"($tif).tmp" | path exists) {
-                    mv $"($tif).tmp" $tif
-                } else {
-                    rm -f $"($tif).tmp"
-                    print $"  FAILED convert ($stem2)"
-                    continue
+            for xyz in (glob $"($work)/*.xyz") {
+                let stem2 = ($xyz | path basename | str replace ".xyz" "")
+                let tif = $"($DEST)/($stem2).tif"
+                if not ($tif | path exists) {
+                    # PREDICTOR=3 is fine here: this raster is read by GDAL
+                    # only. shading-de-bw.nu rewrites its window DEM with
+                    # PREDICTOR=1 for feature-preserving-smoothing, which
+                    # ignores the tag.
+                    let c = (do {
+                        ^gdal_translate -q -of GTiff -a_srs $EPSG -a_nodata -9999 -co COMPRESS=LZW -co PREDICTOR=3 -co TILED=YES $xyz $"($tif).tmp"
+                    } | complete)
+                    if $c.exit_code == 0 and ($"($tif).tmp" | path exists) {
+                        mv $"($tif).tmp" $tif
+                    } else {
+                        rm -f $"($tif).tmp"
+                        print $"  FAILED convert ($stem2)"
+                        continue
+                    }
                 }
             }
-        }
 
-        # The .csv sidecars carry the per-sub-tile survey date and accuracy.
-        for c in (glob $"($work)/*.csv") { mv -f $c $DEST }
+            # The .csv sidecars carry the per-sub-tile survey date and accuracy.
+            for c in (glob $"($work)/*.csv") { mv -f $c $DEST }
 
-        rm -rf $work
-        rm -f $zip
-    } | ignore
-} | ignore
+            rm -rf $work
+            rm -f $zip
+        } | ignore
+    }
+}
 
 # ── Verify and build the state VRT ────────────────────────────────────────────
 

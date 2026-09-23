@@ -285,6 +285,7 @@ fn build_tile_processing_variants(cli: &Cli) -> Result<Vec<VariantConfig>, Strin
         .map(|variant| VariantConfig {
             tile_cache_base_path: variant.tile_cache_base_path,
             tile_index: variant.tile_index,
+            ext: variant.format.extension(),
         })
         .collect())
 }
@@ -303,7 +304,8 @@ fn tile_variant_input_to_server_variant(
     Ok(TileVariantOptions {
         url_path: variant.url_path,
         tile_cache_base_path: variant.tile_cache_base_path,
-        render: variant.render,
+        layers: variant.layers,
+        format: variant.format,
         coverage_geometry,
     })
 }
