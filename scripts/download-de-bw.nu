@@ -39,6 +39,18 @@
 #   the georeference was inferred from corner coordinates and came out half a
 #   cell off, which is the opposite mistake.
 #
+# NODATA IS 0.00, AND THE DELIVERY SAYS SO NOWHERE. Every .xyz line carries a z,
+#   so cells outside coverage are written as 0.00 rather than omitted or flagged.
+#   Converting with -a_nodata -9999 therefore marks nothing, and a border tile
+#   becomes half real terrain and half sea level: dgm1_32_581_5276 reads
+#   min 0.00, max 1021.99, mean 446 — a 1 km cliff along the state boundary that
+#   would have been hillshaded and contoured as if it were ground.
+#
+#   0 IS SAFE TO MASK HERE, MEASURED. Across 400 random rasters not one pixel
+#   falls in (0, 80) m and the lowest real elevation is 89.10 m, the Rhine
+#   graben being the state's floor. This is the same overloading of 0 that
+#   Poland's delivery has, and it is caught the same way.
+#
 # EACH SUB-TILE CARRIES ITS OWN VINTAGE IN ITS NAME, e.g.
 #   dgm1_32_397_5322_1_bw_2019.tif, so the year cannot be predicted and
 #   resumability tests a glob rather than an exact filename. A .csv sidecar per
@@ -227,31 +239,27 @@ if ($tiles | length) != $EXPECTED {
 
 # ── Fetch, convert, sweep ─────────────────────────────────────────────────────
 
-# A 2 km tile yields sub-tiles at (e,n), (e,n+1), (e+1,n), (e+1,n+1). The
-# vintage suffix is unknown until the archive is open, so a raster is
-# identified by its e_n prefix rather than an exact name.
+# COMPLETENESS IS A MARKER PER ARCHIVE, NOT A COUNT OF RASTERS. A 2 km archive
+# does NOT reliably hold four 1 km sub-tiles: the state boundary is not aligned
+# to the kilometre grid, so edge archives hold one, two or three, and seven of
+# them hold none at all (just a licence PDF and a metadata note). Measured over
+# the full state: 9371 archives yielded 36667 rasters, not 37484, and 401
+# archives were short. Requiring four would refetch those 401 on every run and
+# — worse — leave `missing` permanently non-empty, so the VRT would never be
+# built.
 #
-# PRESENCE IS TESTED AGAINST ONE DIRECTORY LISTING, NOT PER-TILE GLOBS. There
-# are 37484 rasters, so globbing each one turns the check into 37k directory
-# scans of a 37k-entry directory on exFAT — quadratic, and slower than the
-# download it guards.
-def have-set [dest: string]: nothing -> record {
-    let names = (do { ^find $dest -maxdepth 1 -name "*.tif" -printf "%f\n" } | complete
-                   | get stdout | lines)
-    $names | reduce --fold {} {|f, acc|
-        let p = ($f | split row "_")
-        if ($p | length) > 3 { $acc | upsert $"($p.2)_($p.3)" true } else { $acc }
-    }
-}
-
-def tile-done [have: record, e: int, n: int]: nothing -> bool {
-    [[$e $n] [$e ($n + 1)] [($e + 1) $n] [($e + 1) ($n + 1)]]
-      | all {|p| ($have | get -o $"($p.0)_($p.1)" | default false) }
+# One empty file per processed archive, listed once, is also far cheaper than
+# globbing 36k rasters on exFAT.
+def done-set [dest: string]: nothing -> record {
+    do { ^find $"($dest)/.done" -maxdepth 1 -type f -printf "%f\n" } | complete
+      | get stdout | lines
+      | reduce --fold {} {|f, acc| $acc | upsert $f true }
 }
 
 
-let have0 = (have-set $DEST)
-let pending = ($tiles | where {|t| not (tile-done $have0 $t.e $t.n) })
+mkdir $"($DEST)/.done"
+let done0 = (done-set $DEST)
+let pending = ($tiles | where {|t| not ($done0 | get -o $"dgm1_32_($t.e)_($t.n)_2_bw" | default false) })
 print $"==> ($pending | length) pending, ($tiles | length) total"
 
 # DOWNLOAD AND CONVERSION RUN CONCURRENTLY, NOT IN LOCKSTEP. Fetching an
@@ -285,24 +293,17 @@ if ($pending | is-not-empty) {
     } | complete) | ignore
     print $"==> downloader started \(($DL_PAR) concurrent\), draining with ($PAR) converters"
 
-    mut done = false
-    mut idle = 0
-    while not $done {
+    loop {
         let ready = (
             glob $"($zipdir)/*.zip"
               | where {|z| not ($"($z).aria2" | path exists) }
         )
 
         if ($ready | is-empty) {
-            if ($"($zipdir)/.dl-done" | path exists) {
-                $done = true
-            } else {
-                sleep 3sec
-                $idle = $idle + 1
-            }
+            if ($"($zipdir)/.dl-done" | path exists) { break }
+            sleep 3sec
             continue
         }
-        $idle = 0
 
         $ready | par-each -t $PAR {|zip|
             let stem = ($zip | path basename | str replace ".zip" "")
@@ -332,7 +333,7 @@ if ($pending | is-not-empty) {
                     # PREDICTOR=1 for feature-preserving-smoothing, which
                     # ignores the tag.
                     let c = (do {
-                        ^gdal_translate -q -of GTiff -a_srs $EPSG -a_nodata -9999 -co COMPRESS=LZW -co PREDICTOR=3 -co TILED=YES $xyz $"($tif).tmp"
+                        ^gdal_translate -q -of GTiff -a_srs $EPSG -a_nodata 0 -co COMPRESS=LZW -co PREDICTOR=3 -co TILED=YES $xyz $"($tif).tmp"
                     } | complete)
                     if $c.exit_code == 0 and ($"($tif).tmp" | path exists) {
                         mv $"($tif).tmp" $tif
@@ -349,6 +350,7 @@ if ($pending | is-not-empty) {
 
             rm -rf $work
             rm -f $zip
+            touch $"($DEST)/.done/($stem)"
         } | ignore
     }
 }
@@ -356,10 +358,11 @@ if ($pending | is-not-empty) {
 # ── Verify and build the state VRT ────────────────────────────────────────────
 
 let tifs = (do { ^find $DEST -maxdepth 1 -name "*.tif" } | complete | get stdout | lines)
-let have1 = (have-set $DEST)
-let missing = ($tiles | where {|t| not (tile-done $have1 $t.e $t.n) })
+let done1 = (done-set $DEST)
+let missing = ($tiles | where {|t| not ($done1 | get -o $"dgm1_32_($t.e)_($t.n)_2_bw" | default false) })
 
-print $"==> ($tifs | length) rasters present; ($missing | length) tiles incomplete"
+# 36667 rasters over the full state, not 9371 * 4 — see done-set.
+print $"==> ($tifs | length) rasters from ($tiles | length) archives; ($missing | length) archives unprocessed"
 
 if ($missing | is-not-empty) {
     print $"==> INCOMPLETE — re-run to pick up the stragglers; VRT not built"
@@ -368,7 +371,11 @@ if ($missing | is-not-empty) {
     rm -rf $"($DEST)/zips"
     if not ($"($DEST)/all.vrt" | path exists) {
         print "==> building all.vrt"
-        gdal build-vrt $tifs $"($DEST)/all.vrt" --index $"($DEST)/tiles.txt"
+        # -srcnodata 0 is load-bearing: the delivery writes out-of-coverage as
+        # 0.00, so without it the state border is a cliff to sea level.
+        (gdal build-vrt $tifs $"($DEST)/all.vrt"
+           --extra [-srcnodata 0 -vrtnodata -9999]
+           --index $"($DEST)/tiles.txt")
     }
     print $"==> Done -> ($DEST)/all.vrt"
 }

@@ -72,7 +72,7 @@ fn get_routes_query(
 
     let mut rights = Vec::<&str>::new();
 
-    let bool_hiking_kst = render.contains(RenderLayer::RoutesHikingKst);
+    let bool_hiking_kst = render.draws(RenderLayer::RoutesHikingKst);
     let bool_hiking = render.draws(RenderLayer::RoutesHiking) || bool_hiking_kst;
 
     if bool_hiking || bool_hiking_kst {
@@ -282,7 +282,7 @@ pub async fn query_marking(
     let zoom = ctx.zoom;
 
     let z = zoom
-        + if render.contains(RenderLayer::RoutesHikingKst) {
+        + if render.draws(RenderLayer::RoutesHikingKst) {
             2
         } else {
             0
@@ -407,7 +407,7 @@ pub fn render_marking(
             }
 
             if to_render.draws(RenderLayer::RoutesHiking)
-                || to_render.contains(RenderLayer::RoutesHikingKst)
+                || to_render.draws(RenderLayer::RoutesHikingKst)
             {
                 {
                     let off = row.get_i32(&format!("h_{}", color.0))?;

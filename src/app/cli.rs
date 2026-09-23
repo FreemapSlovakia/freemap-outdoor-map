@@ -45,18 +45,6 @@ impl RenderGroup {
     }
 }
 
-/// How a variant's `--render` group is read.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum LayerMode {
-    /// The map, with the group naming the optional layers to add.
-    #[default]
-    Map,
-    /// An overlay of nothing but the group.
-    Only,
-    /// The map bar the group, for overlaying something that draws its own ground.
-    Except,
-}
-
 /// A variant's output format. Lossy WebP only pays on an overlay dense enough
 /// that lossless has no sparsity to exploit; a sparse one encodes smaller
 /// lossless, and without the fringing a photo codec leaves around text.
@@ -96,6 +84,12 @@ impl FromStr for RenderGroup {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         let mut parsed = HashSet::new();
 
+        // A variant may legitimately want no extras, or nothing omitted, so an
+        // empty group is a group of nothing rather than a mistake.
+        if value.trim().is_empty() {
+            return Ok(Self(parsed));
+        }
+
         for token in value.split(',') {
             let layer_name = token.trim();
 
@@ -107,10 +101,6 @@ impl FromStr for RenderGroup {
                 .map_err(|_| format!("unknown render layer '{layer_name}'"))?;
 
             parsed.insert(layer);
-        }
-
-        if parsed.is_empty() {
-            return Err(format!("render group cannot be empty: {value}"));
         }
 
         Ok(Self(parsed))
@@ -242,9 +232,17 @@ pub struct Cli {
     )]
     pub tile_url_path: Vec<TileUrlPath>,
 
-    /// How each variant's `--render` group is read, aligned with tile URL paths.
-    #[arg(long, env = "MAPRENDER_LAYER_MODE", value_delimiter = ',')]
-    pub layer_mode: Vec<LayerMode>,
+    /// Whether each variant draws the layers the map draws by itself, aligned
+    /// with tile URL paths. False makes the variant an overlay of nothing but
+    /// its `--render` group.
+    #[arg(long, env = "MAPRENDER_BASE_MAP", value_delimiter = ',')]
+    pub base_map: Vec<bool>,
+
+    /// Base-map layers each variant drops, groups delimited by ';' and aligned
+    /// with tile URL paths. For an overlay over something that draws its own
+    /// ground, an aerial image above all.
+    #[arg(long, env = "MAPRENDER_OMIT", value_delimiter = ';', num_args = 1..)]
+    pub omit: Vec<RenderGroup>,
 
     /// Output format per variant, aligned with tile URL paths.
     #[arg(long, env = "MAPRENDER_TILE_FORMAT", value_delimiter = ',')]
@@ -389,7 +387,7 @@ impl Cli {
         for variant in self.tile_variant_inputs()? {
             // An overlay leaves most of the surface unpainted; an opaque format
             // renders that as solid black rather than as nothing.
-            if !variant.layers.is_map() && !variant.format.has_alpha() {
+            if !variant.layers.is_whole_map() && !variant.format.has_alpha() {
                 return Err(format!(
                     "tile URL path '{}' is an overlay, so it needs an alpha-capable --tile-format",
                     variant.url_path
@@ -437,21 +435,26 @@ impl Cli {
             "--tile-cache-base-path",
         )?;
         let index_by_variant = expand_optional_by_variant(&self.index, variants_len, "--index")?;
-        let mode_by_variant =
-            expand_optional_by_variant(&self.layer_mode, variants_len, "--layer-mode")?;
+        let base_by_variant = expand_optional_by_variant(&self.base_map, variants_len, "--base-map")?;
+        let omit_by_variant = expand_optional_by_variant(&self.omit, variants_len, "--omit")?;
         let format_by_variant =
             expand_optional_by_variant(&self.tile_format, variants_len, "--tile-format")?;
 
         let mut result = Vec::with_capacity(variants_len);
 
         for i in 0..variants_len {
-            let set = render_by_variant[i].layers().clone();
-
-            let layers = match mode_by_variant[i].unwrap_or_default() {
-                LayerMode::Map => Layers::Map(set),
-                LayerMode::Only => Layers::Only(set),
-                LayerMode::Except => Layers::Except(set),
+            let layers = Layers {
+                base_map: base_by_variant[i].unwrap_or(true),
+                add: render_by_variant[i].layers().clone(),
+                omit: omit_by_variant[i]
+                    .as_ref()
+                    .map(|group| group.layers().clone())
+                    .unwrap_or_default(),
             };
+
+            layers
+                .validate()
+                .map_err(|err| format!("tile URL path '{}': {err}", self.tile_url_path[i].as_str()))?;
 
             result.push(TileVariantInput {
                 url_path: self.tile_url_path[i].as_str().to_string(),

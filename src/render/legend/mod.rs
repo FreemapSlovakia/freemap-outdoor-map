@@ -362,7 +362,7 @@ fn render_request(
         },
         // Every optional layer with a legend item of its own; one left out here
         // draws nothing at any zoom, and the zoom-range test is what says so.
-        Layers::Map(HashSet::from([
+        Layers::map(HashSet::from([
             RenderLayer::CountryBorders,
             RenderLayer::RoutesBicycle,
             RenderLayer::RoutesHiking,

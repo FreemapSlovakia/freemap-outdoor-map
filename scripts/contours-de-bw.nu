@@ -27,14 +27,16 @@
 # DATUM: EPSG:25832 is ETRS89 / UTM 32N, so the path to 3857 is a null transform
 # and there is nothing to get wrong — no England/OSTN15 hazard.
 
-# NODATA is -9999, written by download-de-bw.nu's XYZ conversion and carried
-# through shading-de-bw.nu's dem2m step. The source has no nodata of its own:
-# every .xyz is a complete million-point grid.
+# NODATA is -9999 in the smoothed tiles this script reads, written by
+# shading-de-bw.nu's dem2m step.
 #
-# NOTHING NEAR 0 m EXISTS HERE — the state is landlocked and its floor is the
-# Rhine graben at about 85 m. Do not add `-snodata 0`, which is Poland's fix for
-# a delivery that overloaded 0 for out-of-coverage; it has no business here.
-# If a 0 m or negative contour ever appears, it is a bug, not a quarry.
+# UPSTREAM, THOUGH, NODATA IS 0 — Baden-Württemberg's delivery writes a z for
+# every cell and uses 0.00 for out-of-coverage, exactly the overloading Poland
+# has. all.vrt masks it with `-srcnodata 0`, so by the time contours are cut it
+# is already gone. Nothing real sits below 89.10 m here (measured over 400
+# rasters; the Rhine graben is the floor), so a 0 m or negative contour in the
+# output means that masking was lost somewhere upstream — it is a bug, not a
+# quarry, and unlike Sachsen-Anhalt there are no pit floors to confuse it with.
 
 # ── HANDOFF TO POSTGIS ────────────────────────────────────────────────────────
 #

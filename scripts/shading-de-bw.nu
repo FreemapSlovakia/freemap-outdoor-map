@@ -4,7 +4,7 @@
 # Seventh of the German states; port of shading-de-st.nu.
 #
 # Source: /run/media/martin/2190983A5767510F/DGM1/Baden-Wuerttemberg — 1 m
-#   GeoTIFFs of 1x1 km, Float32, LZW, nodata -9999, EPSG:25832, heights
+#   GeoTIFFs of 1x1 km, Float32, LZW, nodata 0, EPSG:25832, heights
 #   DE_DHHN2016_NH, accuracy 0.15 m, with an all.vrt already built.
 #   download-de-bw.nu fetches 2 km zips of XYZ ASCII and converts them.
 #   Licence dl-de/by-2-0, attribution "Datenquelle: LGL, www.lgl-bw.de,
@@ -44,8 +44,25 @@
 #
 # THE SOURCE IS XYZ ASCII AND download-de-bw.nu OWNS THE CONVERSION. Do not
 #   point this script at raw .xyz: it reads the .tif that conversion produced.
-#   The two traps live in that script's header — cell-centre coordinates, and a
-#   tile grid on odd eastings and even northings.
+#   Three traps live in that script's header — cell-centre coordinates, a tile
+#   grid on odd eastings and even northings, and nodata written as 0.00.
+#
+# THE RASTERS CARRY nodata 0; THE VRT PRESENTS -9999. all.vrt is built with
+#   `-srcnodata 0 -vrtnodata -9999`, so out-of-coverage is masked at the source
+#   and everything downstream sees the -9999 the rest of the pipeline expects.
+#   If all.vrt is ever rebuilt by hand, those two flags are not optional: drop
+#   them and the state border becomes a 1 km cliff down to sea level, shaded
+#   and contoured as though it were ground.
+#
+# MASKING THE ZEROS IS NOT ENOUGH, HENCE THE PREFILTER. The cells immediately
+#   inside the coverage edge hold a partial value between real ground and that
+#   zero, so the rim still falls hundreds of metres in one pixel — 780 m to
+#   48 m in the Allgäu. feature-preserving-smoothing treats a step that sharp
+#   as a feature and keeps it, exactly as it does Italy's pixel-doubled
+#   staircase, so erode_nodata_fringe.py drops one pixel of valid data wherever
+#   it touches nodata, BEFORE smoothing. Measured on dgm1_32_581_5276: 742
+#   fringe pixels, all adjacent to nodata and none isolated, removed for 0.19%
+#   of the window's valid pixels.
 #
 # PREDICTOR=1 on the window DEM is LOAD-BEARING — feature-preserving-smoothing
 #   does I/O via `wbgeotiff`, which ignores the TIFF Predictor tag (317) and
@@ -71,6 +88,8 @@ use lib/shading.nu
 const SRC_VRT   = "/run/media/martin/2190983A5767510F/DGM1/Baden-Wuerttemberg/all.vrt"
 const DATA_ROOT = "/mnt/osm/de_bw"               # smooth2m/, tiles/ on NVMe
 const EPSG      = "EPSG:25832"                   # ETRS89 / UTM zone 32N
+const ERODE     = "/home/martin/fm/freemap-outdoor-map/scripts/erode_nodata_fringe.py"
+const SYS_PYTHON = "/usr/bin/python3"
 
 let DRIVE = (gdal find-drive)
 print $"==> drive: ($DRIVE)"
@@ -98,7 +117,7 @@ shading run {
     fill_md:   0                                 # MEASURED off — see header
     dem_tr:    2                                 # m; what contours-de-bw.nu reads
     smooth:    {filter: 11, norm_diff: 16, num_iter: 6, max_diff: 6}
-    prefilter: null
+    prefilter: {|src, dst| ^$SYS_PYTHON $ERODE $src $dst }   # see header
 
     # Pinned below the Baden-Württemberg extent (about 388000, 5265000) on the
     # STEP grid, with room to spare so a coverage change cannot move it.

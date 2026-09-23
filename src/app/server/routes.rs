@@ -74,10 +74,7 @@ pub async fn start_server(
     let default_render = options
         .tile_variants
         .iter()
-        .find_map(|variant| match &variant.layers {
-            Layers::Map(set) => Some(set.clone()),
-            _ => None,
-        })
+        .find_map(|variant| variant.layers.is_whole_map().then(|| variant.layers.add.clone()))
         .unwrap_or_default();
 
     let app_state = AppState {

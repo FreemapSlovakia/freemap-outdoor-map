@@ -175,10 +175,10 @@ fn key_layers(key: &str) -> Option<&'static [RenderLayer]> {
 
 /// Whether the layer registered under `name` (filed under `legend_key`) draws.
 ///
-/// Everything is on in [`Layers::Map`]. In [`Layers::Only`] a layer draws when
-/// the selection names one of the [`RenderLayer`]s its key covers; in
-/// [`Layers::Except`] unless it names *all* of them, so excluding one route type
-/// leaves the other four to the per-type filtering inside the layer.
+/// One rule for every stage: a stage draws when any [`RenderLayer`] its key
+/// covers is drawn, and a stage whose key covers nothing is the map's own, drawn
+/// whenever the base map is. `Layers::draws` is what separates an extra the
+/// request asked for from a base layer it did not take away.
 ///
 /// The layer's own name is asked first and its legend group only as a fallback,
 /// so a stage can opt out of the group it is filed under. Contours rely on the
@@ -187,20 +187,11 @@ fn key_layers(key: &str) -> Option<&'static [RenderLayer]> {
 /// Kept apart from [`Prefetcher`] so the legend can ask the same question of a
 /// variant's selection without building a pipeline.
 pub fn key_enabled(selection: &Layers, name: &str, legend_key: &str) -> bool {
-    let layers = key_layers(name)
-        .or_else(|| key_layers(legend_key))
-        .unwrap_or(&[]);
-
-    match selection {
-        Layers::Map(_) => true,
-        Layers::Only(set) => layers.iter().any(|layer| set.contains(layer)),
-        // Only when every layer the key covers is named: `routes` covers all five
-        // route types, and excluding one must not take the other four with it.
-        // The per-type filtering is `draws`'s job, inside the layer. An empty arm
-        // carries nothing excludable, so it always draws.
-        Layers::Except(set) => {
-            layers.is_empty() || !layers.iter().all(|layer| set.contains(layer))
+    match key_layers(name).or_else(|| key_layers(legend_key)) {
+        Some(layers) if !layers.is_empty() => {
+            layers.iter().any(|layer| selection.draws(*layer))
         }
+        _ => selection.base_map(),
     }
 }
 
@@ -545,7 +536,7 @@ pub fn render(
     let attribution: Rc<RefCell<Attribution>> = Rc::default();
 
     let coverage_geometry = if ctx.legend.is_none()
-        && request.layers.is_map()
+        && request.layers.is_whole_map()
         && matches!(
             request.format,
             ImageFormat::Jpeg | ImageFormat::Png | ImageFormat::Webp(_)
@@ -1030,7 +1021,7 @@ pub fn render(
         let to_render = to_render.clone();
         let to_render1 = to_render.clone();
 
-        let min_zoom = if to_render.contains(RenderLayer::RoutesHikingKst) {
+        let min_zoom = if to_render.draws(RenderLayer::RoutesHikingKst) {
             8
         } else {
             9
@@ -1232,7 +1223,7 @@ pub fn render(
         Rc::new(RefCell::new(None));
 
     if zoom >= 10 {
-        let kst = to_render.contains(RenderLayer::RoutesHikingKst);
+        let kst = to_render.draws(RenderLayer::RoutesHikingKst);
         let slot_icons = pois_to_label_slot.clone();
         let ctx = ctx.clone();
 
@@ -1414,8 +1405,8 @@ pub fn render(
 
     // Icons and their labels in one stage: on an overlay there are no other POIs
     // for them to interleave with, so they only have to miss each other.
-    if zoom >= layers::pois::WAYMARKING_MIN_ZOOM && to_render.contains(RenderLayer::Waymarking) {
-        let kst = to_render.contains(RenderLayer::RoutesHikingKst);
+    if zoom >= layers::pois::WAYMARKING_MIN_ZOOM && to_render.draws(RenderLayer::Waymarking) {
+        let kst = to_render.draws(RenderLayer::RoutesHikingKst);
         let ctx = ctx.clone();
 
         prefetcher.add(
@@ -1440,13 +1431,7 @@ pub fn render(
 
     // Last of the map layers: the grade qualifies everything drawn below it, and
     // as an overlay it has nothing of its own to hide behind.
-    //
-    // Asked with `contains`, not `draws`, like every layer the map itself never
-    // draws: `Except` turns on whatever it is not told to exclude, which would
-    // put the whole of `/o/sac` on top of the aerial overlay. So in an `Except`
-    // group naming one of these switches it *on*, against the sense of the rest
-    // of the list - which is the price of one list meaning two things.
-    if zoom >= layers::sac_scale::MIN_ZOOM && to_render.contains(RenderLayer::SacScale) {
+    if zoom >= layers::sac_scale::MIN_ZOOM && to_render.draws(RenderLayer::SacScale) {
         prefetcher.add(
             "sac_scale",
             None,
@@ -1455,9 +1440,9 @@ pub fn render(
         );
     }
 
-    // As above, and doubly so until the roads table is reimported: without the
-    // column the query fails the whole render rather than coming back empty.
-    if zoom >= layers::smoothness::MIN_ZOOM && to_render.contains(RenderLayer::Smoothness) {
+    // Not in any variant's render list until the roads table is reimported:
+    // without the column the query fails the whole render.
+    if zoom >= layers::smoothness::MIN_ZOOM && to_render.draws(RenderLayer::Smoothness) {
         prefetcher.add(
             "smoothness",
             None,

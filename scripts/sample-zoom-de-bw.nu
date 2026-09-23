@@ -15,24 +15,30 @@
 #   generator ported from it returns 404 for every tile — which is exactly what
 #   happened on the first attempt here.
 #
-# THE SITES WERE MEASURED, AND TWO OF SIX HAND-PICKED ONES WERE WRONG. Scanning
-#   the downloaded tiles by high-frequency residual moved the Alb escarpment
-#   site 5 km — the original coordinates sat on the plateau above it, flat
-#   farmland with a quarry — and found better ground in the Black Forest and the
-#   Kaiserstuhl than reputation suggested. Roughness measured here (void-aware
-#   metric, so comparable with Sachsen-Anhalt's but NOT with the older states'):
+# THE SITES WERE MEASURED OVER ALL 36493 SCORABLE RASTERS, and every one kept
+#   lands in the top 0.4% of the state:
 #
-#     donautal     0.273   Danube gorge at Beuron, limestone crags
-#     feldberg     0.155   Feldberg, 413 m relief in the window
-#     albtrauf     0.146   Swabian Alb escarpment, cliff rim
-#     kaiserstuhl  0.145   volcanic hills, vineyard terraces
-#     wutach       0.141   Wutachschlucht
-#     rheinebene   —       Upper Rhine plain, 17 m relief: the floor
+#     fridingen    0.547   rank     1   Danube at Fridingen, crags and terraces
+#     donautal     0.313   rank    10   Danube gorge at Beuron
+#     feldberg     0.224   rank    31   Feldberg, slope p50 22.1°
+#     kaiserstuhl  0.178   rank    57   volcanic hills, vineyard terraces
+#     wutach       0.165   rank    72   Wutachschlucht
+#     albtrauf     0.132   rank   142   Swabian Alb escarpment
+#     rheinebene   0.027   rank 24106   Upper Rhine plain: the floor
 #
-#   Unusually for this pipeline, nothing man-made reached the top of that
-#   ranking. Sachsen-Anhalt's top seven held a quarry, a spoil heap and a
-#   lignite pit; Baden-Württemberg's is the Danube gorge fourteen tiles deep.
-#   Every site below was still rendered and looked at before it was kept.
+#   Distribution: p50 0.032, p90 0.056, p99 0.098, max 0.547.
+#
+#   RANK 2 IS A QUARRY and is carried below only to be excluded — a pit cut into
+#   gentle farmland near Crailsheim, 0.459 with 85 m of relief. Hand-picked
+#   coordinates went wrong too: the Alb escarpment site had to move 5 km,
+#   because the name landed on the plateau above the Trauf, flat farmland with
+#   a quarry in the corner. Render every candidate before believing its number.
+#
+# THE FIRST FULL-STATE SCAN WAS WORTHLESS AND LOOKED FINE. Before nodata was
+#   understood, its top thirty were all border tiles scoring up to 12.361
+#   against a median of 0.032 — half real terrain, half the 0.00 that this
+#   delivery writes for out-of-coverage. A roughness metric cannot tell that
+#   from a cliff. See download-de-bw.nu.
 #
 # Run via:
 #   nice ~/miniforge3/bin/conda run --no-capture-output -n geo nu ~/fm/freemap-outdoor-map/scripts/sample-zoom-de-bw.nu
@@ -66,17 +72,21 @@ zoomsample run {
     lat_max:   49.79
 
     sites: [
+        {name: "fridingen",   lat: 48.02876, lon: 8.91281,
+         note: "Danube at Fridingen — ROUGHEST WINDOW IN THE STATE, rank 1 of 36493"}
         {name: "donautal",    lat: 48.04678, lon: 8.97987,
-         note: "Danube gorge at Beuron — limestone crags, roughest window found"}
+         note: "Danube gorge at Beuron — limestone crags, rank 10"}
         {name: "feldberg",    lat: 47.87174, lon: 8.03049,
-         note: "Feldberg, 1493 m — 413 m relief, slope p90 41.7°"}
-        {name: "albtrauf",    lat: 48.51367, lon: 9.46715,
-         note: "Swabian Alb escarpment — cliff rim above the plateau"}
+         note: "Feldberg, 1493 m — rank 31, slope p50 22.1°"}
         {name: "kaiserstuhl", lat: 48.07547, lon: 7.70445,
-         note: "Kaiserstuhl — volcanic hills under vineyard terracing"}
+         note: "Kaiserstuhl — volcanic hills under vineyard terracing, rank 57"}
         {name: "wutach",      lat: 47.83809, lon: 8.36521,
-         note: "Wutachschlucht — incised gorge, southern Black Forest"}
+         note: "Wutachschlucht — incised gorge, southern Black Forest, rank 72"}
+        {name: "albtrauf",    lat: 48.51367, lon: 9.46715,
+         note: "Swabian Alb escarpment — cliff rim above the plateau, rank 142"}
         {name: "rheinebene",  lat: 48.60000, lon: 8.00000,
-         note: "Upper Rhine plain — 17 m relief, the flat floor"}
+         note: "Upper Rhine plain — the flat floor, rank 24106"}
+        {name: "quarry",      lat: 49.15742, lon: 10.06294,
+         note: "EXCLUDED — rank 2 is a quarry cut into farmland near Crailsheim"}
     ]
 }

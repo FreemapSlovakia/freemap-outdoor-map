@@ -110,42 +110,91 @@ pub struct AttributionDecoration {
     pub overrides: HashMap<String, String>,
 }
 
-/// Which layers a request draws. `Only` and `Except` both leave part of the
-/// surface unpainted, so they need an alpha-capable format to be of any use.
-#[derive(Debug, Clone)]
-pub enum Layers {
-    /// The whole base map, plus the optional layers named.
-    Map(HashSet<RenderLayer>),
-    /// Nothing but the layers named.
-    Only(HashSet<RenderLayer>),
-    /// The whole base map bar the layers named — an overlay for something that
-    /// supplies its own ground, an aerial image above all.
-    Except(HashSet<RenderLayer>),
+impl RenderLayer {
+    /// Whether the map draws this of its own accord. A base layer is part of the
+    /// map and goes only when a request takes it away; an extra is never drawn
+    /// unless a request asks for it.
+    ///
+    /// The split is what lets [`Layers`] keep two lists that each mean one thing.
+    pub const fn is_base(self) -> bool {
+        matches!(
+            self,
+            Self::Sea
+                | Self::Landcover
+                | Self::WaterAreas
+                | Self::Buildings
+                | Self::PierAreas
+                | Self::BridgeAreas
+                | Self::SolarPlants
+                | Self::Trees
+        )
+    }
+}
+
+/// Which layers a request draws.
+///
+/// `add` names extras to draw and `omit` names base layers to drop — never the
+/// other way round, which [`Layers::validate`] enforces. An overlay is
+/// `base_map: false` plus the extras it wants; an overlay for something that
+/// draws its own ground, an aerial image above all, is `base_map: true` with the
+/// ground omitted.
+///
+/// Anything but `base_map: true` with an empty `omit` leaves part of the surface
+/// unpainted, so it needs an alpha-capable format to be of any use.
+#[derive(Debug, Clone, Default)]
+pub struct Layers {
+    /// Whether the layers the map draws by itself are drawn at all.
+    pub base_map: bool,
+    /// Extras to draw. Only [`RenderLayer`]s that are not `is_base`.
+    pub add: HashSet<RenderLayer>,
+    /// Base layers to drop. Only [`RenderLayer`]s that are `is_base`.
+    pub omit: HashSet<RenderLayer>,
 }
 
 impl Layers {
-    /// Raw membership, for the values that pick a variant rather than name a
-    /// layer of their own: `RoutesHikingKst` is the KST map, not a thing drawn,
-    /// so it stays opt-in whatever the mode.
-    pub fn contains(&self, layer: RenderLayer) -> bool {
-        let (Self::Map(set) | Self::Only(set) | Self::Except(set)) = self;
-
-        set.contains(&layer)
-    }
-
-    /// Whether `layer` is drawn. `Except` inverts membership, so a layer gated
-    /// on this reads right in all three modes where `contains` would not.
-    pub fn draws(&self, layer: RenderLayer) -> bool {
-        match self {
-            Self::Map(set) | Self::Only(set) => set.contains(&layer),
-            Self::Except(set) => !set.contains(&layer),
+    /// The whole map, plus `add`.
+    pub fn map(add: HashSet<RenderLayer>) -> Self {
+        Self {
+            base_map: true,
+            add,
+            omit: HashSet::new(),
         }
     }
 
-    pub const fn is_map(&self) -> bool {
-        matches!(self, Self::Map(_))
+    pub fn validate(&self) -> Result<(), String> {
+        if let Some(layer) = self.add.iter().find(|layer| layer.is_base()) {
+            return Err(format!(
+                "{layer:?} is part of the map, so it belongs in the omit list, not the render list"
+            ));
+        }
+
+        if let Some(layer) = self.omit.iter().find(|layer| !layer.is_base()) {
+            return Err(format!(
+                "{layer:?} is not part of the map, so omitting it does nothing - leave it out of the render list instead"
+            ));
+        }
+
+        Ok(())
     }
 
+    /// Whether `layer` is drawn.
+    pub fn draws(&self, layer: RenderLayer) -> bool {
+        if layer.is_base() {
+            self.base_map && !self.omit.contains(&layer)
+        } else {
+            self.add.contains(&layer)
+        }
+    }
+
+    /// Whether the map's own layers are drawn untouched — the only case that
+    /// paints the whole surface.
+    pub fn is_whole_map(&self) -> bool {
+        self.base_map && self.omit.is_empty()
+    }
+
+    pub const fn base_map(&self) -> bool {
+        self.base_map
+    }
 }
 
 #[derive(Debug, Clone)]

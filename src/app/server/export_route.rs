@@ -223,29 +223,19 @@ impl ExportLayer {
     }
 }
 
-/// How an export reads its `layers` list.
-#[derive(Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub enum ExportLayerMode {
-    /// The map, with `layers` toggling the optional ones.
-    #[default]
-    Map,
-    /// An overlay of nothing but `layers`.
-    Only,
-    /// The map bar `layers` — an overlay for something supplying its own ground.
-    Except,
-}
-
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportFeatures {
     /// Toggleable layers that are enabled. Absent keeps the server defaults; a
     /// present set explicitly turns each toggleable layer on (in set) or off.
     layers: Option<HashSet<ExportLayer>>,
-    /// What `layers` means. Both overlay modes need an alpha-capable `format`,
-    /// and neither applies the server defaults.
+    /// Whether to draw the layers the map draws by itself. False makes the
+    /// export an overlay of nothing but `layers`. Defaults to true.
+    base_map: Option<bool>,
+    /// Base-map layers to drop — for an overlay over something that draws its
+    /// own ground, an aerial image above all. `layers` adds, this takes away.
     #[serde(default)]
-    layer_mode: ExportLayerMode,
+    omit: HashSet<ExportLayer>,
     /// Custom `GeoJSON` overlay layer and its rendering options. Absent means no
     /// overlay.
     custom_layer: Option<ExportCustomLayer>,
@@ -344,14 +334,15 @@ pub async fn post(
 
     let file_path = std::env::temp_dir().join(&filename);
 
-    let layer_mode = request
+    let base_map = request
         .features
         .as_ref()
-        .map_or(ExportLayerMode::Map, |features| features.layer_mode);
+        .and_then(|features| features.base_map)
+        .unwrap_or(true);
 
-    // An overlay names its own layers outright, in or out; the server defaults
-    // describe the map and would leak into either reading of the list.
-    let mut render = if layer_mode == ExportLayerMode::Map {
+    // An overlay names the extras it wants outright; the server defaults
+    // describe the map, and would arrive uninvited.
+    let mut render = if base_map {
         state.default_render.clone()
     } else {
         HashSet::new()
@@ -371,15 +362,25 @@ pub async fn post(
         }
     }
 
-    let layers = match layer_mode {
-        ExportLayerMode::Map => Layers::Map(render),
-        ExportLayerMode::Only => Layers::Only(render),
-        ExportLayerMode::Except => Layers::Except(render),
+    let layers = Layers {
+        base_map,
+        add: render,
+        omit: request.features.as_ref().map_or_else(HashSet::new, |features| {
+            features
+                .omit
+                .iter()
+                .map(|layer| layer.render_layer())
+                .collect()
+        }),
     };
+
+    if layers.validate().is_err() {
+        return bad_request();
+    }
 
     // Same reason as the variant check: an overlay in an opaque format comes out
     // on solid black, which is not what anyone asking for one wants.
-    if !layers.is_map() && !format.has_alpha() {
+    if !layers.is_whole_map() && !format.has_alpha() {
         return bad_request();
     }
 
