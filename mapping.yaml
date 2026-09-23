@@ -1482,6 +1482,19 @@ tables:
             - alpine_hiking
             - demanding_alpine_hiking
             - difficult_alpine_hiking
+      - name: smoothness
+        type: enumerate
+        key: smoothness
+        args:
+          values:
+            - excellent
+            - good
+            - intermediate
+            - bad
+            - very_bad
+            - horrible
+            - very_horrible
+            - impassable
       - name: tags
         type: hstore_tags
         args:

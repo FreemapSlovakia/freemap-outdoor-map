@@ -160,6 +160,7 @@ fn key_layers(key: &str) -> Option<&'static [RenderLayer]> {
         "country_borders" => &[L::CountryBorders],
         "country_names" => &[L::CountryNames],
         "sac_scale" => &[L::SacScale],
+        "smoothness" => &[L::Smoothness],
         "waymarking" => &[L::Waymarking],
         "routes" => &[
             L::RoutesHiking,
@@ -1372,6 +1373,15 @@ pub fn render(
             None,
             |ctx, conn| async move { layers::sac_scale::query(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::sac_scale::render(&ctx, context, rows),
+        );
+    }
+
+    if zoom >= layers::smoothness::MIN_ZOOM && to_render.draws(RenderLayer::Smoothness) {
+        prefetcher.add(
+            "smoothness",
+            None,
+            |ctx, conn| async move { layers::smoothness::query(&ctx, &conn).await }.boxed(),
+            |rows, _params| layers::smoothness::render(&ctx, context, rows),
         );
     }
 

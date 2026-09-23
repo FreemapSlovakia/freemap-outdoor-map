@@ -167,6 +167,7 @@ pub enum ExportLayer {
     HikingTrails,
     SkiTrails,
     SacScale,
+    Smoothness,
     Waymarking,
     Landcover,
     Sea,
@@ -179,7 +180,7 @@ pub enum ExportLayer {
 }
 
 impl ExportLayer {
-    const ALL: [Self; 16] = [
+    const ALL: [Self; 17] = [
         Self::Shading,
         Self::Contours,
         Self::BicycleTrails,
@@ -187,6 +188,7 @@ impl ExportLayer {
         Self::HikingTrails,
         Self::SkiTrails,
         Self::SacScale,
+        Self::Smoothness,
         Self::Waymarking,
         Self::Landcover,
         Self::Sea,
@@ -207,6 +209,7 @@ impl ExportLayer {
             Self::HikingTrails => RenderLayer::RoutesHiking,
             Self::SkiTrails => RenderLayer::RoutesSki,
             Self::SacScale => RenderLayer::SacScale,
+            Self::Smoothness => RenderLayer::Smoothness,
             Self::Waymarking => RenderLayer::Waymarking,
             Self::Landcover => RenderLayer::Landcover,
             Self::Sea => RenderLayer::Sea,

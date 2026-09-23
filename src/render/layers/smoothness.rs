@@ -6,14 +6,14 @@ use crate::render::{
 };
 use cairo::Context;
 
-/// The generalized road tables keep only major roads and railways, so below this
-/// there is no row left to read `sac_scale` from.
+/// As for `sac_scale`: the generalized road tables keep only major roads and
+/// railways, so below this there is no row left to read `smoothness` from.
 pub const MIN_ZOOM: u8 = 12;
 
 const DOTS: GradedDots = GradedDots {
     min_zoom: MIN_ZOOM,
-    column: "sac_scale",
-    colors: &colors::SAC_SCALE,
+    column: "smoothness",
+    colors: &colors::SMOOTHNESS,
 };
 
 pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
@@ -21,7 +21,7 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
 }
 
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
-    let _span = tracy_client::span!("sac_scale::render");
+    let _span = tracy_client::span!("smoothness::render");
 
     graded_dots::render(&DOTS, ctx, context, rows)
 }

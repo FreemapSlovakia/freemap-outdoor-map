@@ -259,6 +259,17 @@ pub const SAC_SCALE: [Color; 6] = [
     parse_color("hsl(0, 85%, 48%)"),
     parse_color("hsl(348, 75%, 33%)"),
 ];
+/// OSM `smoothness`, excellent to impassable. Indexed by the enumerate minus one.
+pub const SMOOTHNESS: [Color; 8] = [
+    parse_color("hsl(165, 55%, 42%)"),
+    parse_color("hsl(120, 50%, 42%)"),
+    parse_color("hsl(68, 70%, 42%)"),
+    parse_color("hsl(45, 95%, 48%)"),
+    parse_color("hsl(28, 95%, 50%)"),
+    parse_color("hsl(10, 88%, 50%)"),
+    parse_color("hsl(0, 80%, 40%)"),
+    parse_color("hsl(330, 60%, 30%)"),
+];
 pub const SCREE: Color = parse_color("hsl(0, 0%, 90%)");
 pub const SCRUB: Color = parse_color("hsl(100, 70%, 86%)");
 pub const SILO_STROKE: Color = parse_color("hsl(50, 20%, 30%)");

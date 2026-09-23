@@ -1,5 +1,6 @@
 mod default;
 mod feature_lines;
+mod graded_ways;
 mod landcovers;
 mod mapping;
 mod pois;
@@ -359,12 +360,16 @@ fn render_request(
             LegendMode::Normal => ImageFormat::Png,
             LegendMode::Taginfo => ImageFormat::Svg,
         },
+        // Every optional layer with a legend item of its own; one left out here
+        // draws nothing at any zoom, and the zoom-range test is what says so.
         Layers::Map(HashSet::from([
             RenderLayer::CountryBorders,
             RenderLayer::RoutesBicycle,
             RenderLayer::RoutesHiking,
             RenderLayer::RoutesHorse,
             RenderLayer::RoutesSki,
+            RenderLayer::SacScale,
+            RenderLayer::Smoothness,
         ])),
         None,
     );

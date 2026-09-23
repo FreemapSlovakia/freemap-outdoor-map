@@ -8,3 +8,5 @@ pub(super) mod path_geom;
 pub(super) mod smooth_line;
 pub(super) mod text;
 pub(super) mod text_on_line;
+
+pub mod graded_dots;

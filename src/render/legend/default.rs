@@ -2,6 +2,7 @@ use super::mapping;
 use super::{BuildOpts, LegendItem, mapping_path};
 use crate::render::layers::Category;
 use crate::render::legend::feature_lines::feature_lines;
+use crate::render::legend::graded_ways::graded_ways;
 use crate::render::legend::{landcovers::landcovers, pois::pois, roads::roads};
 use geo::Point;
 use mapping::collect_mapping_entries;
@@ -47,6 +48,8 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
     let roads = roads(opts);
 
     let lines = feature_lines(mapping_entries, opts);
+
+    let graded = graded_ways(opts);
 
     let water = [
         &["river", "canal"] as &[&str],
@@ -271,6 +274,7 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
         .chain(landcover_items)
         .chain(roads)
         .chain(lines)
+        .chain(graded)
         .chain(water)
         .collect()
 }
