@@ -167,10 +167,16 @@ pub enum ExportLayer {
     Waymarking,
     Landcover,
     Sea,
+    WaterAreas,
+    Buildings,
+    PierAreas,
+    BridgeAreas,
+    SolarPlants,
+    Trees,
 }
 
 impl ExportLayer {
-    const ALL: [Self; 10] = [
+    const ALL: [Self; 16] = [
         Self::Shading,
         Self::Contours,
         Self::BicycleTrails,
@@ -181,6 +187,12 @@ impl ExportLayer {
         Self::Waymarking,
         Self::Landcover,
         Self::Sea,
+        Self::WaterAreas,
+        Self::Buildings,
+        Self::PierAreas,
+        Self::BridgeAreas,
+        Self::SolarPlants,
+        Self::Trees,
     ];
 
     const fn render_layer(self) -> RenderLayer {
@@ -195,6 +207,12 @@ impl ExportLayer {
             Self::Waymarking => RenderLayer::Waymarking,
             Self::Landcover => RenderLayer::Landcover,
             Self::Sea => RenderLayer::Sea,
+            Self::WaterAreas => RenderLayer::WaterAreas,
+            Self::Buildings => RenderLayer::Buildings,
+            Self::PierAreas => RenderLayer::PierAreas,
+            Self::BridgeAreas => RenderLayer::BridgeAreas,
+            Self::SolarPlants => RenderLayer::SolarPlants,
+            Self::Trees => RenderLayer::Trees,
         }
     }
 }

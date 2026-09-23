@@ -26,6 +26,12 @@ pub enum RenderLayer {
     SacScale,
     Waymarking,
     Landcover,
+    WaterAreas,
+    Buildings,
+    PierAreas,
+    BridgeAreas,
+    SolarPlants,
+    Trees,
 }
 
 #[derive(Deserialize, Debug, Clone, Copy)]

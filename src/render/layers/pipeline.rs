@@ -116,15 +116,27 @@ enum PendingLayer<'a> {
     },
 }
 
-/// Which [`RenderLayer`]s switch on the layer registered under `key` (its legend
-/// name, or its own name where it has none). A key missing here never draws in
-/// [`Layers::Only`] mode, so overlays opt in one layer at a time as the enum grows.
-fn key_layers(key: &str) -> &'static [RenderLayer] {
+/// Which [`RenderLayer`]s switch the layer registered under `key` on or off.
+///
+/// `None` means the key is not addressable: it never draws in [`Layers::Only`],
+/// and no [`Layers::Except`] set can turn it off. An explicit `Some(&[])` says
+/// the same for a key that would otherwise inherit its legend group's arm — a
+/// label layer filed under the fill it labels, which an overlay wants kept when
+/// the fill goes.
+fn key_layers(key: &str) -> Option<&'static [RenderLayer]> {
     use RenderLayer as L;
 
-    match key {
+    Some(match key {
         "sea" => &[L::Sea],
         "landcovers" => &[L::Landcover],
+        "water_areas" => &[L::WaterAreas],
+        "buildings" => &[L::Buildings],
+        "pier_areas" => &[L::PierAreas],
+        "bridge_areas" => &[L::BridgeAreas],
+        "solar_power_plants" => &[L::SolarPlants],
+        "trees" => &[L::Trees],
+        // Names, not the fill they are filed under for the legend.
+        "landcover_names" | "water_area_names" => &[],
         // Cuts bridges out of the shading and the contours alike.
         "bridge_for_shading" => &[L::Shading, L::Contours],
         "contours" => &[L::Contours],
@@ -140,8 +152,8 @@ fn key_layers(key: &str) -> &'static [RenderLayer] {
             L::RoutesBicycle,
             L::RoutesSki,
         ],
-        _ => &[],
-    }
+        _ => return None,
+    })
 }
 
 struct Prefetcher<'a> {
@@ -163,14 +175,23 @@ impl<'a> Prefetcher<'a> {
         }
     }
 
-    /// Whether a layer registered under `key` draws at all. Everything is on in
-    /// [`Layers::Map`]; in [`Layers::Only`] a layer draws when the request names
-    /// one of the [`RenderLayer`]s that switch it on.
-    fn enabled(&self, key: &str) -> bool {
+    /// Whether a layer draws at all. Everything is on in [`Layers::Map`]; in
+    /// [`Layers::Only`] a layer draws when the request names one of the
+    /// [`RenderLayer`]s that switch it on, and in [`Layers::Except`] unless it
+    /// does.
+    ///
+    /// The layer's own name is asked first and its legend group only as a
+    /// fallback, so a stage can opt out of the group it is filed under. Contours
+    /// rely on the fallback: their names are per-country.
+    fn enabled(&self, name: &str, legend_key: &str) -> bool {
+        let layers = key_layers(name)
+            .or_else(|| key_layers(legend_key))
+            .unwrap_or(&[]);
+
         match self.selection {
             Layers::Map(_) => true,
-            Layers::Only(ref set) => key_layers(key).iter().any(|layer| set.contains(layer)),
-            Layers::Except(ref set) => !key_layers(key).iter().any(|layer| set.contains(layer)),
+            Layers::Only(ref set) => layers.iter().any(|layer| set.contains(layer)),
+            Layers::Except(ref set) => !layers.iter().any(|layer| set.contains(layer)),
         }
     }
 
@@ -208,7 +229,7 @@ impl<'a> Prefetcher<'a> {
             return;
         }
 
-        if !self.enabled(legend_name.unwrap_or(name)) {
+        if !self.enabled(name, legend_name.unwrap_or(name)) {
             return;
         }
 
@@ -240,7 +261,7 @@ impl<'a> Prefetcher<'a> {
         + Send
         + 'static,
     ) -> Option<Rc<SharedSlot>> {
-        if self.ctx.legend.is_some() || !self.enabled(name) {
+        if self.ctx.legend.is_some() || !self.enabled(name, name) {
             return None;
         }
 
@@ -286,15 +307,21 @@ impl<'a> Prefetcher<'a> {
             return;
         }
 
-        if !self.enabled(legend_name) {
+        if !self.enabled(name, legend_name) {
             return;
         }
 
-        // Safe as long as a stage's `legend_name` matches the name its
-        // `shared_query` was registered under: `enabled` then agrees for both.
-        let slot = slot
-            .cloned()
-            .expect("shared slot must be present outside legend mode");
+        let Some(slot) = slot.cloned() else {
+            // An overlay can gate off the shared query while leaving a stage that
+            // reads it enabled. Drop the stage rather than draw from a query that
+            // never ran; in `Map` the query always runs, so this cannot happen.
+            assert!(
+                !self.selection.is_map(),
+                "shared slot must be present outside legend mode"
+            );
+
+            return;
+        };
 
         self.layers.push(PendingLayer::Shared {
             name,
