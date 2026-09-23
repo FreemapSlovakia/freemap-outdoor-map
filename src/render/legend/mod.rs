@@ -9,7 +9,7 @@ mod roads;
 mod zoom_range_test;
 
 use crate::render::layers::Category;
-use crate::render::{ImageFormat, LegendValue, RenderLayer, RenderRequest};
+use crate::render::{ImageFormat, Layers, LegendValue, RenderLayer, RenderRequest};
 use geo::{Coord, LineString, Polygon, Rect};
 use indexmap::IndexMap;
 use serde::Deserialize;
@@ -359,13 +359,13 @@ fn render_request(
             LegendMode::Normal => ImageFormat::Png,
             LegendMode::Taginfo => ImageFormat::Svg,
         },
-        HashSet::from([
+        Layers::Map(HashSet::from([
             RenderLayer::CountryBorders,
             RenderLayer::RoutesBicycle,
             RenderLayer::RoutesHiking,
             RenderLayer::RoutesHorse,
             RenderLayer::RoutesSki,
-        ]),
+        ])),
         None,
     );
 

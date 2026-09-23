@@ -8,7 +8,7 @@ pub use render_config::{
     PlaceTypeOverrides, RenderConfig,
 };
 pub use render_request::{
-    AttributionDecoration, CustomLayer, CustomLayerOrder, Decorations, Glow, LabelStyle,
+    AttributionDecoration, CustomLayer, CustomLayerOrder, Decorations, Glow, LabelStyle, Layers,
     RenderLayer, RenderRequest,
 };
 pub use render_worker_pool::RenderWorkerPool;

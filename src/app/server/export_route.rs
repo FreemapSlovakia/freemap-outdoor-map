@@ -2,7 +2,8 @@ use crate::{
     app::server::{app_state::AppState, routes::ServerOptions},
     render::{
         ATTRIBUTION_HEADER, Attribution, AttributionDecoration, CustomLayer, CustomLayerOrder,
-        Decorations, Glow, ImageFormat, LabelStyle, RenderLayer, RenderRequest, RenderWorkerPool,
+        Decorations, Glow, ImageFormat, LabelStyle, Layers, RenderLayer, RenderRequest,
+        RenderWorkerPool,
         bbox_size_in_pixels,
     },
 };
@@ -192,6 +193,11 @@ pub struct ExportFeatures {
     /// Toggleable layers that are enabled. Absent keeps the server defaults; a
     /// present set explicitly turns each toggleable layer on (in set) or off.
     layers: Option<HashSet<ExportLayer>>,
+    /// Draw an overlay — nothing but `layers`, over a transparent background —
+    /// instead of the map. Needs an alpha-capable `format`, and the server
+    /// defaults do not apply: what is not listed is not drawn.
+    #[serde(default)]
+    only: bool,
     /// Custom `GeoJSON` overlay layer and its rendering options. Absent means no
     /// overlay.
     custom_layer: Option<ExportCustomLayer>,
@@ -290,7 +296,13 @@ pub async fn post(
 
     let file_path = std::env::temp_dir().join(&filename);
 
-    let mut render = state.default_render.clone();
+    let only = request.features.as_ref().is_some_and(|features| features.only);
+
+    let mut render = if only {
+        HashSet::new()
+    } else {
+        state.default_render.clone()
+    };
 
     if let Some(features) = &request.features
         && let Some(layers) = &features.layers
@@ -306,7 +318,13 @@ pub async fn post(
         }
     }
 
-    let mut render_request = RenderRequest::new(rect, request.zoom, scale, format, render, None);
+    let layers = if only {
+        Layers::Only(render)
+    } else {
+        Layers::Map(render)
+    };
+
+    let mut render_request = RenderRequest::new(rect, request.zoom, scale, format, layers, None);
 
     render_request.custom_layer = if let Some(custom_layer) = request
         .features

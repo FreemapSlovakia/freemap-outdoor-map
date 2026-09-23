@@ -5,7 +5,7 @@ use crate::{
         tile_processor::{cached_tile_path, read_attribution},
     },
     render::{
-        ATTRIBUTION_HEADER, Attribution, ImageFormat, RenderRequest, TileCoverageRelation,
+        ATTRIBUTION_HEADER, Attribution, ImageFormat, Layers, RenderRequest, TileCoverageRelation,
         tile_touches_coverage,
     },
 };
@@ -248,7 +248,7 @@ pub async fn serve_tile(
         coord.zoom,
         scale,
         ImageFormat::Jpeg,
-        variant.render.clone(),
+        Layers::Map(variant.render.clone()),
         variant.coverage_geometry.clone(),
     );
 

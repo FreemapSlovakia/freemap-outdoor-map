@@ -2,7 +2,7 @@ use crate::render::colors::ContextExt;
 use crate::render::projectable::TileProjectable;
 use crate::render::render_request::CustomLayer;
 use crate::render::{
-    ContourCountries, CustomLayerOrder, FeatureLineMaskCountries, HillshadingHierarchy,
+    ContourCountries, CustomLayerOrder, FeatureLineMaskCountries, HillshadingHierarchy, Layers,
     PlaceTypeOverrides, RenderLayer, colors,
 };
 use crate::render::{
@@ -116,20 +116,57 @@ enum PendingLayer<'a> {
     },
 }
 
+/// Which [`RenderLayer`]s switch on the layer registered under `key` (its legend
+/// name, or its own name where it has none). A key missing here never draws in
+/// [`Layers::Only`] mode, so overlays opt in one layer at a time as the enum grows.
+fn key_layers(key: &str) -> &'static [RenderLayer] {
+    use RenderLayer as L;
+
+    match key {
+        "sea" => &[L::Sea],
+        // Cuts bridges out of the shading and the contours alike.
+        "bridge_for_shading" => &[L::Shading, L::Contours],
+        "contours" => &[L::Contours],
+        "geonames" => &[L::Geonames],
+        "country_borders" => &[L::CountryBorders],
+        "country_names" => &[L::CountryNames],
+        "routes" => &[
+            L::RoutesHiking,
+            L::RoutesHikingKst,
+            L::RoutesHorse,
+            L::RoutesBicycle,
+            L::RoutesSki,
+        ],
+        _ => &[],
+    }
+}
+
 struct Prefetcher<'a> {
     pool: Pool,
     handle: Handle,
     ctx: Arc<Ctx>,
+    selection: Layers,
     layers: Vec<PendingLayer<'a>>,
 }
 
 impl<'a> Prefetcher<'a> {
-    const fn new(pool: Pool, handle: Handle, ctx: Arc<Ctx>) -> Self {
+    const fn new(pool: Pool, handle: Handle, ctx: Arc<Ctx>, selection: Layers) -> Self {
         Self {
             pool,
             handle,
             ctx,
+            selection,
             layers: Vec::new(),
+        }
+    }
+
+    /// Whether a layer registered under `key` draws at all. Everything is on in
+    /// [`Layers::Map`]; in [`Layers::Only`] a layer draws when the request names
+    /// one of the [`RenderLayer`]s that switch it on.
+    fn enabled(&self, key: &str) -> bool {
+        match self.selection {
+            Layers::Map(_) => true,
+            Layers::Only(ref set) => key_layers(key).iter().any(|layer| set.contains(layer)),
         }
     }
 
@@ -167,6 +204,10 @@ impl<'a> Prefetcher<'a> {
             return;
         }
 
+        if !self.enabled(legend_name.unwrap_or(name)) {
+            return;
+        }
+
         let pool = self.pool.clone();
         let ctx = self.ctx.clone();
 
@@ -195,7 +236,7 @@ impl<'a> Prefetcher<'a> {
         + Send
         + 'static,
     ) -> Option<Rc<SharedSlot>> {
-        if self.ctx.legend.is_some() {
+        if self.ctx.legend.is_some() || !self.enabled(name) {
             return None;
         }
 
@@ -241,6 +282,12 @@ impl<'a> Prefetcher<'a> {
             return;
         }
 
+        if !self.enabled(legend_name) {
+            return;
+        }
+
+        // Safe as long as a stage's `legend_name` matches the name its
+        // `shared_query` was registered under: `enabled` then agrees for both.
         let slot = slot
             .cloned()
             .expect("shared slot must be present outside legend mode");
@@ -364,15 +411,15 @@ pub fn render(
 
     let zoom = request.zoom;
 
-    let to_render = &request.to_render;
+    let to_render = &request.layers;
 
-    let do_shading = to_render.contains(&RenderLayer::Shading) && shading.hierarchy.is_some();
+    let do_shading = to_render.contains(RenderLayer::Shading) && shading.hierarchy.is_some();
 
     let feature_line_mask_countries = shading
         .feature_line_mask_countries
         .map_or(&[] as &[String], FeatureLineMaskCountries::countries);
 
-    let do_contours = to_render.contains(&RenderLayer::Contours)
+    let do_contours = to_render.contains(RenderLayer::Contours)
         && shading.hierarchy.is_some()
         && shading.contour_countries.is_some();
 
@@ -393,6 +440,7 @@ pub fn render(
     let attribution: Rc<RefCell<Attribution>> = Rc::default();
 
     let coverage_geometry = if ctx.legend.is_none()
+        && !request.layers.is_only()
         && matches!(request.format, ImageFormat::Jpeg | ImageFormat::Png)
         && let Some(ref coverage_geometry) = request.coverage_geometry
     {
@@ -406,7 +454,7 @@ pub fn render(
         None
     };
 
-    let mut prefetcher = Prefetcher::new(pool, handle, ctx.clone());
+    let mut prefetcher = Prefetcher::new(pool, handle, ctx.clone(), request.layers.clone());
 
     // Built from the land and water the sea and water fills project anyway.
     let dry_land: Rc<RefCell<Option<layers::dry_land::DryLand>>> = Rc::default();
@@ -841,7 +889,7 @@ pub fn render(
         );
     }
 
-    if zoom >= 8 && to_render.contains(&RenderLayer::CountryBorders) {
+    if zoom >= 8 && to_render.contains(RenderLayer::CountryBorders) {
         prefetcher.add(
             "borders",
             Some("country_borders"),
@@ -854,7 +902,7 @@ pub fn render(
         let to_render = to_render.clone();
         let to_render1 = to_render.clone();
 
-        let min_zoom = if to_render.contains(&RenderLayer::RoutesHikingKst) {
+        let min_zoom = if to_render.contains(RenderLayer::RoutesHikingKst) {
             8
         } else {
             9
@@ -914,7 +962,7 @@ pub fn render(
         });
     }
 
-    if (9..=11).contains(&zoom) && to_render.contains(&RenderLayer::Geonames) {
+    if (9..=11).contains(&zoom) && to_render.contains(RenderLayer::Geonames) {
         prefetcher.add(
             "geonames",
             None,
@@ -1056,7 +1104,7 @@ pub fn render(
         Rc::new(RefCell::new(None));
 
     if zoom >= 10 {
-        let kst = to_render.contains(&RenderLayer::RoutesHikingKst);
+        let kst = to_render.contains(RenderLayer::RoutesHikingKst);
         let slot_icons = pois_to_label_slot.clone();
         let ctx = ctx.clone();
 
@@ -1208,7 +1256,7 @@ pub fn render(
         );
     }
 
-    if zoom < 8 && to_render.contains(&RenderLayer::CountryNames) {
+    if zoom < 8 && to_render.contains(RenderLayer::CountryNames) {
         let rect = ctx.bbox.project_to_tile(&ctx.tile_projector);
 
         prefetcher.push(move |_params| {

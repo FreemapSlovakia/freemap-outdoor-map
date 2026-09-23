@@ -1,5 +1,5 @@
 use crate::render::{
-    Feature, RenderLayer,
+    Feature, Layers, RenderLayer,
     collision::Collision,
     ctx::Ctx,
     draw::{
@@ -15,7 +15,6 @@ use crate::render::{
 };
 use cairo::Context;
 use colorsys::{Rgb, RgbRatio};
-use std::collections::HashSet;
 
 const COLOR_SQL: &str = r#"
   CASE
@@ -65,7 +64,7 @@ fn format_vec(vec: &[&str]) -> String {
 }
 
 fn get_routes_query(
-    render: &HashSet<RenderLayer>,
+    render: &Layers,
     include_networks: Option<Vec<&str>>,
     gen_suffix: &str,
 ) -> String {
@@ -73,22 +72,22 @@ fn get_routes_query(
 
     let mut rights = Vec::<&str>::new();
 
-    let bool_hiking_kst = render.contains(&RenderLayer::RoutesHikingKst);
-    let bool_hiking = render.contains(&RenderLayer::RoutesHiking) || bool_hiking_kst;
+    let bool_hiking_kst = render.contains(RenderLayer::RoutesHikingKst);
+    let bool_hiking = render.contains(RenderLayer::RoutesHiking) || bool_hiking_kst;
 
     if bool_hiking || bool_hiking_kst {
         lefts.extend_from_slice(&["hiking", "foot", "running"]);
     }
 
-    if render.contains(&RenderLayer::RoutesHorse) {
+    if render.contains(RenderLayer::RoutesHorse) {
         lefts.push("horse");
     }
 
-    if render.contains(&RenderLayer::RoutesBicycle) {
+    if render.contains(RenderLayer::RoutesBicycle) {
         rights.extend_from_slice(&["bicycle", "mtb"]);
     }
 
-    if render.contains(&RenderLayer::RoutesSki) {
+    if render.contains(RenderLayer::RoutesSki) {
         rights.extend_from_slice(&["ski", "piste"]);
     }
 
@@ -124,9 +123,9 @@ fn get_routes_query(
         format!("{} AND ", conditions.join(" AND "))
     };
 
-    let bool_horse = render.contains(&RenderLayer::RoutesHorse);
-    let bool_bicycle = render.contains(&RenderLayer::RoutesBicycle);
-    let bool_ski = render.contains(&RenderLayer::RoutesSki);
+    let bool_horse = render.contains(RenderLayer::RoutesHorse);
+    let bool_bicycle = render.contains(RenderLayer::RoutesBicycle);
+    let bool_ski = render.contains(RenderLayer::RoutesSki);
 
     format!("
         SELECT
@@ -278,12 +277,12 @@ fn get_routes_query(
 pub async fn query_marking(
     ctx: &Ctx,
     client: &tokio_postgres::Client,
-    render: &HashSet<RenderLayer>,
+    render: &Layers,
 ) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let zoom = ctx.zoom;
 
     let z = zoom
-        + if render.contains(&RenderLayer::RoutesHikingKst) {
+        + if render.contains(RenderLayer::RoutesHikingKst) {
             2
         } else {
             0
@@ -308,7 +307,7 @@ pub fn render_marking(
     ctx: &Ctx,
     context: &Context,
     rows: Vec<Feature>,
-    to_render: HashSet<RenderLayer>,
+    to_render: Layers,
     svg_repo: &mut SvgRepo,
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("routes::render_marking");
@@ -327,7 +326,7 @@ pub fn render_marking(
         let df = 1.25;
 
         for color in &COLORS {
-            if to_render.contains(&RenderLayer::RoutesHorse) {
+            if to_render.contains(RenderLayer::RoutesHorse) {
                 let off = row.get_i32(&format!("r_{}", color.0))?;
 
                 if off > 0 {
@@ -352,7 +351,7 @@ pub fn render_marking(
                 }
             }
 
-            if to_render.contains(&RenderLayer::RoutesSki) {
+            if to_render.contains(RenderLayer::RoutesSki) {
                 let off = row.get_i32(&format!("s_{}", color.0))?;
 
                 if off > 0 {
@@ -379,7 +378,7 @@ pub fn render_marking(
                 }
             }
 
-            if to_render.contains(&RenderLayer::RoutesBicycle) {
+            if to_render.contains(RenderLayer::RoutesBicycle) {
                 let off = row.get_i32(&format!("b_{}", color.0))?;
 
                 if off > 0 {
@@ -407,8 +406,8 @@ pub fn render_marking(
                 }
             }
 
-            if to_render.contains(&RenderLayer::RoutesHiking)
-                || to_render.contains(&RenderLayer::RoutesHikingKst)
+            if to_render.contains(RenderLayer::RoutesHiking)
+                || to_render.contains(RenderLayer::RoutesHikingKst)
             {
                 {
                     let off = row.get_i32(&format!("h_{}", color.0))?;
@@ -473,7 +472,7 @@ pub fn render_marking(
 pub async fn query_labels(
     ctx: &Ctx,
     client: &tokio_postgres::Client,
-    render: &HashSet<RenderLayer>,
+    render: &Layers,
 ) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let query = get_routes_query(render, None, "");
 

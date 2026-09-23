@@ -100,13 +100,35 @@ pub struct AttributionDecoration {
     pub overrides: HashMap<String, String>,
 }
 
+/// Which layers a request draws. `Only` leaves everything it does not name
+/// unpainted, so it needs an alpha-capable format to be of any use.
+#[derive(Debug, Clone)]
+pub enum Layers {
+    /// The whole base map, plus the optional layers named.
+    Map(HashSet<RenderLayer>),
+    /// Nothing but the layers named.
+    Only(HashSet<RenderLayer>),
+}
+
+impl Layers {
+    pub fn contains(&self, layer: RenderLayer) -> bool {
+        let (Self::Map(set) | Self::Only(set)) = self;
+
+        set.contains(&layer)
+    }
+
+    pub const fn is_only(&self) -> bool {
+        matches!(self, Self::Only(_))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RenderRequest {
     pub bbox: Rect<f64>,
     pub zoom: u8,
     pub scale: f64,
     pub format: ImageFormat,
-    pub to_render: HashSet<RenderLayer>,
+    pub layers: Layers,
     pub coverage_geometry: Option<Arc<Geometry>>,
     pub custom_layer: Option<CustomLayer>,
     pub legend: Option<LegendItemData>,
@@ -119,7 +141,7 @@ impl RenderRequest {
         zoom: u8,
         scale: f64,
         format: ImageFormat,
-        to_render: HashSet<RenderLayer>,
+        layers: Layers,
         coverage_geometry: Option<Arc<Geometry>>,
     ) -> Self {
         Self {
@@ -127,7 +149,7 @@ impl RenderRequest {
             zoom,
             scale,
             format,
-            to_render,
+            layers,
             coverage_geometry,
             custom_layer: None,
             legend: None,
