@@ -1411,7 +1411,12 @@ pub fn render(
         );
     }
 
-    if zoom >= layers::smoothness::MIN_ZOOM && to_render.draws(RenderLayer::Smoothness) {
+    // Opt-in in every mode, unlike the other overlays: `smoothness` has no column
+    // until the roads table is reimported, and the query fails the whole render
+    // rather than coming back empty. `Except` turns everything on by default, so
+    // `draws` here would break every aerial overlay. Switch it to `draws` once
+    // the column is in.
+    if zoom >= layers::smoothness::MIN_ZOOM && to_render.contains(RenderLayer::Smoothness) {
         prefetcher.add(
             "smoothness",
             None,
