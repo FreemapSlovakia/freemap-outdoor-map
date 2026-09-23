@@ -539,7 +539,7 @@ mod tests {
 
         let mut bad = vec![];
 
-        for meta in legend_metadata(None) {
+        for meta in legend_metadata(None, None) {
             if meta.tags.is_empty() {
                 bad.push(format!("{} lists no tags at all", meta.id));
             }

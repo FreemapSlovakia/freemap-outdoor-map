@@ -2,7 +2,7 @@
 //!
 //! The ranges in `legend::{default, feature_lines, landcovers, roads}` restate, in data, what
 //! `layers::pipeline` and the layer render fns express as control flow, so that
-//! `legend_metadata(Some(zoom))` can list only what the map draws at that zoom. This test
+//! `legend_metadata(Some(zoom), None)` can list only what the map draws at that zoom. This test
 //! renders each item for real and fails when the two disagree — change a `zoom >= N` gate in
 //! the renderer and you will hear about it here.
 
