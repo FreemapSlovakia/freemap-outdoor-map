@@ -169,19 +169,15 @@ pub enum ExportLayer {
     SacScale,
     Smoothness,
     Waymarking,
-    Landcover,
-    Sea,
-    WaterAreas,
+    /// Everything that covers the ground, as one switch: an aerial image shows
+    /// all of it better than the map can, and until a client wants them apart
+    /// there is no reason to make it name eight.
+    GroundCover,
     Buildings,
-    PierAreas,
-    BridgeAreas,
-    SolarPlants,
-    Trees,
-    Cutlines,
 }
 
 impl ExportLayer {
-    const ALL: [Self; 18] = [
+    const ALL: [Self; 11] = [
         Self::Shading,
         Self::Contours,
         Self::BicycleTrails,
@@ -191,37 +187,32 @@ impl ExportLayer {
         Self::SacScale,
         Self::Smoothness,
         Self::Waymarking,
-        Self::Landcover,
-        Self::Sea,
-        Self::WaterAreas,
+        Self::GroundCover,
         Self::Buildings,
-        Self::PierAreas,
-        Self::BridgeAreas,
-        Self::SolarPlants,
-        Self::Trees,
-        Self::Cutlines,
     ];
 
-    const fn render_layer(self) -> RenderLayer {
+    const fn render_layers(self) -> &'static [RenderLayer] {
         match self {
-            Self::Shading => RenderLayer::Shading,
-            Self::Contours => RenderLayer::Contours,
-            Self::BicycleTrails => RenderLayer::RoutesBicycle,
-            Self::HorseTrails => RenderLayer::RoutesHorse,
-            Self::HikingTrails => RenderLayer::RoutesHiking,
-            Self::SkiTrails => RenderLayer::RoutesSki,
-            Self::SacScale => RenderLayer::SacScale,
-            Self::Smoothness => RenderLayer::Smoothness,
-            Self::Waymarking => RenderLayer::Waymarking,
-            Self::Landcover => RenderLayer::Landcover,
-            Self::Sea => RenderLayer::Sea,
-            Self::WaterAreas => RenderLayer::WaterAreas,
-            Self::Buildings => RenderLayer::Buildings,
-            Self::PierAreas => RenderLayer::PierAreas,
-            Self::BridgeAreas => RenderLayer::BridgeAreas,
-            Self::SolarPlants => RenderLayer::SolarPlants,
-            Self::Trees => RenderLayer::Trees,
-            Self::Cutlines => RenderLayer::Cutlines,
+            Self::Shading => &[RenderLayer::Shading],
+            Self::Contours => &[RenderLayer::Contours],
+            Self::BicycleTrails => &[RenderLayer::RoutesBicycle],
+            Self::HorseTrails => &[RenderLayer::RoutesHorse],
+            Self::HikingTrails => &[RenderLayer::RoutesHiking],
+            Self::SkiTrails => &[RenderLayer::RoutesSki],
+            Self::SacScale => &[RenderLayer::SacScale],
+            Self::Smoothness => &[RenderLayer::Smoothness],
+            Self::Waymarking => &[RenderLayer::Waymarking],
+            Self::Buildings => &[RenderLayer::Buildings],
+            Self::GroundCover => &[
+                RenderLayer::Sea,
+                RenderLayer::Landcover,
+                RenderLayer::WaterAreas,
+                RenderLayer::PierAreas,
+                RenderLayer::BridgeAreas,
+                RenderLayer::SolarPlants,
+                RenderLayer::Trees,
+                RenderLayer::Cutlines,
+            ],
         }
     }
 }
@@ -355,12 +346,12 @@ pub async fn post(
         && let Some(layers) = &features.layers
     {
         for export_layer in ExportLayer::ALL {
-            let render_layer = export_layer.render_layer();
-
-            if layers.contains(&export_layer) {
-                render.insert(render_layer);
-            } else {
-                render.remove(&render_layer);
+            for render_layer in export_layer.render_layers() {
+                if layers.contains(&export_layer) {
+                    render.insert(*render_layer);
+                } else {
+                    render.remove(render_layer);
+                }
             }
         }
     }
@@ -372,7 +363,8 @@ pub async fn post(
             features
                 .omit
                 .iter()
-                .map(|layer| layer.render_layer())
+                .flat_map(|layer| layer.render_layers())
+                .copied()
                 .collect()
         }),
     };
