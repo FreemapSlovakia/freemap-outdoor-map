@@ -1,8 +1,9 @@
 use crate::{
     app::server::{app_state::AppState, routes::ServerOptions},
     render::{
-        Attribution, AttributionDecoration, CustomLayer, CustomLayerOrder, Decorations, Glow,
-        ImageFormat, LabelStyle, RenderLayer, RenderRequest, RenderWorkerPool, bbox_size_in_pixels,
+        ATTRIBUTION_HEADER, Attribution, AttributionDecoration, CustomLayer, CustomLayerOrder,
+        Decorations, Glow, ImageFormat, LabelStyle, RenderLayer, RenderRequest, RenderWorkerPool,
+        bbox_size_in_pixels,
     },
 };
 use axum::{
@@ -241,12 +242,6 @@ const DEFAULT_LABEL_SIZE: f64 = 15.0;
 pub struct TokenQuery {
     token: String,
 }
-
-/// Carries the finished export's dataset codes on the poll the client already
-/// makes, so no second request is needed. Same short spelling as the tile
-/// `Server-Timing` and the embedded metadata — `o,ssk,csk` — so a client needs
-/// one parser, not two. Resolve the codes through `GET /licenses`.
-pub const ATTRIBUTION_HEADER: &str = "X-Attribution";
 
 pub async fn post(
     State(state): State<AppState>,

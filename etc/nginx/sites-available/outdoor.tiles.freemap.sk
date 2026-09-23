@@ -184,16 +184,14 @@ server {
                 return 404;
         }
 
-        # Tiles are proxied rather than served off disk, because the renderer is the
-        # only thing that can read a tile's attribution out of its COM segment and put
-        # it on the response. It serves cache hits itself (MAPRENDER_SERVE_CACHED=true)
-        # and renders the misses, so the try_files/@fallback split is gone — and so is
-        # the ?rerender dance, which it handles as a query parameter.
+        # Tiles are proxied rather than served off disk, because only the renderer can
+        # read a tile's attribution out of its xattr and put it on the response.
+        # It serves cache hits itself (MAPRENDER_SERVE_CACHED=true), renders the misses
+        # and handles ?rerender as a query parameter.
         #
-        # Cache-Control (with no-transform, so no intermediary re-encodes the tile and
-        # drops the COM), Server-Timing and Timing-Allow-Origin all come from upstream;
-        # nothing here hides them. Server-Timing carries both the tile's attribution
-        # and whether it was a cache hit, which is what the removed X-Tile-Source said.
+        # Cache-Control, Server-Timing, Timing-Allow-Origin, X-Attribution and
+        # Access-Control-Expose-Headers all come from upstream. Nothing here hides them,
+        # and re-adding one here would send it twice.
         location ~ ^/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[1234])x)?(?:\.(?:jpe?g|png))?$ {
                 add_header Access-Control-Allow-Origin $cors_origin always;
                 add_header Vary Origin always;

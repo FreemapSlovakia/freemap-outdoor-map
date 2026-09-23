@@ -1,13 +1,8 @@
 use crate::render::{
-    PlaceTypeOverrides,
-    attribution::{self, Attribution},
-    image_format::ImageFormat,
-    layers,
-    render_request::RenderRequest,
-    svg_repo::SvgRepo,
-    xyz::bbox_size_in_pixels,
+    PlaceTypeOverrides, attribution::Attribution, image_format::ImageFormat, layers,
+    render_request::RenderRequest, svg_repo::SvgRepo, xyz::bbox_size_in_pixels,
 };
-use cairo::{Format, ImageSurface, PdfMetadata, PdfSurface, Surface, SvgSurface};
+use cairo::{Format, ImageSurface, PdfSurface, Surface, SvgSurface};
 use deadpool_postgres::Pool;
 use image::codecs::jpeg::JpegEncoder;
 use image::{ExtendedColorType, ImageEncoder};
@@ -27,9 +22,7 @@ pub enum RenderError {
 }
 
 /// A finished render: the encoded image, and the codes of the datasets that
-/// contributed pixels to it. The codes are also embedded in the image itself
-/// (JPEG `COM`, PNG `tEXt`, PDF keywords), so a tile carries its own attribution
-/// for as long as it is cached.
+/// contributed pixels to it.
 pub struct RenderOutput {
     pub bytes: Vec<u8>,
     pub attribution: Attribution,
@@ -92,12 +85,6 @@ pub fn render(
 
             let attribution = render(&surface)?;
 
-            // The document info dictionary is written at finish, so this reaches the
-            // file even though the codes are only known once the map is drawn.
-            if !attribution.is_empty() {
-                surface.set_metadata(PdfMetadata::Keywords, &attribution.encode())?;
-            }
-
             Ok(RenderOutput {
                 bytes: *surface
                     .finish_output_stream()
@@ -125,10 +112,6 @@ pub fn render(
             surface
                 .write_to_png(&mut buffer)
                 .map_err(|err| RenderError::ImageEncoding(Box::new(err)))?;
-
-            if !attribution.is_empty() {
-                attribution::insert_png_text(&mut buffer, &attribution.encode());
-            }
 
             Ok(RenderOutput {
                 bytes: buffer,
@@ -172,10 +155,6 @@ pub fn render(
             JpegEncoder::new_with_quality(&mut buffer, 90)
                 .write_image(&rgb_data, width, height, ExtendedColorType::Rgb8)
                 .map_err(|err| RenderError::ImageEncoding(Box::new(err)))?;
-
-            if !attribution.is_empty() {
-                attribution::insert_jpeg_com(&mut buffer, &attribution.encode());
-            }
 
             Ok(RenderOutput {
                 bytes: buffer,

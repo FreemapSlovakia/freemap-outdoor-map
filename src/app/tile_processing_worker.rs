@@ -1,6 +1,9 @@
-use crate::app::{
-    tile_coord::TileCoord,
-    tile_processor::{TileProcessingConfig, TileProcessor},
+use crate::{
+    app::{
+        tile_coord::TileCoord,
+        tile_processor::{TileProcessingConfig, TileProcessor},
+    },
+    render::Attribution,
 };
 use std::{
     sync::{Arc, Mutex},
@@ -32,6 +35,7 @@ struct TileProcessingInner {
 enum TileProcessingMessage {
     SaveTile {
         data: Vec<u8>,
+        attribution: Attribution,
         coord: TileCoord,
         scale: f64,
         render_started_at: SystemTime,
@@ -68,12 +72,14 @@ impl TileProcessingWorker {
                     match message {
                         TileProcessingMessage::SaveTile {
                             data,
+                            attribution,
                             coord,
                             scale,
                             render_started_at,
                             variant_index,
                         } => processor.handle_save_tile(
                             data,
+                            &attribution,
                             coord,
                             scale,
                             render_started_at,
@@ -99,6 +105,7 @@ impl TileProcessingWorker {
     pub(crate) async fn save_tile(
         &self,
         data: Vec<u8>,
+        attribution: Attribution,
         coord: TileCoord,
         scale: f64,
         render_started_at: SystemTime,
@@ -111,6 +118,7 @@ impl TileProcessingWorker {
 
         tx.send(TileProcessingMessage::SaveTile {
             data,
+            attribution,
             coord,
             scale,
             render_started_at,

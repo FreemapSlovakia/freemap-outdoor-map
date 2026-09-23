@@ -2,11 +2,11 @@ use crate::{
     app::{
         server::app_state::{AppState, TileRouteState},
         tile_coord::TileCoord,
-        tile_processor::cached_tile_path,
+        tile_processor::{cached_tile_path, read_attribution},
     },
     render::{
-        Attribution, ImageFormat, JPEG_COM_HEAD_LEN, RenderRequest, TileCoverageRelation,
-        parse_jpeg_com, tile_touches_coverage,
+        ATTRIBUTION_HEADER, Attribution, ImageFormat, RenderRequest, TileCoverageRelation,
+        tile_touches_coverage,
     },
 };
 use axum::{
@@ -18,18 +18,14 @@ use geo::Rect;
 use httpdate::parse_http_date;
 use image::{ColorType, codecs::jpeg::JpegEncoder};
 use std::{
+    io::{self, Read},
     os::unix::fs::MetadataExt,
     sync::LazyLock,
     time::{Duration, SystemTime},
 };
-use tokio::{
-    fs,
-    io::{self, AsyncReadExt},
-};
+use tokio::task;
 
-/// `no-transform` because an image-rewriting intermediary would re-encode the tile
-/// and drop the `COM` segment it carries its attribution in.
-const TILE_CACHE_CONTROL: &str = "no-cache, no-transform";
+const TILE_CACHE_CONTROL: &str = "no-cache";
 
 static GRAY_TILE_JPEG: LazyLock<Vec<u8>> = LazyLock::new(|| {
     const TILE_SIZE: usize = 256;
@@ -143,8 +139,8 @@ pub async fn serve_tile(
             == TileCoverageRelation::Outside
         {
             // Outside coverage nothing is drawn, so the codes are known to be none —
-            // which is not the same as the unknown of a tile with no `COM`.
-            return with_timing(
+            // which is not the same as the unknown of a tile cached without them.
+            return annotate(
                 Response::builder()
                     .status(StatusCode::OK)
                     .header("Content-Type", "image/jpeg")
@@ -161,44 +157,50 @@ pub async fn serve_tile(
         let file_path = cached_tile_path(tile_cache_base_path, coord, scale);
 
         enum ModifiedOrFresh {
-            Modified(Vec<u8>, Option<SystemTime>),
+            Modified(Vec<u8>, Option<SystemTime>, Option<Attribution>),
             Fresh(SystemTime, Option<Attribution>),
         }
 
         if rerender {
             // nothing
         } else if state.serve_cached {
-            let result: Result<_, io::Error> = async {
-                let mut f = fs::OpenOptions::new().read(true).open(&file_path).await?;
+            let if_modified_since = headers
+                .get(header::IF_MODIFIED_SINCE)
+                .and_then(|ims| parse_http_date(ims.to_str().ok()?).ok());
 
-                let metadata = f.metadata().await?;
+            // One blocking hop for the open, stat, xattr and read together.
+            let result = task::spawn_blocking({
+                let file_path = file_path.clone();
 
-                let mtime = metadata.modified().ok();
+                move || -> io::Result<_> {
+                    let mut f = std::fs::File::open(&file_path)?;
 
-                if let Some(ims) = headers.get(header::IF_MODIFIED_SINCE)
-                    && let Ok(ims_time) = parse_http_date(ims.to_str().unwrap_or(""))
-                    && let Some(mtime) = mtime
-                    && whole_seconds(mtime) <= ims_time
-                {
-                    // `Cache-Control: no-cache` makes every revisited tile revalidate,
-                    // so this is the common path for a returning viewport and has to
-                    // carry the codes too — one page-cached 1 KiB read for them.
-                    return Ok(ModifiedOrFresh::Fresh(mtime, read_com(&mut f).await));
+                    let metadata = f.metadata()?;
+
+                    let mtime = metadata.modified().ok();
+
+                    let attribution = read_attribution(&f);
+
+                    if let Some(ims_time) = if_modified_since
+                        && let Some(mtime) = mtime
+                        && whole_seconds(mtime) <= ims_time
+                    {
+                        return Ok(ModifiedOrFresh::Fresh(mtime, attribution));
+                    }
+
+                    let mut buf = Vec::with_capacity(metadata.size() as usize);
+
+                    f.read_to_end(&mut buf)?;
+
+                    Ok(ModifiedOrFresh::Modified(buf, mtime, attribution))
                 }
-
-                let mut buf = Vec::with_capacity(metadata.size() as usize);
-
-                f.read_to_end(&mut buf).await?;
-
-                Ok(ModifiedOrFresh::Modified(buf, mtime))
-            }
-            .await;
+            })
+            .await
+            .unwrap_or_else(|err| Err(io::Error::other(err)));
 
             match result {
-                Ok(ModifiedOrFresh::Modified(data, modified)) => {
-                    let attribution = parse_jpeg_com(&data).map(Attribution::decode);
-
-                    let mut builder = with_timing(
+                Ok(ModifiedOrFresh::Modified(data, modified, attribution)) => {
+                    let mut builder = annotate(
                         Response::builder()
                             .status(StatusCode::OK)
                             .header("Content-Type", "image/jpeg")
@@ -215,7 +217,7 @@ pub async fn serve_tile(
                     return builder.body(Body::from(data)).expect("cached body");
                 }
                 Ok(ModifiedOrFresh::Fresh(date, attribution)) => {
-                    return with_timing(
+                    return annotate(
                         Response::builder()
                             .status(StatusCode::NOT_MODIFIED)
                             .header("Cache-Control", TILE_CACHE_CONTROL)
@@ -269,6 +271,7 @@ pub async fn serve_tile(
         && let Err(err) = tile_worker
             .save_tile(
                 rendered.bytes.clone(),
+                rendered.attribution.clone(),
                 coord,
                 scale,
                 render_started_at,
@@ -279,7 +282,7 @@ pub async fn serve_tile(
         eprintln!("Enqueue tile {coord}@{scale} save failed: {err}");
     }
 
-    with_timing(
+    annotate(
         Response::builder()
             .status(StatusCode::OK)
             .header("Content-Type", "image/jpeg")
@@ -303,26 +306,6 @@ fn whole_seconds(time: SystemTime) -> SystemTime {
         .map_or(time, |since| {
             SystemTime::UNIX_EPOCH + Duration::from_secs(since.as_secs())
         })
-}
-
-/// The codes a cached tile carries, from its head bytes alone — the `COM` segment
-/// sits among the first few, so the JPEG is never decoded and never fully read.
-/// `None` when the tile has no segment, which is how one cached before tiles
-/// carried their attribution goes out without an `attr` metric instead of
-/// breaking.
-async fn read_com(file: &mut fs::File) -> Option<Attribution> {
-    let mut head = [0u8; JPEG_COM_HEAD_LEN];
-    let mut read = 0;
-
-    while read < head.len() {
-        match file.read(&mut head[read..]).await {
-            Ok(0) => break,
-            Ok(n) => read += n,
-            Err(_) => return None,
-        }
-    }
-
-    parse_jpeg_com(&head[..read]).map(Attribution::decode)
 }
 
 /// Where the response body came from.
@@ -358,14 +341,13 @@ impl TileSource {
 /// inside `attr`'s `desc` is not:
 ///
 /// - `src` — where the body came from, for anyone watching cache behaviour.
-/// - `attr` — the tile's dataset codes, present exactly when they are known. A tile
-///   cached before tiles carried attribution has none, and gets no `attr` rather
-///   than an empty one that would read as "nothing to credit".
-fn with_timing(
-    builder: Builder,
-    source: TileSource,
-    attribution: Option<&Attribution>,
-) -> Builder {
+/// - `attr` — the tile's dataset codes, present exactly when they are known. A
+///   cached tile without its xattr gets no `attr` rather than an empty one that
+///   would read as "nothing to credit".
+///
+/// `X-Attribution` is the same codes in the `/export` spelling, for a client that
+/// fetches the tile itself and cannot see it cross-origin without the expose header.
+fn annotate(builder: Builder, source: TileSource, attribution: Option<&Attribution>) -> Builder {
     let metrics = attribution.map_or_else(
         || format!("src;desc=\"{}\"", source.as_str()),
         |attribution| {
@@ -377,9 +359,15 @@ fn with_timing(
         },
     );
 
-    builder
+    let builder = builder
         .header("Server-Timing", metrics)
         .header("Timing-Allow-Origin", "*")
+        .header("Access-Control-Expose-Headers", ATTRIBUTION_HEADER);
+
+    match attribution {
+        Some(attribution) => builder.header(ATTRIBUTION_HEADER, attribution.encode()),
+        None => builder,
+    }
 }
 
 fn parse_y_suffix(input: &str) -> Option<(u32, f64, Option<&str>)> {
@@ -435,12 +423,12 @@ pub fn tile_bounds_to_epsg3857(x: u32, y: u32, zoom: u8, tile_size: u32) -> Rect
 
 #[cfg(test)]
 mod tests {
-    use super::{TileSource, parse_y_suffix, with_timing};
+    use super::{TileSource, annotate, parse_y_suffix};
     use crate::render::Attribution;
     use axum::http::Response;
 
     fn header(attribution: Option<&Attribution>, name: &str) -> Option<String> {
-        with_timing(Response::builder(), TileSource::Cache, attribution)
+        annotate(Response::builder(), TileSource::Cache, attribution)
             .body(())
             .expect("response")
             .headers()
@@ -483,9 +471,42 @@ mod tests {
     }
 
     #[test]
+    fn the_attribution_header_keeps_known_empty_apart_from_unknown() {
+        let mut attribution = Attribution::default();
+        attribution.add_osm();
+        attribution.add_shading("sk");
+        attribution.add_contours("sk");
+
+        assert_eq!(
+            header(Some(&attribution), "X-Attribution").as_deref(),
+            Some("csk,o,ssk")
+        );
+
+        // The gray tile credits nothing: present and empty, not absent.
+        assert_eq!(
+            header(Some(&Attribution::default()), "X-Attribution").as_deref(),
+            Some("")
+        );
+
+        // Unknown is absent, which a client reads as "widen the credit".
+        assert_eq!(header(None, "X-Attribution"), None);
+
+        // A cross-origin `fetch` sees `null` without this, so it goes out either way.
+        for attribution in [Some(&attribution), None] {
+            assert_eq!(
+                header(attribution, "Access-Control-Expose-Headers").as_deref(),
+                Some("X-Attribution")
+            );
+        }
+    }
+
+    #[test]
     fn the_y_suffix_carries_the_scale_and_extension() {
         assert_eq!(parse_y_suffix("91000"), Some((91_000, 1.0, None)));
-        assert_eq!(parse_y_suffix("91000.jpeg"), Some((91_000, 1.0, Some("jpeg"))));
+        assert_eq!(
+            parse_y_suffix("91000.jpeg"),
+            Some((91_000, 1.0, Some("jpeg")))
+        );
         assert_eq!(parse_y_suffix("91000@2x"), Some((91_000, 2.0, None)));
         assert_eq!(
             parse_y_suffix("91000@2x.jpg"),

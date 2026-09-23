@@ -241,7 +241,7 @@ For Nginx you can find configuration in [outdoor.tiles.freemap.sk](./etc/nginx/s
 
 It proxies tiles rather than serving them off disk with `try_files`, and runs with
 `MAPRENDER_SERVE_CACHED=true`. The renderer is the only thing that can read a tile's
-attribution out of its `COM` segment, so a tile served past it arrives without its
+attribution out of its extended attribute, so a tile served past it arrives without its
 `Server-Timing` (see [Attribution](#attribution)) — and with `serve_cached` the renderer
 handles the cache hit and the miss in one place, so the proxy needs no `try_files`
 fallback and no `?rerender` special case. The cost is that a cache hit goes through the
@@ -366,10 +366,15 @@ Endpoint: `/service`
 
 ### Attribution
 
-Every rendered tile carries the datasets that contributed a pixel to it, as a JPEG `COM`
-segment (`FF FE | len_hi len_lo | payload`) placed right after the JFIF `APP0`, which keeps
-the file a conformant JFIF. Reading it back walks the segment chain over the first kilobyte
-— no fixed offset to depend on which `APP` segments the encoder writes, and no decoding.
+Every cached tile keeps the datasets that contributed a pixel to it in a `user.attribution`
+extended attribute on its file: beside the image bytes, so no client ever sees it, but on
+the same inode, so it goes wherever the file goes and is deleted with it. A tile is written
+to a temporary file with its attribute and renamed into place, so a reader gets either the
+old tile and codes or the new ones, never a mix.
+
+The cache filesystem needs user xattrs (ext4 and xfs have them), and a copy of the cache
+needs `rsync -X` to keep them. A tile without the attribute is served with its codes
+unknown.
 
 The API names a dataset by a namespaced code — `osm`, `shading:<key>`, `contours:<key>`,
 where `<key>` is a `--hillshading-hierarchy` / `--contour-countries` key or `_` for a global
@@ -402,9 +407,6 @@ the whole layer is drawn under, so a dataset whose only pixels on a tile fall on
 still named; and whether a contour line really falls inside the region a country's contours
 may draw in, rather than just that the region and the rows both exist.
 
-Exported PNG and PDF carry the same list — in a `tEXt` chunk keyed `map-attribution`, and in
-the document keywords.
-
 **For live browsing**, every tile response also carries the same short codes in a header:
 
 ```http
@@ -423,11 +425,26 @@ Metrics are comma-separated, which is why the code list inside `attr` is not:
 - `src` is `cache`, `render` or `outside-coverage` — where the body came from.
 - `attr` is the codes, present exactly when they are known: on a fresh render, on a cache
   hit, on the `304` of a revalidated tile, and on the out-of-coverage gray tile, where
-  `desc=""` says "nothing to credit" rather than "unknown". A tile cached before tiles
-  carried attribution gets no `attr` at all, and turns over on its own.
+  `desc=""` says "nothing to credit" rather than "unknown". A cached tile without its
+  attribute gets no `attr` at all.
 
-The `COM` segment is storage — it is what a cached tile carries its codes in between
-renders, and what an exported file carries with it. The header is delivery.
+A client that fetches the tile itself — the offline-map downloader — reads the same list,
+from the same source, without parsing `Server-Timing`:
+
+```http
+X-Attribution: csk,o,ssk
+Access-Control-Expose-Headers: X-Attribution
+```
+
+Split it on commas, like the export's header of the same name. It keeps the distinction
+`attr` makes: present and empty on the gray tile, absent when the codes are unknown — which a
+client should read as "widen the credit".
+Without `Access-Control-Expose-Headers` a cross-origin `fetch` gets `null` from
+`headers.get()` and no error anywhere; it is a separate gate from `Timing-Allow-Origin`,
+which is all an `<img>` read through `serverTiming` needs.
+
+The extended attribute is storage — what a cached tile carries its codes in between
+renders. The headers are delivery.
 
 **Code dictionary:**
 
@@ -486,7 +503,7 @@ holding a code it cannot resolve.
 
 **Export attribution:** an export's codes come back on the poll the client already makes, in
 the `X-Attribution` response header of `HEAD /export` and `GET /export` — the same short
-spelling as the tile header and the embedded metadata, `o,ssk,csk`.
+spelling as the tile header, `o,ssk,csk`.
 
 **The burnt-in attribution line** is composed here, not sent. Only the finished render knows
 which datasets contributed a pixel, so a client that composed the text would be guessing from

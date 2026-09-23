@@ -1,4 +1,4 @@
-pub use attribution::{Attribution, FALLBACK_KEY, JPEG_COM_HEAD_LEN, OSM as OSM_CODE, parse_jpeg_com};
+pub use attribution::{ATTRIBUTION_HEADER, Attribution, FALLBACK_KEY, OSM as OSM_CODE};
 pub use coverage::{TileCoverageRelation, tile_touches_coverage};
 pub use feature::{Feature, FeatureError, GeomError, LegendValue};
 pub use image_format::ImageFormat;

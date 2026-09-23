@@ -1002,6 +1002,7 @@ dependencies = [
  "rand",
  "regex",
  "rustc-hash",
+ "rustix",
  "serde",
  "serde-saphyr",
  "serde_json",

@@ -1,11 +1,22 @@
-use crate::app::tile_coord::TileCoord;
+use crate::{app::tile_coord::TileCoord, render::Attribution};
+use rustix::fs::{XattrFlags, fgetxattr, fsetxattr};
 use sled::Batch;
 use std::{
     collections::{HashMap, HashSet},
     fs, io,
-    path::PathBuf,
+    os::fd::AsFd,
+    path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
+
+/// Where a cached tile keeps its dataset codes, in the short comma form. On the
+/// tile's own inode rather than in `--index`, so the codes go wherever the file
+/// goes and are deleted with it.
+const ATTRIBUTION_XATTR: &str = "user.attribution";
+
+/// Longest value [`read_attribution`] accepts; nine sources on a triple border
+/// take 31 bytes.
+const MAX_ATTRIBUTION_LEN: usize = 1024;
 
 #[derive(Clone)]
 pub struct VariantConfig {
@@ -83,6 +94,7 @@ impl TileProcessor {
     pub(crate) fn handle_save_tile(
         &self,
         data: Vec<u8>,
+        attribution: &Attribution,
         coord: TileCoord,
         scale: f64,
         render_started_at: SystemTime,
@@ -111,18 +123,8 @@ impl TileProcessor {
             eprintln!("create tile dir failed: {err}");
         }
 
-        match fs::File::create(&file_path) {
-            Err(err) => eprintln!("write tile failed: {err}"),
-            Ok(mut file) => {
-                if let Err(err) = io::Write::write_all(&mut file, &data) {
-                    eprintln!("write tile failed: {err}");
-                } else {
-                    let times = fs::FileTimes::new().set_modified(render_started_at);
-                    if let Err(err) = file.set_times(times) {
-                        eprintln!("set tile mtime failed: {err}");
-                    }
-                }
-            }
+        if let Err(err) = write_tile(&file_path, &data, attribution, render_started_at) {
+            eprintln!("write tile {coord}@{scale} failed: {err}");
         }
     }
 
@@ -267,10 +269,118 @@ impl TileProcessor {
     }
 }
 
+/// Writes the tile beside its final path and renames it into place, so a reader
+/// sees either the old tile or the new one whole — never new bytes with the old
+/// codes, or a partial file.
+fn write_tile(
+    path: &Path,
+    data: &[u8],
+    attribution: &Attribution,
+    modified: SystemTime,
+) -> io::Result<()> {
+    // The processing worker is the only writer, so a fixed name cannot collide.
+    let tmp_path = path.with_extension("jpeg.tmp");
+
+    let result = (|| {
+        let mut file = fs::File::create(&tmp_path)?;
+
+        // Unknown codes only widen the credit, so a filesystem without user xattrs
+        // still caches the tile.
+        if let Err(err) = write_attribution(&file, attribution) {
+            eprintln!("set tile attribution failed: {err}");
+        }
+
+        io::Write::write_all(&mut file, data)?;
+
+        file.set_times(fs::FileTimes::new().set_modified(modified))?;
+
+        fs::rename(&tmp_path, path)
+    })();
+
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp_path);
+    }
+
+    result
+}
+
+fn write_attribution(file: &fs::File, attribution: &Attribution) -> io::Result<()> {
+    fsetxattr(
+        file,
+        ATTRIBUTION_XATTR,
+        attribution.encode().as_bytes(),
+        XattrFlags::empty(),
+    )
+    .map_err(io::Error::from)
+}
+
+/// The codes a cached tile was saved with, or `None` when the filesystem could not
+/// store them.
+pub fn read_attribution(file: impl AsFd) -> Option<Attribution> {
+    let mut value = [0u8; MAX_ATTRIBUTION_LEN];
+
+    let len = fgetxattr(file, ATTRIBUTION_XATTR, &mut value).ok()?;
+
+    std::str::from_utf8(&value[..len])
+        .ok()
+        .map(Attribution::decode)
+}
+
 pub fn cached_tile_path(base: &std::path::Path, coord: TileCoord, scale: f64) -> PathBuf {
     let mut path = base.to_owned();
     path.push(coord.zoom.to_string());
     path.push(coord.x.to_string());
     path.push(format!("{}@{scale}.jpeg", coord.y));
     path
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{read_attribution, write_tile};
+    use crate::render::Attribution;
+    use std::{fs, time::SystemTime};
+
+    /// Removes the tile even when an assertion fails.
+    struct TempTile(std::path::PathBuf);
+
+    impl Drop for TempTile {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.0);
+        }
+    }
+
+    #[test]
+    fn a_saved_tile_keeps_known_empty_apart_from_unknown() {
+        let tile =
+            TempTile(std::env::temp_dir().join(format!("tile-xattr-{}.jpeg", std::process::id())));
+
+        fs::write(&tile.0, b"old").expect("tile written");
+
+        // Where user xattrs are unsupported there is nothing to test.
+        if let Err(err) = rustix::fs::fgetxattr(
+            fs::File::open(&tile.0).expect("tile opened"),
+            "user.attribution",
+            &mut [0u8; 1],
+        ) && err == rustix::io::Errno::NOTSUP
+        {
+            return;
+        }
+
+        let read = || read_attribution(fs::File::open(&tile.0).expect("tile opened"));
+
+        assert_eq!(read(), None);
+
+        let mut attribution = Attribution::default();
+        attribution.add_osm();
+        attribution.add_shading("sk");
+
+        write_tile(&tile.0, b"new", &attribution, SystemTime::now()).expect("tile saved");
+        assert_eq!(read(), Some(attribution));
+        assert_eq!(fs::read(&tile.0).expect("tile read"), b"new");
+
+        // A re-render crediting nothing replaces the codes rather than keeping them.
+        write_tile(&tile.0, b"gray", &Attribution::default(), SystemTime::now())
+            .expect("tile saved");
+        assert_eq!(read(), Some(Attribution::default()));
+    }
 }

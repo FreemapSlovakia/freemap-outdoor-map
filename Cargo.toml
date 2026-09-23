@@ -70,6 +70,7 @@ indexmap = { version = "2.14.0", features = ["serde"] }
 notify = "8.2.0"
 tokio-util = { version = "0.7.19", features = ["io"] }
 sled = "0.34.7"
+rustix = { version = "1.1.4", features = ["fs"] }
 httpdate = "1.0.3"
 enumset = "1.1.14"
 cosmic-text = { version = "0.19.0", features = [
