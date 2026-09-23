@@ -43,6 +43,7 @@ mod protected_areas;
 mod road_access_restrictions;
 mod roads;
 mod routes;
+mod sac_scale;
 mod sea;
 mod shading_and_contours;
 mod solar_power_plants;

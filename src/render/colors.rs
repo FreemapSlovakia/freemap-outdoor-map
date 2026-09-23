@@ -248,6 +248,17 @@ pub const GLACIER: Color = parse_color("hsl(216, 65%, 90%)");
 pub const QUARRY: Color = parse_color("hsl(0, 0%, 78%)");
 pub const RESIDENTIAL: Color = parse_color("hsl(100, 0%, 91%)");
 pub const ROAD: Color = parse_color("hsl(40, 60%, 50%)");
+/// SAC hiking scale T1..T6, easy to hard. Indexed by the `sac_scale` enumerate
+/// minus one. Ordered as a single green-to-red ramp so the grade reads off the
+/// colour without a legend.
+pub const SAC_SCALE: [Color; 6] = [
+    parse_color("hsl(150, 50%, 45%)"),
+    parse_color("hsl(68, 70%, 42%)"),
+    parse_color("hsl(42, 95%, 48%)"),
+    parse_color("hsl(22, 95%, 50%)"),
+    parse_color("hsl(0, 85%, 48%)"),
+    parse_color("hsl(348, 75%, 33%)"),
+];
 pub const SCREE: Color = parse_color("hsl(0, 0%, 90%)");
 pub const SCRUB: Color = parse_color("hsl(100, 70%, 86%)");
 pub const SILO_STROKE: Color = parse_color("hsl(50, 20%, 30%)");

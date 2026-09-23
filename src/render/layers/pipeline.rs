@@ -130,6 +130,7 @@ fn key_layers(key: &str) -> &'static [RenderLayer] {
         "geonames" => &[L::Geonames],
         "country_borders" => &[L::CountryBorders],
         "country_names" => &[L::CountryNames],
+        "sac_scale" => &[L::SacScale],
         "routes" => &[
             L::RoutesHiking,
             L::RoutesHikingKst,
@@ -1281,6 +1282,17 @@ pub fn render(
             None,
             |ctx, conn| async move { layers::country_names::query(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::country_names::render(&ctx, context, rows),
+        );
+    }
+
+    // Last of the map layers: the grade qualifies everything drawn below it, and
+    // as an overlay it has nothing of its own to hide behind.
+    if zoom >= layers::sac_scale::MIN_ZOOM && to_render.contains(RenderLayer::SacScale) {
+        prefetcher.add(
+            "sac_scale",
+            None,
+            |ctx, conn| async move { layers::sac_scale::query(&ctx, &conn).await }.boxed(),
+            |rows, _params| layers::sac_scale::render(&ctx, context, rows),
         );
     }
 
