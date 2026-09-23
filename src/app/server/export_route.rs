@@ -3,9 +3,7 @@ use crate::{
     render::{
         ATTRIBUTION_HEADER, Attribution, AttributionDecoration, CustomLayer, CustomLayerOrder,
         Decorations, Glow, ImageFormat, LabelStyle, Layers, RenderLayer, RenderRequest,
-        WebpQuality,
-        RenderWorkerPool,
-        bbox_size_in_pixels,
+        RenderWorkerPool, WebpQuality, bbox_size_in_pixels,
     },
 };
 use axum::{
@@ -288,7 +286,8 @@ pub async fn post(
     State(state): State<AppState>,
     Json(request): Json<ExportRequest>,
 ) -> Response<Body> {
-    let (format, ext, content_type) = match parse_format(request.format.as_deref(), request.quality) {
+    let (format, ext, content_type) = match parse_format(request.format.as_deref(), request.quality)
+    {
         Ok(value) => value,
         Err(response) => return *response,
     };
@@ -348,6 +347,15 @@ pub async fn post(
     if let Some(features) = &request.features
         && let Some(layers) = &features.layers
     {
+        // Skipping these would make a base layer in `layers` a silent no-op,
+        // where it used to be a 400. It is still the wrong list for them.
+        if layers
+            .iter()
+            .any(|layer| !ExportLayer::TOGGLEABLE.contains(layer))
+        {
+            return bad_request();
+        }
+
         for export_layer in ExportLayer::TOGGLEABLE {
             for render_layer in export_layer.render_layers() {
                 if layers.contains(&export_layer) {
@@ -362,14 +370,17 @@ pub async fn post(
     let layers = Layers {
         base_map,
         add: render,
-        omit: request.features.as_ref().map_or_else(HashSet::new, |features| {
-            features
-                .omit
-                .iter()
-                .flat_map(|layer| layer.render_layers())
-                .copied()
-                .collect()
-        }),
+        omit: request
+            .features
+            .as_ref()
+            .map_or_else(HashSet::new, |features| {
+                features
+                    .omit
+                    .iter()
+                    .flat_map(|layer| layer.render_layers())
+                    .copied()
+                    .collect()
+            }),
     };
 
     if layers.validate().is_err() {

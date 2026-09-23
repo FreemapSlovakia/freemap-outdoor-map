@@ -24,7 +24,9 @@ const DEFAULT_WEBP_QUALITY: f32 = 80.0;
 /// sparsity to exploit; a sparse one encodes smaller lossless, and without the
 /// fringing a photo codec leaves around text.
 fn parse_format(token: &str) -> Option<Result<ImageFormat, String>> {
-    let (name, quality) = token.split_once('=').map_or((token, None), |(name, q)| (name, Some(q)));
+    let (name, quality) = token
+        .split_once('=')
+        .map_or((token, None), |(name, q)| (name, Some(q)));
 
     let lossy = |default: f32| {
         quality.map_or(Ok(default), |q| match q.parse::<f32>() {
@@ -34,12 +36,13 @@ fn parse_format(token: &str) -> Option<Result<ImageFormat, String>> {
         })
     };
 
-    let lossless =
-        || quality.map_or(Ok(()), |_| Err(format!("format '{name}' takes no quality")));
+    let lossless = || quality.map_or(Ok(()), |_| Err(format!("format '{name}' takes no quality")));
 
     Some(match name {
         "jpeg" => lossy(DEFAULT_JPEG_QUALITY).map(|q| ImageFormat::Jpeg(q as u8)),
-        "webp-lossy" => lossy(DEFAULT_WEBP_QUALITY).map(|q| ImageFormat::Webp(WebpQuality::Lossy(q))),
+        "webp-lossy" => {
+            lossy(DEFAULT_WEBP_QUALITY).map(|q| ImageFormat::Webp(WebpQuality::Lossy(q)))
+        }
         "png" => lossless().map(|()| ImageFormat::Png),
         "webp" => lossless().map(|()| ImageFormat::Webp(WebpQuality::Lossless)),
         _ => return None,
@@ -153,8 +156,8 @@ impl FromStr for TileVariants {
                     }
 
                     format_seen = true;
-                    variant.format = format
-                        .map_err(|err| format!("tile variant '{entry}': {err}"))?;
+                    variant.format =
+                        format.map_err(|err| format!("tile variant '{entry}': {err}"))?;
                 } else {
                     return Err(format!("unknown field '{field}' in tile variant '{entry}'"));
                 }
@@ -167,9 +170,7 @@ impl FromStr for TileVariants {
 
             // An overlay leaves most of the surface unpainted; an opaque format
             // renders that as solid black rather than as nothing.
-            if !variant.layers.is_whole_map()
-                && !variant.format.has_alpha()
-            {
+            if !variant.layers.is_whole_map() && !variant.format.has_alpha() {
                 return Err(format!(
                     "tile variant '{}' is an overlay, so it needs an alpha-capable format",
                     variant.url_path
@@ -209,13 +210,16 @@ mod tests {
         assert_eq!(v.len(), 3);
 
         assert_eq!(v[0].url_path, "/");
-        assert_eq!(v[0].format.extension(), "jpeg");
+        assert_eq!(v[0].format, ImageFormat::Jpeg(DEFAULT_JPEG_QUALITY as u8));
         assert!(v[0].layers.base_map);
         assert!(v[0].layers.draws(RenderLayer::Shading));
-        assert_eq!(v[0].coverage_geojson.as_deref(), Some("/c.geojson".as_ref()));
+        assert_eq!(
+            v[0].coverage_geojson.as_deref(),
+            Some("/c.geojson".as_ref())
+        );
 
         assert!(!v[1].layers.base_map);
-        assert_eq!(v[1].format.extension(), "webp");
+        assert_eq!(v[1].format, ImageFormat::Webp(WebpQuality::Lossless));
         assert!(v[1].layers.draws(RenderLayer::SacScale));
         assert!(!v[1].layers.draws(RenderLayer::Sea));
 
@@ -225,9 +229,61 @@ mod tests {
     }
 
     #[test]
+    fn reads_a_quality_off_the_format() {
+        let v = parse(
+            "/a jpeg=70; /b webp-lossy=5 overlay +sac-scale; /c webp-lossy overlay +sac-scale",
+        )
+        .expect("parses");
+
+        assert_eq!(v[0].format, ImageFormat::Jpeg(70));
+        assert_eq!(v[1].format, ImageFormat::Webp(WebpQuality::Lossy(5.0)));
+        assert_eq!(
+            v[2].format,
+            ImageFormat::Webp(WebpQuality::Lossy(DEFAULT_WEBP_QUALITY))
+        );
+    }
+
+    #[test]
+    fn rejects_a_quality_that_is_not_one() {
+        assert!(
+            parse("/ jpeg=101")
+                .expect_err("too high")
+                .contains("outside 0..=100")
+        );
+        assert!(
+            parse("/ jpeg=-1")
+                .expect_err("negative")
+                .contains("outside 0..=100")
+        );
+        assert!(
+            parse("/ jpeg=abc")
+                .expect_err("not a number")
+                .contains("not a number")
+        );
+        assert!(
+            parse("/o/x webp=80 overlay +sac-scale")
+                .expect_err("lossless takes none")
+                .contains("takes no quality")
+        );
+        assert!(
+            parse("/ png=80")
+                .expect_err("lossless takes none")
+                .contains("takes no quality")
+        );
+    }
+
+    #[test]
     fn rejects_a_layer_in_the_wrong_list() {
-        assert!(parse("/ +landcover").expect_err("base layer added").contains("omit list"));
-        assert!(parse("/ -contours").expect_err("extra omitted").contains("render list"));
+        assert!(
+            parse("/ +landcover")
+                .expect_err("base layer added")
+                .contains("omit list")
+        );
+        assert!(
+            parse("/ -contours")
+                .expect_err("extra omitted")
+                .contains("render list")
+        );
     }
 
     #[test]
@@ -241,9 +297,25 @@ mod tests {
 
     #[test]
     fn rejects_duplicates_and_junk() {
-        assert!(parse("/ ; /").expect_err("duplicate path").contains("duplicate"));
-        assert!(parse("x jpeg").expect_err("no slash").contains("must start with '/'"));
-        assert!(parse("/ wat").expect_err("junk field").contains("unknown field"));
-        assert!(parse("/ jpeg webp").expect_err("two formats").contains("two formats"));
+        assert!(
+            parse("/ ; /")
+                .expect_err("duplicate path")
+                .contains("duplicate")
+        );
+        assert!(
+            parse("x jpeg")
+                .expect_err("no slash")
+                .contains("must start with '/'")
+        );
+        assert!(
+            parse("/ wat")
+                .expect_err("junk field")
+                .contains("unknown field")
+        );
+        assert!(
+            parse("/ jpeg webp")
+                .expect_err("two formats")
+                .contains("two formats")
+        );
     }
 }

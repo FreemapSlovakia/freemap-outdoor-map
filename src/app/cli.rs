@@ -142,7 +142,8 @@ pub struct Cli {
 
     /// Every tile route, one per `;`-separated entry, lines allowed. An entry is
     /// a URL path followed by space-separated fields in any order: a format
-    /// (`jpeg` by default, or `png`, `webp`, `webp-lossy`), `overlay` to leave
+    /// (`jpeg` by default, or `png`, `webp`, `webp-lossy`, the lossy ones taking
+    /// an optional `=<quality>` — `jpeg=85`, default 90 and 80), `overlay` to leave
     /// out the layers the map draws by itself, `+<layers>` to add extras,
     /// `-<layers>` to drop base layers, and `cache=`, `index=`, `coverage=`.
     /// A layer is either an extra or part of the map, never both, so naming one
@@ -219,6 +220,16 @@ impl Cli {
     }
 
     fn validate(&self) -> Result<(), String> {
+        // Clap sees an unknown flag but never an unknown env var, and this one
+        // moved into the format field of a tile variant.
+        if std::env::var_os("MAPRENDER_WEBP_QUALITY").is_some() {
+            return Err(
+                "MAPRENDER_WEBP_QUALITY is gone; quality is a field of the format in \
+                 MAPRENDER_TILE_VARIANTS, as in 'webp-lossy=90' or 'jpeg=85'"
+                    .into(),
+            );
+        }
+
         if self.min_zoom > self.max_zoom {
             return Err(format!(
                 "min-zoom {} is greater than max-zoom {}",

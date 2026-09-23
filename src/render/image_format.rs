@@ -10,7 +10,7 @@ pub enum WebpQuality {
     Lossy(f32),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ImageFormat {
     Png,
     /// Quality 1..=100.
