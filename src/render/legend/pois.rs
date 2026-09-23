@@ -1,7 +1,8 @@
 use crate::render::{
     layers::{Category, Def, INACCESSIBLE_ZOOM_DELAY, POI_ORDER, POIS, SHOP_TYPES},
     legend::{
-        BuildOpts, LegendItem, LegendItemBuilder, MAX_LEGEND_ZOOM, build_tags_map, leak_str,
+        BuildOpts, LegendItem, LegendItemBuilder, MAX_LEGEND_ZOOM, PropsBuilder, build_tags_map,
+        leak_str,
         mapping::{self, MappingEntry},
     },
 };
@@ -464,11 +465,25 @@ impl LegendItemBuilder<'_> {
 
         let offset = if self.for_taginfo { 0.0 } else { factor * -2.0 };
 
-        self.add_landcover(bg).add_feature("pois", |b| {
+        let feature = move |b: PropsBuilder| {
             b.with("type", typ)
                 .with_name()
-                .with("extra", extra)
+                .with("extra", extra.clone())
                 .with("geometry", Point::new(0.0, offset))
-        })
+        };
+
+        let item = self.add_landcover(bg).add_feature("pois", feature.clone());
+
+        // Waymarking is drawn by the POI layer on the map and by a layer of its
+        // own on an overlay, so its samples are filed under both — or an overlay
+        // carrying guideposts would have no legend item for them.
+        if WAYMARKING_TYPES.contains(&typ) {
+            item.add_feature("waymarking", feature)
+        } else {
+            item
+        }
     }
 }
+
+/// The POI types `layers::pois::query_waymarking` selects.
+const WAYMARKING_TYPES: [&str; 3] = ["guidepost", "guidepost_noname", "route_marker"];
