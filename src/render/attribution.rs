@@ -51,8 +51,7 @@ impl Attribution {
     /// The form every cached tile stores and `X-Attribution` sends: the codes
     /// comma-separated, each with its namespace shortened to one character — `o`,
     /// `s<key>`, `c<key>`. A tile near a triple border lists nine sources in 31
-    /// bytes this way. [`encode_spaced`](Self::encode_spaced) is the same list for
-    /// a header that cannot hold commas.
+    /// bytes this way.
     ///
     /// Sorted by the long code, so the namespaces group and a given set of sources
     /// always encodes to the same bytes.
@@ -62,23 +61,11 @@ impl Attribution {
     /// They cannot contain the separator — `--hillshading-hierarchy` and
     /// `--contour-countries` split on `,` themselves.
     pub fn encode(&self) -> String {
-        self.join(",")
-    }
-
-    /// The same short codes space-separated, for a `Server-Timing` `desc`. The
-    /// `Server-Timing` grammar splits metrics on commas, and quoting one is not
-    /// worth relying on across browsers — but it is the same spelling, so a client
-    /// that reads either reads both.
-    pub fn encode_spaced(&self) -> String {
-        self.join(" ")
-    }
-
-    fn join(&self, separator: &str) -> String {
         self.0
             .iter()
             .map(|code| shorten(code))
             .collect::<Vec<_>>()
-            .join(separator)
+            .join(",")
     }
 
     pub fn decode(payload: &str) -> Self {
@@ -136,7 +123,6 @@ mod tests {
         // Sorted by the long code, so the namespaces group and a given set of
         // sources always encodes to the same bytes.
         assert_eq!(attribution.encode(), "cat,o,sde_by");
-        assert_eq!(attribution.encode_spaced(), "cat o sde_by");
         assert_eq!(Attribution::decode(&attribution.encode()), attribution);
     }
 

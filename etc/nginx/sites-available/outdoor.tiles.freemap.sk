@@ -210,10 +210,9 @@ server {
                 error_page 404 /40x.html;
         }
 
-        # Open to any origin, unlike the rest: the tiles it explains are readable by
-        # anyone as an <img> and advertise their codes in Server-Timing, so limiting
-        # the dictionary to the allowlist would leave other readers holding codes
-        # they cannot resolve. Nothing here is credentialed.
+        # Open to any origin, unlike the rest: it is public reference data, nothing
+        # here is credentialed, and a code reaches its reader through channels this
+        # allowlist does not cover — a saved export, an offline map passed on.
         location = /licenses {
                 if ($request_method = OPTIONS) {
                         add_header Access-Control-Allow-Origin "*";

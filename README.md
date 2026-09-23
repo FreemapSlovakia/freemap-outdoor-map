@@ -242,7 +242,7 @@ For Nginx you can find configuration in [outdoor.tiles.freemap.sk](./etc/nginx/s
 It proxies tiles rather than serving them off disk with `try_files`, and runs with
 `MAPRENDER_SERVE_CACHED=true`. The renderer is the only thing that can read a tile's
 attribution out of its extended attribute, so a tile served past it arrives without its
-`Server-Timing` (see [Attribution](#attribution)) — and with `serve_cached` the renderer
+`X-Attribution` (see [Attribution](#attribution)) — and with `serve_cached` the renderer
 handles the cache hit and the miss in one place, so the proxy needs no `try_files`
 fallback and no `?rerender` special case. The cost is that a cache hit goes through the
 renderer's read instead of `sendfile`.
@@ -407,41 +407,32 @@ the whole layer is drawn under, so a dataset whose only pixels on a tile fall on
 still named; and whether a contour line really falls inside the region a country's contours
 may draw in, rather than just that the region and the rows both exist.
 
-**For live browsing**, every tile response also carries the same short codes in a header:
-
-```http
-Server-Timing: src;desc="cache", attr;desc="csk o ssk"
-Timing-Allow-Origin: *
-```
-
-`Server-Timing` is the one response header JavaScript can read off an `<img>`, through
-`PerformanceResourceTiming.serverTiming`, so a page credits exactly the datasets painted in
-front of it without fetching tile bytes or taking over the tile lifecycle. Without
-`Timing-Allow-Origin` a cross-origin page gets an empty `serverTiming` and no error anywhere,
-so it goes on every tile response.
-
-Metrics are comma-separated, which is why the code list inside `attr` is not:
-
-- `src` is `cache`, `render` or `outside-coverage` — where the body came from.
-- `attr` is the codes, present exactly when they are known: on a fresh render, on a cache
-  hit, on the `304` of a revalidated tile, and on the out-of-coverage gray tile, where
-  `desc=""` says "nothing to credit" rather than "unknown". A cached tile without its
-  attribute gets no `attr` at all.
-
-A client that fetches the tile itself — the offline-map downloader — reads the same list,
-from the same source, without parsing `Server-Timing`:
+**On the wire**, a tile response that knows its codes carries them in a header:
 
 ```http
 X-Attribution: csk,o,ssk
 Access-Control-Expose-Headers: X-Attribution
 ```
 
-Split it on commas, like the export's header of the same name. It keeps the distinction
-`attr` makes: present and empty on the gray tile, absent when the codes are unknown — which a
-client should read as "widen the credit".
-Without `Access-Control-Expose-Headers` a cross-origin `fetch` gets `null` from
-`headers.get()` and no error anywhere; it is a separate gate from `Timing-Allow-Origin`,
-which is all an `<img>` read through `serverTiming` needs.
+Split it on commas, like the export's header of the same name. It is present on a fresh
+render, on a cache hit, on the `304` of a revalidated tile, and on the out-of-coverage gray
+tile, where it is empty — "nothing to credit" rather than "unknown". A cached tile without
+its attribute gets no header at all, which a client should read as "widen the credit".
+Reading it takes a `fetch` — response headers are out of reach of an `<img>` — and
+cross-origin that `fetch` needs both `Access-Control-Allow-Origin`, which the sample nginx
+grants only to an allowlist of origins, and `Access-Control-Expose-Headers`, without which
+`headers.get()` is `null` with no error anywhere.
+
+Separately, every tile response says where its body came from:
+
+```http
+Server-Timing: src;desc="cache"
+Timing-Allow-Origin: *
+```
+
+`src` is `cache`, `render` or `outside-coverage`. It is what a page can read off an `<img>`,
+through `PerformanceResourceTiming.serverTiming`, and without `Timing-Allow-Origin` a
+cross-origin page gets an empty `serverTiming` and no error anywhere.
 
 The extended attribute is storage — what a cached tile carries its codes in between
 renders. The headers are delivery.

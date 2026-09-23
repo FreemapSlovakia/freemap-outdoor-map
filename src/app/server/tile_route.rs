@@ -328,39 +328,14 @@ impl TileSource {
     }
 }
 
-/// Annotates the response with what the page displaying it needs to know about it.
-///
-/// `Server-Timing` is the one response header JavaScript can read off an `<img>`,
-/// through `PerformanceResourceTiming.serverTiming` — so a client credits exactly
-/// what is painted without fetching tile bytes or taking over the tile lifecycle.
-/// `Timing-Allow-Origin` is what makes that work cross-origin: without it the
-/// browser hands the page an empty `serverTiming` and reports nothing anywhere, so
-/// it goes on every tile response.
-///
-/// Two metrics, comma-separated as the grammar wants — which is why the code list
-/// inside `attr`'s `desc` is not:
-///
-/// - `src` — where the body came from, for anyone watching cache behaviour.
-/// - `attr` — the tile's dataset codes, present exactly when they are known. A
-///   cached tile without its xattr gets no `attr` rather than an empty one that
-///   would read as "nothing to credit".
-///
-/// `X-Attribution` is the same codes in the `/export` spelling, for a client that
-/// fetches the tile itself and cannot see it cross-origin without the expose header.
+/// Annotates the response for the client fetching it: `X-Attribution` carries the
+/// tile's dataset codes — absent rather than empty when they are unknown — and
+/// `Server-Timing`'s `src` where the body came from. Each has its own cross-origin
+/// gate (`Access-Control-Expose-Headers`, `Timing-Allow-Origin`); without it the
+/// value reads as `null` or empty with no error anywhere.
 fn annotate(builder: Builder, source: TileSource, attribution: Option<&Attribution>) -> Builder {
-    let metrics = attribution.map_or_else(
-        || format!("src;desc=\"{}\"", source.as_str()),
-        |attribution| {
-            format!(
-                "src;desc=\"{}\", attr;desc=\"{}\"",
-                source.as_str(),
-                attribution.encode_spaced()
-            )
-        },
-    );
-
     let builder = builder
-        .header("Server-Timing", metrics)
+        .header("Server-Timing", format!("src;desc=\"{}\"", source.as_str()))
         .header("Timing-Allow-Origin", "*")
         .header("Access-Control-Expose-Headers", ATTRIBUTION_HEADER);
 
@@ -437,37 +412,23 @@ mod tests {
     }
 
     #[test]
-    fn the_metrics_separate_on_commas_and_the_code_list_does_not() {
+    fn the_source_metric_stands_without_the_codes() {
         let mut attribution = Attribution::default();
         attribution.add_osm();
-        attribution.add_shading("sk");
-        attribution.add_contours("sk");
 
-        // A comma inside `desc` would split the code list off into metrics of its own.
-        assert_eq!(
-            header(Some(&attribution), "Server-Timing").as_deref(),
-            Some("src;desc=\"cache\", attr;desc=\"csk o ssk\"")
-        );
+        for attribution in [Some(&attribution), None] {
+            assert_eq!(
+                header(attribution, "Server-Timing").as_deref(),
+                Some("src;desc=\"cache\"")
+            );
 
-        // Known to credit nothing (outside coverage) is an `attr` with an empty list…
-        assert_eq!(
-            header(Some(&Attribution::default()), "Server-Timing").as_deref(),
-            Some("src;desc=\"cache\", attr;desc=\"\"")
-        );
-
-        // … while not knowing is no `attr` at all, and `src` still stands.
-        assert_eq!(
-            header(None, "Server-Timing").as_deref(),
-            Some("src;desc=\"cache\"")
-        );
-
-        // Cross-origin the page sees an empty `serverTiming` and no error without
-        // this, so it goes out either way.
-        assert_eq!(
-            header(Some(&attribution), "Timing-Allow-Origin").as_deref(),
-            Some("*")
-        );
-        assert_eq!(header(None, "Timing-Allow-Origin").as_deref(), Some("*"));
+            // Cross-origin the page sees an empty `serverTiming` and no error
+            // without this, so it goes out either way.
+            assert_eq!(
+                header(attribution, "Timing-Allow-Origin").as_deref(),
+                Some("*")
+            );
+        }
     }
 
     #[test]
