@@ -13,10 +13,9 @@
 # The consolidation pass is not skipped — gdal_contour over a many-thousand-tile
 # VRT is pathologically slow, reopening tiles per scanline.
 
-# INTERVAL 10 m, as everywhere except the Netherlands. The state runs from about
-# 15 m in the northern Altmark — measured, lowest tile minimum found was 15.25 m
-# on the Elbe near Seehausen — to 1141 m on the Brocken, so the range is wide
-# enough that 10 m is unambiguous.
+# INTERVAL 10 m, as everywhere except the Netherlands. Contours run from -10 m
+# in a quarry floor to 1140 m just under the Brocken summit, so the range is
+# wide enough that 10 m is unambiguous. 305449 features.
 #
 # THE NORTH WILL CARRY ALMOST NO LINES AND THAT IS CORRECT. The Altmark sample
 # window held 21.7 m of relief across 2 km, so large areas get one contour or
@@ -30,11 +29,13 @@
 
 # NODATA is -9999, written explicitly by shading-de-st.nu's dem2m step.
 #
-# NO GENUINE 0 m OR NEGATIVE TERRAIN HERE, unlike Niedersachsen. Sachsen-Anhalt
-# is landlocked and its lowest ground is around 15 m, so a 0 m contour would be
-# an artefact rather than a coastline. -snodata stays -9999 regardless; do not
-# add `-snodata 0`, which is Poland's fix for a delivery that overloaded 0 for
-# out-of-coverage and has no business here.
+# 0 m AND NEGATIVE CONTOURS ARE REAL, AND THEY ARE PITS. The natural land
+# surface bottoms out around 15 m in the northern Altmark, but the state is
+# quarried: an open-cast pit at 51.8177, 11.7332 is cut to -12.4 m, and the run
+# produces exactly nine features below 20 m, all of them inside working pits.
+# They are terrain and they stay. Do not "fix" them, and do not add
+# `-snodata 0` — that is Poland's fix for a delivery that overloaded 0 for
+# out-of-coverage, and here it would erase a real pit floor.
 
 # ── HANDOFF TO POSTGIS ────────────────────────────────────────────────────────
 #
