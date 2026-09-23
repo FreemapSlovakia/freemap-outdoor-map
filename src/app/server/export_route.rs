@@ -3,6 +3,7 @@ use crate::{
     render::{
         ATTRIBUTION_HEADER, Attribution, AttributionDecoration, CustomLayer, CustomLayerOrder,
         Decorations, Glow, ImageFormat, LabelStyle, Layers, RenderLayer, RenderRequest,
+        WebpQuality,
         RenderWorkerPool,
         bbox_size_in_pixels,
     },
@@ -108,6 +109,8 @@ pub struct ExportRequest {
     zoom: u8,
     bbox: [f64; 4],
     format: Option<String>,
+    /// Quality for `webp-lossy`, 0..=100. Ignored by every other format.
+    quality: Option<f32>,
     scale: Option<f64>,
     features: Option<ExportFeatures>,
     decorations: Option<ExportDecorations>,
@@ -295,7 +298,7 @@ pub async fn post(
     State(state): State<AppState>,
     Json(request): Json<ExportRequest>,
 ) -> Response<Body> {
-    let (format, ext, content_type) = match parse_format(request.format.as_deref()) {
+    let (format, ext, content_type) = match parse_format(request.format.as_deref(), request.quality) {
         Ok(value) => value,
         Err(response) => return *response,
     };
@@ -640,10 +643,19 @@ fn generate_token() -> String {
     })
 }
 
+/// `quality` only reaches `webp-lossy`. An export is a file someone keeps, so
+/// plain `webp` is the lossless one and asking for loss is explicit.
 fn parse_format(
     format: Option<&str>,
+    quality: Option<f32>,
 ) -> Result<(ImageFormat, &'static str, &'static str), Box<Response<Body>>> {
     let format = format.unwrap_or("pdf");
+
+    if let Some(quality) = quality
+        && !(0.0..=100.0).contains(&quality)
+    {
+        return Err(Box::new(bad_request()));
+    }
 
     match format {
         "pdf" => Ok((ImageFormat::Pdf, "pdf", "application/pdf")),
@@ -651,6 +663,16 @@ fn parse_format(
         "jpeg" => Ok((ImageFormat::Jpeg, "jpeg", "image/jpeg")),
         "jpg" => Ok((ImageFormat::Jpeg, "jpg", "image/jpeg")),
         "png" => Ok((ImageFormat::Png, "png", "image/png")),
+        "webp" => Ok((
+            ImageFormat::Webp(WebpQuality::Lossless),
+            "webp",
+            "image/webp",
+        )),
+        "webp-lossy" => Ok((
+            ImageFormat::Webp(WebpQuality::Lossy(quality.unwrap_or(80.0))),
+            "webp",
+            "image/webp",
+        )),
         _ => Err(Box::new(bad_request())),
     }
 }
