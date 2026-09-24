@@ -44,6 +44,17 @@ pub const MTB_SCALE: GradedDots = GradedDots {
     colors: &colors::MTB_SCALE,
 };
 
+pub const PISTE_DIFFICULTY: GradedDots = GradedDots {
+    grade: "piste_difficulty",
+    colors: &colors::PISTE_DIFFICULTY,
+};
+
+/// Normalised by the mapping exactly as `mtb_scale` is.
+pub const VIA_FERRATA_SCALE: GradedDots = GradedDots {
+    grade: "COALESCE(NULLIF(via_ferrata_scale, '')::int, 0)",
+    colors: &colors::VIA_FERRATA_SCALE,
+};
+
 pub const SMOOTHNESS: GradedDots = GradedDots {
     grade: "smoothness",
     colors: &colors::SMOOTHNESS,

@@ -26,6 +26,8 @@ pub enum RenderLayer {
     SacScale,
     Smoothness,
     MtbScale,
+    PisteDifficulty,
+    ViaFerrataScale,
     Waymarking,
     Landcover,
     WaterAreas,

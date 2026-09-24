@@ -54,6 +54,7 @@ tags:
     - tower:construction
     - tower:type
     - vending
+    - via_ferrata_scale
     - water_characteristic
     - wetland
   include_regex:
@@ -1498,6 +1499,32 @@ tables:
         args:
           expression: |
             let v = get(tags, "mtb:scale") ?? "";
+            let d = v == "" ? "" : v[0:1];
+            d >= "0" && d <= "6" ? string(int(d) + 1) : ""
+      # Categorical, not a scale — kept raw for whatever renders it.
+      - name: surface
+        type: string
+        key: surface
+      - name: piste_difficulty
+        type: enumerate
+        key: "piste:difficulty"
+        args:
+          values:
+            - novice
+            - easy
+            - intermediate
+            - advanced
+            - expert
+            - freeride
+            - extreme
+      # Same shape as mtb:scale — 0-6 with `+`/`-` variants — so the same
+      # normalisation. Needs its global tags.include entry: an expression column
+      # has no `key` for imposm to whitelist.
+      - name: via_ferrata_scale
+        type: expression
+        args:
+          expression: |
+            let v = get(tags, "via_ferrata_scale") ?? "";
             let d = v == "" ? "" : v[0:1];
             d >= "0" && d <= "6" ? string(int(d) + 1) : ""
       - name: smoothness

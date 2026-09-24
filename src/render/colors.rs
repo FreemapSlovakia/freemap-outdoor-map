@@ -269,6 +269,28 @@ pub const MTB_SCALE: [Color; 7] = [
     parse_color("hsl(2, 85%, 47%)"),
     parse_color("hsl(340, 70%, 34%)"),
 ];
+/// OSM `piste:difficulty`, novice to extreme. Not the piste colours of any one
+/// country's signage — those disagree between Europe and North America — but
+/// the same green-to-red ramp the other grades use.
+pub const PISTE_DIFFICULTY: [Color; 7] = [
+    parse_color("hsl(150, 50%, 45%)"),
+    parse_color("hsl(100, 58%, 40%)"),
+    parse_color("hsl(52, 85%, 45%)"),
+    parse_color("hsl(30, 95%, 50%)"),
+    parse_color("hsl(8, 88%, 48%)"),
+    parse_color("hsl(330, 60%, 42%)"),
+    parse_color("hsl(300, 55%, 30%)"),
+];
+/// OSM `via_ferrata_scale`, 0 (easiest) to 6. Indexed by the grade minus one.
+pub const VIA_FERRATA_SCALE: [Color; 7] = [
+    parse_color("hsl(150, 50%, 45%)"),
+    parse_color("hsl(95, 60%, 40%)"),
+    parse_color("hsl(58, 80%, 44%)"),
+    parse_color("hsl(38, 95%, 48%)"),
+    parse_color("hsl(20, 95%, 50%)"),
+    parse_color("hsl(2, 85%, 47%)"),
+    parse_color("hsl(340, 70%, 34%)"),
+];
 /// OSM `smoothness`, excellent to impassable. Indexed by the enumerate minus one.
 pub const SMOOTHNESS: [Color; 8] = [
     parse_color("hsl(165, 55%, 42%)"),

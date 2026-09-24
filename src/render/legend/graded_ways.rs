@@ -56,6 +56,28 @@ pub fn graded_ways(opts: BuildOpts) -> Vec<LegendItem<'static>> {
     ));
 
     items.extend(graded(
+        "piste_difficulty",
+        "piste:difficulty",
+        &[
+            "novice",
+            "easy",
+            "intermediate",
+            "advanced",
+            "expert",
+            "freeride",
+            "extreme",
+        ],
+        opts,
+    ));
+
+    items.extend(graded(
+        "via_ferrata_scale",
+        "via_ferrata_scale",
+        &["0", "1", "2", "3", "4", "5", "6"],
+        opts,
+    ));
+
+    items.extend(graded(
         "smoothness",
         "smoothness",
         &[

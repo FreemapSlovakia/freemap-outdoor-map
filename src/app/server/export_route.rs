@@ -179,6 +179,8 @@ pub enum ExportLayer {
     SacScale,
     Smoothness,
     MtbScale,
+    PisteDifficulty,
+    ViaFerrataScale,
     Waymarking,
     /// Everything that covers the ground, as one switch: an aerial image shows
     /// all of it better than the map can, and until a client wants them apart
@@ -190,7 +192,7 @@ pub enum ExportLayer {
 impl ExportLayer {
     /// The extras `layers` toggles. `GroundCover` and `Buildings` are base
     /// layers, so they are named in `omit` and never here.
-    const TOGGLEABLE: [Self; 10] = [
+    const TOGGLEABLE: [Self; 12] = [
         Self::Shading,
         Self::Contours,
         Self::BicycleTrails,
@@ -200,6 +202,8 @@ impl ExportLayer {
         Self::SacScale,
         Self::Smoothness,
         Self::MtbScale,
+        Self::PisteDifficulty,
+        Self::ViaFerrataScale,
         Self::Waymarking,
     ];
 
@@ -214,6 +218,8 @@ impl ExportLayer {
             Self::SacScale => &[RenderLayer::SacScale],
             Self::Smoothness => &[RenderLayer::Smoothness],
             Self::MtbScale => &[RenderLayer::MtbScale],
+            Self::PisteDifficulty => &[RenderLayer::PisteDifficulty],
+            Self::ViaFerrataScale => &[RenderLayer::ViaFerrataScale],
             Self::Waymarking => &[RenderLayer::Waymarking],
             Self::Buildings => &[RenderLayer::Buildings],
             // Every base layer but `Buildings`, which stays its own switch.

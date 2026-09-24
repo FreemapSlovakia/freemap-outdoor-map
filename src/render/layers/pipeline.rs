@@ -162,6 +162,8 @@ fn key_layers(key: &str) -> Option<&'static [RenderLayer]> {
         "sac_scale" => &[L::SacScale],
         "smoothness" => &[L::Smoothness],
         "mtb_scale" => &[L::MtbScale],
+        "piste_difficulty" => &[L::PisteDifficulty],
+        "via_ferrata_scale" => &[L::ViaFerrataScale],
         "waymarking" => &[L::Waymarking],
         "routes" => &[
             L::RoutesHiking,
@@ -1428,6 +1430,30 @@ pub fn render(
 
     // Not in any variant's render list until the roads table is reimported:
     // without the column the query fails the whole render.
+    for (layer, dots, name) in [
+        (
+            RenderLayer::PisteDifficulty,
+            &graded_dots::PISTE_DIFFICULTY,
+            "piste_difficulty",
+        ),
+        (
+            RenderLayer::ViaFerrataScale,
+            &graded_dots::VIA_FERRATA_SCALE,
+            "via_ferrata_scale",
+        ),
+    ] {
+        if zoom >= graded_dots::MIN_ZOOM && to_render.draws(layer) {
+            let ctx = ctx.clone();
+
+            prefetcher.add(
+                name,
+                None,
+                move |c, conn| async move { graded_dots::query(dots, &c, &conn).await }.boxed(),
+                move |rows, _params| graded_dots::render(dots, &ctx, context, rows),
+            );
+        }
+    }
+
     if zoom >= graded_dots::MIN_ZOOM {
         prefetcher.add(
             "mtb_scale",
