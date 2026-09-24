@@ -267,7 +267,34 @@ Use 10 m unless the country is flat enough to need otherwise — the Netherlands
 runs about −7 m to +50 m outside its one hilly corner, which is why it is the
 exception.
 
-## 11. Known open issues
+## 11. Re-encoding a finished mosaic
+
+Converting an older `NoData`-sentinel mosaic to the mask-based JXL layout must
+**map the sentinel out of the alpha band**, not merely derive a mask from it.
+`gdaladdo`'s multiband path ignores `NoDataValue`, so `-r average` mixes the
+sentinel into the edge of every overview. The mask still calls those pixels
+valid, and nothing downstream can tell them from data: alpha near 255 is a fully
+opaque shadow, so the boundary draws as a dark hairline. Full resolution is
+unaffected, which is why it only shows below native zoom and deepens with each
+overview level — Slovakia read 215 against an interior of 44 at z13, and the
+second ring in was contaminated too.
+
+A LUT on the alpha band in the VRT fixes it, since the sentinel is by definition
+not a valid value:
+
+```xml
+<LUT>0:0,254:254,255:0</LUT>
+```
+
+Setting the fill to transparent means later averaging pulls the edge toward 0,
+which fades instead of darkening. The renderer cannot compensate: its mask
+erosion is sized for kernel support, and widening it would trim real coastline
+at every dataset edge and every zoom.
+
+A re-encode is also the moment to apply section 3 — these mosaics predate
+`aligned-extent`, and snapping costs 1–2% of area.
+
+## 12. Known open issues
 
 - **Contours cross each other** (#99). The stored geometry is clean and
   `--simplify-tolerance 2` is not the cause; `ST_SimplifyVW` introduces crossings
