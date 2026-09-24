@@ -220,29 +220,6 @@ impl Cli {
     }
 
     fn validate(&self) -> Result<(), String> {
-        // Clap sees an unknown flag but never an unknown env var, so a setting
-        // that moved would otherwise be ignored in silence — and every one of
-        // these leaves the server running, just not serving what was asked for.
-        for (gone, went) in [
-            (
-                "MAPRENDER_WEBP_QUALITY",
-                "a field of the format in MAPRENDER_TILE_VARIANTS, as in 'webp-lossy=90' or 'jpeg=85'",
-            ),
-            ("MAPRENDER_TILE_URL_PATH", "the path at the start of each MAPRENDER_TILE_VARIANTS entry"),
-            ("MAPRENDER_RENDER", "the '+layers' field of a MAPRENDER_TILE_VARIANTS entry"),
-            ("MAPRENDER_OMIT", "the '-layers' field of a MAPRENDER_TILE_VARIANTS entry"),
-            ("MAPRENDER_BASE_MAP", "the 'overlay' field of a MAPRENDER_TILE_VARIANTS entry"),
-            ("MAPRENDER_LAYER_MODE", "the 'overlay' and '-layers' fields of a MAPRENDER_TILE_VARIANTS entry"),
-            ("MAPRENDER_TILE_FORMAT", "the format field of a MAPRENDER_TILE_VARIANTS entry"),
-            ("MAPRENDER_TILE_CACHE_BASE_PATH", "'cache=' on a MAPRENDER_TILE_VARIANTS entry"),
-            ("MAPRENDER_INDEX", "'index=' on a MAPRENDER_TILE_VARIANTS entry"),
-            ("MAPRENDER_COVERAGE_GEOJSON", "'coverage=' on a MAPRENDER_TILE_VARIANTS entry"),
-        ] {
-            if std::env::var_os(gone).is_some() {
-                return Err(format!("{gone} is gone; it is now {went}"));
-            }
-        }
-
         // Whole numbers because the tile index packs a scale into one byte with
         // the top bit reserved, so a fractional scale would collide with its
         // neighbour. The ceiling is far below that bit: a tile side is 256 times
