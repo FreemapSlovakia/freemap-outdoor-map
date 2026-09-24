@@ -211,7 +211,7 @@ server {
         }
 
         # Overlays: transparent WebP, so no grey 40x tile standing in for a miss.
-        location ~ ^/o/(?<variant>sac|hiking|ski|horse|bicycle|aerial)/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[123])x)?(?:\.webp)?$ {
+        location ~ ^/o/(?<variant>sac|smoothness|hiking|ski|horse|bicycle|aerial)/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[123])x)?(?:\.webp)?$ {
                 add_header Access-Control-Allow-Origin $cors_origin always;
                 add_header Vary Origin always;
                 add_header Alt-Svc 'h3=":$server_port"; ma=86400';
