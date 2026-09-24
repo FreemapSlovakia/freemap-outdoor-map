@@ -1387,13 +1387,15 @@ pub fn render(
     // for them to interleave with, so they only have to miss each other.
     if zoom >= layers::pois::WAYMARKING_MIN_ZOOM {
         let kst = to_render.draws(RenderLayer::RoutesHikingKst);
+        let selection = to_render.clone();
         let ctx = ctx.clone();
 
         prefetcher.add(
             "waymarking",
             None,
             move |ctx, conn| {
-                async move { layers::pois::query_waymarking(&ctx, &conn, kst).await }.boxed()
+                async move { layers::pois::query_waymarking(&ctx, &conn, kst, &selection).await }
+                    .boxed()
             },
             move |rows, params| {
                 let to_label = layers::pois::render_icons(

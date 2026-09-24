@@ -1,5 +1,5 @@
 use crate::render::{
-    Feature,
+    Feature, Layers, RenderLayer,
     categories::Category,
     collision::Collision,
     colors::{self, Color},
@@ -793,10 +793,42 @@ pub const WAYMARKING_LEGEND_TYPES: [&str; 3] = ["guidepost", "guidepost_noname",
 /// Guideposts and route markers on their own, for an overlay that carries the
 /// waymarking without the rest of the POIs. The columns are the ones
 /// [`render_icons`] reads, so the overlay reuses the POI renderers as they are.
+/// The `tags` keys a guidepost or route marker carries to say it serves an
+/// activity. A post may carry several, and one the overlay does not ask about
+/// does not disqualify it.
+fn activity_keys(layers: &Layers) -> Vec<&'static str> {
+    let mut keys = Vec::new();
+
+    if layers.draws(RenderLayer::RoutesHiking) || layers.draws(RenderLayer::RoutesHikingKst) {
+        // `foot` is rare on a guidepost — it does not reach taginfo's 60 most
+        // common companions to `information=guidepost` — but it is free to ask
+        // for. Both it and `mtb` need their mapping entries; until the POI table
+        // is reimported the lookup is simply NULL, not an error.
+        keys.extend(["hiking", "foot"]);
+    }
+
+    if layers.draws(RenderLayer::RoutesBicycle) {
+        // Guideposts say `mtb` about a fifth as often as `bicycle`, and the
+        // route layer already folds `route=mtb` into the same selection.
+        keys.extend(["bicycle", "mtb"]);
+    }
+
+    if layers.draws(RenderLayer::RoutesSki) {
+        keys.push("ski");
+    }
+
+    if layers.draws(RenderLayer::RoutesHorse) {
+        keys.push("horse");
+    }
+
+    keys
+}
+
 pub async fn query_waymarking(
     ctx: &Ctx,
     client: &tokio_postgres::Client,
     kst_only: bool,
+    layers: &Layers,
 ) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let zoom = ctx.zoom;
 
@@ -811,6 +843,20 @@ pub async fn query_waymarking(
     let waymarking_types = WAYMARKING_TYPES
         .map(|typ| format!("'{typ}'"))
         .join(", ");
+
+    // A post serves the activity the overlay is about. One that says nothing is
+    // left out: over half of those that do say are for cycling here, so silence
+    // cannot be read as hiking.
+    let activity_cond = match activity_keys(layers).as_slice() {
+        [] => String::new(),
+        keys => format!(
+            "AND ({})",
+            keys.iter()
+                .map(|key| format!("tags->'{key}' = 'yes'"))
+                .collect::<Vec<_>>()
+                .join(" OR ")
+        ),
+    };
 
     // A guidepost with no name is a different definition, drawn from a deeper zoom
     // and with a smaller icon - the same split the main query makes.
@@ -830,6 +876,7 @@ pub async fn query_waymarking(
         WHERE
             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
             type IN ({waymarking_types})
+            {activity_cond}
             {route_marker_cond}
             {kst_cond}
     ");

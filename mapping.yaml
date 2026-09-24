@@ -701,7 +701,9 @@ tables:
             - ele
             - fee
             - hiking
+            - foot
             - bicycle
+            - mtb
             - ski
             - horse
             - icao
