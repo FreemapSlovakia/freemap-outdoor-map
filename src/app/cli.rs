@@ -220,14 +220,27 @@ impl Cli {
     }
 
     fn validate(&self) -> Result<(), String> {
-        // Clap sees an unknown flag but never an unknown env var, and this one
-        // moved into the format field of a tile variant.
-        if std::env::var_os("MAPRENDER_WEBP_QUALITY").is_some() {
-            return Err(
-                "MAPRENDER_WEBP_QUALITY is gone; quality is a field of the format in \
-                 MAPRENDER_TILE_VARIANTS, as in 'webp-lossy=90' or 'jpeg=85'"
-                    .into(),
-            );
+        // Clap sees an unknown flag but never an unknown env var, so a setting
+        // that moved would otherwise be ignored in silence — and every one of
+        // these leaves the server running, just not serving what was asked for.
+        for (gone, went) in [
+            (
+                "MAPRENDER_WEBP_QUALITY",
+                "a field of the format in MAPRENDER_TILE_VARIANTS, as in 'webp-lossy=90' or 'jpeg=85'",
+            ),
+            ("MAPRENDER_TILE_URL_PATH", "the path at the start of each MAPRENDER_TILE_VARIANTS entry"),
+            ("MAPRENDER_RENDER", "the '+layers' field of a MAPRENDER_TILE_VARIANTS entry"),
+            ("MAPRENDER_OMIT", "the '-layers' field of a MAPRENDER_TILE_VARIANTS entry"),
+            ("MAPRENDER_BASE_MAP", "the 'overlay' field of a MAPRENDER_TILE_VARIANTS entry"),
+            ("MAPRENDER_LAYER_MODE", "the 'overlay' and '-layers' fields of a MAPRENDER_TILE_VARIANTS entry"),
+            ("MAPRENDER_TILE_FORMAT", "the format field of a MAPRENDER_TILE_VARIANTS entry"),
+            ("MAPRENDER_TILE_CACHE_BASE_PATH", "'cache=' on a MAPRENDER_TILE_VARIANTS entry"),
+            ("MAPRENDER_INDEX", "'index=' on a MAPRENDER_TILE_VARIANTS entry"),
+            ("MAPRENDER_COVERAGE_GEOJSON", "'coverage=' on a MAPRENDER_TILE_VARIANTS entry"),
+        ] {
+            if std::env::var_os(gone).is_some() {
+                return Err(format!("{gone} is gone; it is now {went}"));
+            }
         }
 
         if self.min_zoom > self.max_zoom {
