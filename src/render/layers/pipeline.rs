@@ -1428,21 +1428,14 @@ pub fn render(
         );
     }
 
-    // Not in any variant's render list until the roads table is reimported:
-    // without the column the query fails the whole render.
-    for (layer, dots, name) in [
-        (
-            RenderLayer::PisteDifficulty,
-            &graded_dots::PISTE_DIFFICULTY,
-            "piste_difficulty",
-        ),
-        (
-            RenderLayer::ViaFerrataScale,
-            &graded_dots::VIA_FERRATA_SCALE,
-            "via_ferrata_scale",
-        ),
+    // Every grade below reads a column that only exists after an `osm_roads`
+    // reimport, and a missing column fails the whole render rather than drawing
+    // nothing — so a variant naming one must not be deployed ahead of the import.
+    for (dots, name) in [
+        (&graded_dots::PISTE_DIFFICULTY, "piste_difficulty"),
+        (&graded_dots::VIA_FERRATA_SCALE, "via_ferrata_scale"),
     ] {
-        if zoom >= graded_dots::MIN_ZOOM && to_render.draws(layer) {
+        if zoom >= graded_dots::MIN_ZOOM {
             let ctx = ctx.clone();
 
             prefetcher.add(

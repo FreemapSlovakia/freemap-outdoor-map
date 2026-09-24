@@ -790,9 +790,6 @@ pub const WAYMARKING_TYPES: [&str; 2] = ["guidepost", "route_marker"];
 /// on, but a legend sample carries it.
 pub const WAYMARKING_LEGEND_TYPES: [&str; 3] = ["guidepost", "guidepost_noname", "route_marker"];
 
-/// Guideposts and route markers on their own, for an overlay that carries the
-/// waymarking without the rest of the POIs. The columns are the ones
-/// [`render_icons`] reads, so the overlay reuses the POI renderers as they are.
 /// The `tags` keys a guidepost or route marker carries to say it serves an
 /// activity. A post may carry several, and one the overlay does not ask about
 /// does not disqualify it.

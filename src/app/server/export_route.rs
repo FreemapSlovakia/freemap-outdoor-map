@@ -694,7 +694,18 @@ fn parse_format(
         _ => {}
     }
 
-    let token = quality.map_or_else(|| format.to_owned(), |q| format!("{format}={q}"));
+    if let Some(quality) = quality
+        && !(0.0..=100.0).contains(&quality)
+    {
+        return Err(Box::new(bad_request()));
+    }
+
+    // Only the lossy formats are told the quality. The others document it as
+    // ignored, and appending it would make `ImageFormat::parse` refuse them.
+    let token = match quality {
+        Some(q) if matches!(format, "jpeg" | "jpg" | "webp-lossy") => format!("{format}={q}"),
+        _ => format.to_owned(),
+    };
 
     let parsed = ImageFormat::parse(&token)
         .ok_or_else(|| Box::new(bad_request()))?

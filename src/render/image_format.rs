@@ -13,7 +13,7 @@ pub enum WebpQuality {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ImageFormat {
     Png,
-    /// Quality 1..=100.
+    /// Quality 0..=100, as the encoder takes it — it clamps 0 up to 1.
     Jpeg(u8),
     Webp(WebpQuality),
     Pdf,

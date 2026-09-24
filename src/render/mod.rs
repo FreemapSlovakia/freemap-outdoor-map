@@ -1,10 +1,11 @@
 pub use attribution::{ATTRIBUTION_HEADER, Attribution, FALLBACK_KEY, OSM as OSM_CODE};
 pub use coverage::{TileCoverageRelation, tile_touches_coverage};
 pub use feature::{Feature, FeatureError, GeomError, LegendValue};
-// `WebpQuality` and the WebP default are re-exported for the tile-variant tests;
-// the renderer reaches them through the module directly.
-#[allow(unused_imports)]
-pub use image_format::{DEFAULT_JPEG_QUALITY, DEFAULT_WEBP_QUALITY, ImageFormat, WebpQuality};
+pub use image_format::{DEFAULT_JPEG_QUALITY, ImageFormat};
+// Only the tile-variant tests reach for these; the renderer uses the module
+// directly. Gated so a dead re-export above is still reported.
+#[cfg(test)]
+pub use image_format::{DEFAULT_WEBP_QUALITY, WebpQuality};
 pub use layers::key_enabled;
 pub use legend::{LegendMode, legend_metadata, legend_render_request};
 pub use render_config::{
