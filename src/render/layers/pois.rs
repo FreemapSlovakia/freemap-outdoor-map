@@ -1,5 +1,5 @@
 use crate::render::{
-    Feature,
+    Feature, Layers, RenderLayer,
     categories::Category,
     collision::Collision,
     colors::{self, Color},
@@ -738,6 +738,153 @@ static OFFSETS: LazyLock<[(f64, f64); 33]> = LazyLock::new(|| {
     offsets
 });
 
+/// Italian route markers (segnavia) are mapped so densely - one node per painted
+/// blaze along a trail, some 20 m apart - that at the zoom the type is otherwise
+/// drawn from they bury the rest of the map. So in Italy they are held back to
+/// the deepest zoom, where the trail is magnified enough to carry one marker per
+/// blaze; everywhere else `route_marker` means a sparse, signpost-like object and
+/// keeps its own zoom. Nothing else is suppressed by country here, so the rule is
+/// spelled out rather than configured.
+const IT_ROUTE_MARKER_MIN_ZOOM: u8 = 20;
+
+/// The country rule above, as a SQL condition. Needs the `countries` table (see
+/// sql/countries.sql), and is emitted only at the zooms that need it: outside them
+/// the markers are either wanted or already dropped, so the lookup would be dead
+/// weight. `type_omitted_elsewhere` says the caller's own type filter has already
+/// dropped `route_marker` at the zooms it is not drawn at.
+fn route_marker_cond(zoom: u8, type_omitted_elsewhere: bool) -> &'static str {
+    if !drawn_at("route_marker", zoom) {
+        return if type_omitted_elsewhere {
+            ""
+        } else {
+            "AND type <> 'route_marker'"
+        };
+    }
+
+    if zoom < IT_ROUTE_MARKER_MIN_ZOOM {
+        "AND (
+            type <> 'route_marker' OR
+            NOT EXISTS (
+                SELECT 1
+                FROM countries c
+                WHERE
+                    c.country = 'it' AND
+                    c.geometry && osm_pois.geometry AND
+                    ST_Intersects(c.geometry, osm_pois.geometry)
+            )
+        )"
+    } else {
+        ""
+    }
+}
+
+/// The shallowest zoom any waymarking definition draws from; below it
+/// [`render_icons`] would drop every row anyway.
+pub const WAYMARKING_MIN_ZOOM: u8 = 13;
+
+/// The POI types the waymarking layer draws. The legend files its samples under
+/// these, so the list has one owner.
+pub const WAYMARKING_TYPES: [&str; 2] = ["guidepost", "route_marker"];
+
+/// As above, plus the type a nameless guidepost is given — not a thing to select
+/// on, but a legend sample carries it.
+pub const WAYMARKING_LEGEND_TYPES: [&str; 3] = [
+    WAYMARKING_TYPES[0],
+    "guidepost_noname",
+    WAYMARKING_TYPES[1],
+];
+
+/// The `tags` keys a guidepost or route marker carries to say it serves an
+/// activity. A post may carry several, and one the overlay does not ask about
+/// does not disqualify it.
+fn activity_keys(layers: &Layers) -> Vec<&'static str> {
+    let mut keys = Vec::new();
+
+    if layers.draws(RenderLayer::RoutesHiking) || layers.draws(RenderLayer::RoutesHikingKst) {
+        // `foot` is rare on a guidepost — it does not reach taginfo's 60 most
+        // common companions to `information=guidepost` — but it is free to ask
+        // for. Both it and `mtb` need their mapping entries; until the POI table
+        // is reimported the lookup is simply NULL, not an error.
+        keys.extend(["hiking", "foot"]);
+    }
+
+    if layers.draws(RenderLayer::RoutesBicycle) {
+        // Guideposts say `mtb` about a fifth as often as `bicycle`, and the
+        // route layer already folds `route=mtb` into the same selection.
+        keys.extend(["bicycle", "mtb"]);
+    }
+
+    if layers.draws(RenderLayer::RoutesSki) {
+        keys.push("ski");
+    }
+
+    if layers.draws(RenderLayer::RoutesHorse) {
+        keys.push("horse");
+    }
+
+    keys
+}
+
+pub async fn query_waymarking(
+    ctx: &Ctx,
+    client: &tokio_postgres::Client,
+    kst_only: bool,
+    layers: &Layers,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+    let zoom = ctx.zoom;
+
+    let kst_cond = if kst_only {
+        r"AND (type <> 'guidepost' OR tags->'operator' ~* '\ykst\y|\ytanap\y')"
+    } else {
+        ""
+    };
+
+    let route_marker_cond = route_marker_cond(zoom, false);
+
+    let waymarking_types = WAYMARKING_TYPES
+        .map(|typ| format!("'{typ}'"))
+        .join(", ");
+
+    // A post serves the activity the overlay is about. One that says nothing is
+    // left out: over half of those that do say are for cycling here, so silence
+    // cannot be read as hiking.
+    let activity_cond = match activity_keys(layers).as_slice() {
+        [] => String::new(),
+        keys => format!(
+            "AND ({})",
+            keys.iter()
+                .map(|key| format!("tags->'{key}' = 'yes'"))
+                .collect::<Vec<_>>()
+                .join(" OR ")
+        ),
+    };
+
+    // A guidepost with no name is a different definition, drawn from a deeper zoom
+    // and with a smaller icon - the same split the main query makes.
+    #[cfg_attr(any(), rustfmt::skip)]
+    let sql = format!("
+        SELECT
+            osm_id,
+            geometry,
+            COALESCE(NULLIF(name, ''), tags->'ref', '') AS name,
+            hstore(ARRAY['ele', tags->'ele', 'access', tags->'access']) AS extra,
+            CASE
+                WHEN type = 'guidepost' AND name = '' THEN 'guidepost_noname'
+                ELSE type
+            END AS type
+        FROM
+            osm_pois
+        WHERE
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+            type IN ({waymarking_types})
+            {activity_cond}
+            {route_marker_cond}
+            {kst_cond}
+    ");
+
+    client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params()).await
+}
+
 pub async fn query(
     ctx: &Ctx,
     client: &tokio_postgres::Client,
@@ -892,34 +1039,7 @@ pub async fn query(
             format!("AND (NOT ({UNNAMED_SADDLE}) OR {NUMERIC_ELE})")
         };
 
-        // Italian route markers (segnavia) are mapped so densely - one node per painted
-        // blaze along a trail, some 20 m apart - that at the zoom the type is otherwise
-        // drawn from they bury the rest of the map. So in Italy they are held back to
-        // the deepest zoom, where the trail is magnified enough to carry one marker per
-        // blaze; everywhere else `route_marker` means a sparse, signpost-like object and
-        // keeps its own zoom. Nothing else is suppressed by country here, so the rule is
-        // spelled out rather than configured. Needs the `countries` table (see
-        // sql/countries.sql), and is added only at the zooms in between: outside them
-        // either `{w}` has already omitted the type or the markers are wanted, so the
-        // lookup would be dead weight.
-        const IT_ROUTE_MARKER_MIN_ZOOM: u8 = 20;
-
-        let route_marker_cond = if zoom < IT_ROUTE_MARKER_MIN_ZOOM && drawn_at("route_marker", zoom)
-        {
-            "AND (
-                type <> 'route_marker' OR
-                NOT EXISTS (
-                    SELECT 1
-                    FROM countries c
-                    WHERE
-                        c.country = 'it' AND
-                        c.geometry && osm_pois.geometry AND
-                        ST_Intersects(c.geometry, osm_pois.geometry)
-                )
-            )"
-        } else {
-            ""
-        };
+        let route_marker_cond = route_marker_cond(zoom, true);
 
         z14_sql = format!(
             "

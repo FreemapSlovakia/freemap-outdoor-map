@@ -4,8 +4,11 @@ pub use hillshading_datasets::load_hillshading_datasets;
 pub use landcover::PAINT_DEFS;
 pub use pipeline::RenderError;
 pub use pipeline::Shading;
+pub use pipeline::key_enabled;
 pub use pipeline::render;
-pub use pois::{Def, INACCESSIBLE_ZOOM_DELAY, POI_ORDER, POIS, SHOP_TYPES};
+pub use pois::{
+    Def, INACCESSIBLE_ZOOM_DELAY, POI_ORDER, POIS, SHOP_TYPES, WAYMARKING_LEGEND_TYPES,
+};
 
 mod aerialway_names;
 mod blur_edges;

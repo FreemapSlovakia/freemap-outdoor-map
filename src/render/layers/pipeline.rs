@@ -1,8 +1,9 @@
 use crate::render::colors::ContextExt;
+use crate::render::draw::graded_dots;
 use crate::render::projectable::TileProjectable;
 use crate::render::render_request::CustomLayer;
 use crate::render::{
-    ContourCountries, CustomLayerOrder, FeatureLineMaskCountries, HillshadingHierarchy,
+    ContourCountries, CustomLayerOrder, FeatureLineMaskCountries, HillshadingHierarchy, Layers,
     PlaceTypeOverrides, RenderLayer, colors,
 };
 use crate::render::{
@@ -88,7 +89,23 @@ type FeatureQueryHandle = JoinHandle<Result<Vec<Feature>, LayerRenderError>>;
 /// A single query result reused across multiple render stages (e.g. `feature_lines`,
 /// drawn up to 5× in different draw-order positions from one DB fetch). The first
 /// stage to run awaits the query and caches the rows; the rest borrow them.
+type SharedQueryFn = Box<
+    dyn FnOnce(
+            Arc<Ctx>,
+            deadpool_postgres::Object,
+        ) -> BoxFuture<'static, Result<Vec<Row>, tokio_postgres::Error>>
+        + Send,
+>;
+
+/// A query several render stages read. It is spawned by the first stage that
+/// registers and turns out to be enabled, not at the point the query is
+/// declared: an overlay can keep one stage of a group while dropping the rest,
+/// and the query should follow the stages rather than the group it is named
+/// after. Registration all happens before anything runs, so the spawn is no
+/// less parallel for being deferred.
 struct SharedSlot {
+    name: &'static str,
+    query: RefCell<Option<SharedQueryFn>>,
     jh: RefCell<Option<FeatureQueryHandle>>,
     features: RefCell<Option<Vec<Feature>>>,
 }
@@ -116,21 +133,93 @@ enum PendingLayer<'a> {
     },
 }
 
+/// Which [`RenderLayer`]s switch the layer registered under `key` on or off.
+///
+/// `None` means the key names nothing switchable, so the stage follows the base
+/// map. An explicit `Some(&[])` says the same for a key that would otherwise
+/// inherit its legend group's arm — a label layer filed under the fill it
+/// labels, which an overlay wants kept when the fill goes.
+fn key_layers(key: &str) -> Option<&'static [RenderLayer]> {
+    use RenderLayer as L;
+
+    Some(match key {
+        "sea" => &[L::Sea],
+        "landcovers" => &[L::Landcover],
+        "water_areas" => &[L::WaterAreas],
+        "buildings" => &[L::Buildings],
+        "pier_areas" => &[L::PierAreas],
+        "bridge_areas" => &[L::BridgeAreas],
+        "solar_power_plants" => &[L::SolarPlants],
+        "trees" => &[L::Trees],
+        // Names, not the fill they are filed under for the legend.
+        "landcover_names" | "water_area_names" | "winter_sports_boundaries" => &[],
+        // Cuts bridges out of the shading and the contours alike.
+        "bridge_for_shading" => &[L::Shading, L::Contours],
+        "contours" => &[L::Contours],
+        "geonames" => &[L::Geonames],
+        "country_borders" => &[L::CountryBorders],
+        "country_names" => &[L::CountryNames],
+        "sac_scale" => &[L::SacScale],
+        "smoothness" => &[L::Smoothness],
+        "mtb_scale" => &[L::MtbScale],
+        "piste_difficulty" => &[L::PisteDifficulty],
+        "via_ferrata_scale" => &[L::ViaFerrataScale],
+        "waymarking" => &[L::Waymarking],
+        "routes" => &[
+            L::RoutesHiking,
+            L::RoutesHikingKst,
+            L::RoutesHorse,
+            L::RoutesBicycle,
+            L::RoutesSki,
+        ],
+        _ => return None,
+    })
+}
+
+/// Whether the layer registered under `name` (filed under `legend_key`) draws.
+///
+/// One rule for every stage: a stage draws when any [`RenderLayer`] its key
+/// covers is drawn, and a stage whose key covers nothing is the map's own, drawn
+/// whenever the base map is. `Layers::draws` is what separates an extra the
+/// request asked for from a base layer it did not take away.
+///
+/// The layer's own name is asked first and its legend group only as a fallback,
+/// so a stage can opt out of the group it is filed under. Contours rely on the
+/// fallback: their names are per-country.
+///
+/// Kept apart from [`Prefetcher`] so the legend can ask the same question of a
+/// variant's selection without building a pipeline.
+pub fn key_enabled(selection: &Layers, name: &str, legend_key: &str) -> bool {
+    match key_layers(name).or_else(|| key_layers(legend_key)) {
+        Some(layers) if !layers.is_empty() => {
+            layers.iter().any(|layer| selection.draws(*layer))
+        }
+        _ => selection.base_map,
+    }
+}
+
 struct Prefetcher<'a> {
     pool: Pool,
     handle: Handle,
     ctx: Arc<Ctx>,
+    selection: Layers,
     layers: Vec<PendingLayer<'a>>,
 }
 
 impl<'a> Prefetcher<'a> {
-    const fn new(pool: Pool, handle: Handle, ctx: Arc<Ctx>) -> Self {
+    const fn new(pool: Pool, handle: Handle, ctx: Arc<Ctx>, selection: Layers) -> Self {
         Self {
             pool,
             handle,
             ctx,
+            selection,
             layers: Vec::new(),
         }
+    }
+
+    /// See [`key_enabled`].
+    fn enabled(&self, name: &str, legend_key: &str) -> bool {
+        key_enabled(&self.selection, name, legend_key)
     }
 
     /// Add a layer with a DB query.
@@ -140,6 +229,38 @@ impl<'a> Prefetcher<'a> {
         &mut self,
         name: &'static str,
         legend_name: Option<&'static str>,
+        query_fn: impl FnOnce(
+            Arc<Ctx>,
+            deadpool_postgres::Object,
+        ) -> BoxFuture<'static, Result<Vec<Row>, tokio_postgres::Error>>
+        + Send
+        + 'static,
+        render_fn: impl FnOnce(Vec<Feature>, Params) -> LayerRenderResult + 'a,
+    ) {
+        self.add_gated(name, legend_name, true, query_fn, render_fn);
+    }
+
+    /// A query the pipeline needs for its own sake rather than to draw with, so
+    /// no layer selection may switch it off.
+    fn add_ungated(
+        &mut self,
+        name: &'static str,
+        query_fn: impl FnOnce(
+            Arc<Ctx>,
+            deadpool_postgres::Object,
+        ) -> BoxFuture<'static, Result<Vec<Row>, tokio_postgres::Error>>
+        + Send
+        + 'static,
+        render_fn: impl FnOnce(Vec<Feature>, Params) -> LayerRenderResult + 'a,
+    ) {
+        self.add_gated(name, None, false, query_fn, render_fn);
+    }
+
+    fn add_gated(
+        &mut self,
+        name: &'static str,
+        legend_name: Option<&'static str>,
+        gated: bool,
         query_fn: impl FnOnce(
             Arc<Ctx>,
             deadpool_postgres::Object,
@@ -167,6 +288,10 @@ impl<'a> Prefetcher<'a> {
             return;
         }
 
+        if gated && !self.enabled(name, legend_name.unwrap_or(name)) {
+            return;
+        }
+
         let pool = self.pool.clone();
         let ctx = self.ctx.clone();
 
@@ -183,8 +308,9 @@ impl<'a> Prefetcher<'a> {
         });
     }
 
-    /// Spawn a query whose rows are shared by several render stages via [`add_shared`].
-    /// Returns `None` in legend mode (no DB query is run; stages fall back to legend data).
+    /// Declare a query whose rows are shared by several render stages via
+    /// [`add_shared`]. Returns `None` in legend mode (no DB query is run; stages
+    /// fall back to legend data).
     fn shared_query(
         &self,
         name: &'static str,
@@ -199,8 +325,23 @@ impl<'a> Prefetcher<'a> {
             return None;
         }
 
+        Some(Rc::new(SharedSlot {
+            name,
+            query: RefCell::new(Some(Box::new(query_fn))),
+            jh: RefCell::new(None),
+            features: RefCell::new(None),
+        }))
+    }
+
+    /// Start a shared query, unless an earlier stage already did.
+    fn spawn_shared(&self, slot: &SharedSlot) {
+        let Some(query_fn) = slot.query.borrow_mut().take() else {
+            return;
+        };
+
         let pool = self.pool.clone();
         let ctx = self.ctx.clone();
+        let name = slot.name;
 
         let jh = self.handle.spawn(async move {
             let conn = db_pool_stats::get(&pool, name).await.map_err(LayerRenderError::from)?;
@@ -208,10 +349,7 @@ impl<'a> Prefetcher<'a> {
             Ok::<Vec<Feature>, LayerRenderError>(rows.into_iter().map(Feature::from).collect())
         });
 
-        Some(Rc::new(SharedSlot {
-            jh: RefCell::new(Some(jh)),
-            features: RefCell::new(None),
-        }))
+        *slot.jh.borrow_mut() = Some(jh);
     }
 
     /// Add a render stage that draws from a [`shared_query`] result.
@@ -241,9 +379,15 @@ impl<'a> Prefetcher<'a> {
             return;
         }
 
+        if !self.enabled(name, legend_name) {
+            return;
+        }
+
         let slot = slot
             .cloned()
             .expect("shared slot must be present outside legend mode");
+
+        self.spawn_shared(&slot);
 
         self.layers.push(PendingLayer::Shared {
             name,
@@ -364,15 +508,15 @@ pub fn render(
 
     let zoom = request.zoom;
 
-    let to_render = &request.to_render;
+    let to_render = &request.layers;
 
-    let do_shading = to_render.contains(&RenderLayer::Shading) && shading.hierarchy.is_some();
+    let do_shading = to_render.draws(RenderLayer::Shading) && shading.hierarchy.is_some();
 
     let feature_line_mask_countries = shading
         .feature_line_mask_countries
         .map_or(&[] as &[String], FeatureLineMaskCountries::countries);
 
-    let do_contours = to_render.contains(&RenderLayer::Contours)
+    let do_contours = to_render.draws(RenderLayer::Contours)
         && shading.hierarchy.is_some()
         && shading.contour_countries.is_some();
 
@@ -393,7 +537,11 @@ pub fn render(
     let attribution: Rc<RefCell<Attribution>> = Rc::default();
 
     let coverage_geometry = if ctx.legend.is_none()
-        && matches!(request.format, ImageFormat::Jpeg | ImageFormat::Png)
+        && request.layers.is_whole_map()
+        && matches!(
+            request.format,
+            ImageFormat::Jpeg(_) | ImageFormat::Png | ImageFormat::Webp(_)
+        )
         && let Some(ref coverage_geometry) = request.coverage_geometry
     {
         context.set_source_rgb(0.82, 0.80, 0.78);
@@ -406,14 +554,22 @@ pub fn render(
         None
     };
 
-    let mut prefetcher = Prefetcher::new(pool, handle, ctx.clone());
+    let mut prefetcher = Prefetcher::new(pool, handle, ctx.clone(), request.layers.clone());
+
+    let cutlines = to_render.draws(RenderLayer::Cutlines);
 
     // Built from the land and water the sea and water fills project anyway.
     let dry_land: Rc<RefCell<Option<layers::dry_land::DryLand>>> = Rc::default();
 
     let label_margin = do_contours && zoom >= layers::contours::LABEL_MIN_ZOOM;
 
-    if request.legend.is_none() {
+    let draw_sea = to_render.draws(RenderLayer::Sea);
+
+    // The sea layer is also the only producer of `dry_land`, which masks shading
+    // and contours off the water. An overlay that drops the fill but keeps the
+    // contours still needs the mask, so the stage runs under a name with no arm
+    // of its own and renders nothing.
+    if request.legend.is_none() && (draw_sea || do_shading || do_contours) {
         let margin = if label_margin {
             layers::dry_land::LABEL_MARGIN_PX
         } else {
@@ -423,14 +579,18 @@ pub fn render(
         let dry_land = dry_land.clone();
         let ctx_ref = &ctx;
 
-        prefetcher.add(
+        // The surrounding condition already decided this runs, and `draw_sea`
+        // decides whether it paints, so it does not go through the layer gate a
+        // second time — which would drop the mask-only case.
+        prefetcher.add_ungated(
             "sea",
-            None,
             move |ctx, conn| async move { layers::sea::query(&ctx, &conn, margin).await }.boxed(),
             move |rows, _params| {
                 let land = layers::sea::project(ctx_ref, &rows)?;
 
-                layers::sea::render(context, &land)?;
+                if draw_sea {
+                    layers::sea::render(context, &land)?;
+                }
 
                 if (do_shading || do_contours) && zoom >= layers::dry_land::MIN_ZOOM {
                     *dry_land.borrow_mut() = Some(layers::dry_land::DryLand::new(land));
@@ -459,8 +619,8 @@ pub fn render(
     // borrow the cached rows. The lowest stage gate is zoom 11 (stage 3).
     let feature_lines_slot = if zoom >= 11 {
         prefetcher
-            .shared_query("feature_lines", |ctx, conn| {
-                async move { layers::feature_lines::query(&ctx, &conn).await }.boxed()
+            .shared_query("feature_lines", move |ctx, conn| {
+                async move { layers::feature_lines::query(&ctx, &conn, cutlines).await }.boxed()
             })
     } else {
         None
@@ -841,7 +1001,7 @@ pub fn render(
         );
     }
 
-    if zoom >= 8 && to_render.contains(&RenderLayer::CountryBorders) {
+    if zoom >= 8 {
         prefetcher.add(
             "borders",
             Some("country_borders"),
@@ -851,16 +1011,16 @@ pub fn render(
     }
 
     {
-        let to_render = to_render.clone();
-        let to_render1 = to_render.clone();
-
-        let min_zoom = if to_render.contains(&RenderLayer::RoutesHikingKst) {
+        let min_zoom = if to_render.draws(RenderLayer::RoutesHikingKst) {
             8
         } else {
             9
         };
 
         if zoom >= min_zoom {
+            let to_render = to_render.clone();
+            let to_render1 = to_render.clone();
+
             prefetcher.add(
                 "routes_marking",
                 Some("routes"),
@@ -914,7 +1074,7 @@ pub fn render(
         });
     }
 
-    if (9..=11).contains(&zoom) && to_render.contains(&RenderLayer::Geonames) {
+    if (9..=11).contains(&zoom) {
         prefetcher.add(
             "geonames",
             None,
@@ -938,7 +1098,9 @@ pub fn render(
         );
     }
 
-    if zoom >= 13 {
+    // The group has to follow the same gate as the stages inside it: `push` has no
+    // name, so nothing else would stop an overlay compositing an empty group.
+    if zoom >= 13 && key_enabled(&request.layers, "valleys", "valleys_ridges") {
         let opacity = 0.5 - (zoom as f64 - 13.0) / 10.0;
 
         prefetcher.push(|_params| {
@@ -1056,7 +1218,7 @@ pub fn render(
         Rc::new(RefCell::new(None));
 
     if zoom >= 10 {
-        let kst = to_render.contains(&RenderLayer::RoutesHikingKst);
+        let kst = to_render.draws(RenderLayer::RoutesHikingKst);
         let slot_icons = pois_to_label_slot.clone();
         let ctx = ctx.clone();
 
@@ -1208,7 +1370,7 @@ pub fn render(
         );
     }
 
-    if zoom < 8 && to_render.contains(&RenderLayer::CountryNames) {
+    if zoom < 8 && to_render.draws(RenderLayer::CountryNames) {
         let rect = ctx.bbox.project_to_tile(&ctx.tile_projector);
 
         prefetcher.push(move |_params| {
@@ -1234,6 +1396,61 @@ pub fn render(
             |ctx, conn| async move { layers::country_names::query(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::country_names::render(&ctx, context, rows),
         );
+    }
+
+    // Icons and their labels in one stage: on an overlay there are no other POIs
+    // for them to interleave with, so they only have to miss each other.
+    if zoom >= layers::pois::WAYMARKING_MIN_ZOOM {
+        let kst = to_render.draws(RenderLayer::RoutesHikingKst);
+        let selection = to_render.clone();
+        let ctx = ctx.clone();
+
+        prefetcher.add(
+            "waymarking",
+            None,
+            move |ctx, conn| {
+                async move { layers::pois::query_waymarking(&ctx, &conn, kst, &selection).await }
+                    .boxed()
+            },
+            move |rows, params| {
+                let to_label = layers::pois::render_icons(
+                    &ctx,
+                    context,
+                    rows,
+                    params.collision,
+                    params.svg_repo,
+                )?;
+
+                layers::pois::render_labels(&ctx, context, to_label, params.collision)
+            },
+        );
+    }
+
+    // Last of the map layers: a grade qualifies everything drawn below it, and as
+    // an overlay it has nothing of its own to hide behind.
+    //
+    // Every grade reads a column that only exists after an `osm_roads` reimport,
+    // and a missing column fails the whole render rather than drawing nothing —
+    // so a variant naming one must not be deployed ahead of the import.
+    //
+    // One query each. If a variant ever wants several at once, `shared_query` is
+    // the mechanism — but every variant today carries exactly one, where sharing
+    // would be a pessimisation.
+    if zoom >= graded_dots::MIN_ZOOM {
+        for (layer, name, dots) in graded_dots::ALL {
+            if !to_render.draws(layer) {
+                continue;
+            }
+
+            let ctx = ctx.clone();
+
+            prefetcher.add(
+                name,
+                None,
+                move |c, conn| async move { graded_dots::query(dots, &c, &conn).await }.boxed(),
+                move |rows, _params| graded_dots::render(dots, &ctx, context, rows),
+            );
+        }
     }
 
     if let Some(coverage_geometry) = coverage_geometry {

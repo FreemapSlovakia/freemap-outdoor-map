@@ -9,7 +9,7 @@ use crate::{
         },
         tile_processing_worker::TileProcessingWorker,
     },
-    render::{RenderLayer, RenderWorkerPool},
+    render::{ImageFormat, Layers, RenderWorkerPool},
 };
 use axum::{
     Router,
@@ -47,7 +47,9 @@ pub struct ServerOptions {
 pub struct TileVariantOptions {
     pub url_path: String,
     pub tile_cache_base_path: Option<PathBuf>,
-    pub render: std::collections::HashSet<RenderLayer>,
+    pub layers: Layers,
+    pub format: ImageFormat,
+    pub index_db: Option<sled::Db>,
     pub coverage_geometry: Option<Geometry>,
 }
 
@@ -61,15 +63,21 @@ pub async fn start_server(
         .tile_variants
         .iter()
         .map(|variant| TileVariantState {
+            url_path: variant.url_path.clone(),
             tile_cache_base_path: variant.tile_cache_base_path.clone(),
             coverage_geometry: variant.coverage_geometry.clone().map(Arc::new),
-            render: variant.render.iter().copied().collect(),
+            layers: variant.layers.clone(),
+            format: variant.format,
+            index_db: variant.index_db.clone(),
         })
         .collect();
 
-    let default_render = tile_variants
-        .first()
-        .map(|variant| variant.render.clone())
+    // `/export` offers the layers the main map has; an overlay variant's set is
+    // not a menu of extras, so it would mean nothing there.
+    let default_render = options
+        .tile_variants
+        .iter()
+        .find_map(|variant| variant.layers.is_whole_map().then(|| variant.layers.add.clone()))
         .unwrap_or_default();
 
     let app_state = AppState {

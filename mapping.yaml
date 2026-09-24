@@ -17,6 +17,7 @@ tags:
     - access
     - assisted_trail
     - bicycle
+    - club
     - covered
     - denotation
     - diplomatic
@@ -24,6 +25,7 @@ tags:
     - drinking_water
     - ele
     - fee
+    - foot
     - generator:method
     - generator:source
     - hiking
@@ -33,6 +35,8 @@ tags:
     - ladder
     - local_ref # bus stop number, shown instead of the name - https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/43
     - location
+    - mtb
+    - mtb:scale
     - operator
     - plant:method
     - plant:source
@@ -50,6 +54,7 @@ tags:
     - tower:construction
     - tower:type
     - vending
+    - via_ferrata_scale
     - water_characteristic
     - wetland
   include_regex:
@@ -701,7 +706,9 @@ tables:
             - ele
             - fee
             - hiking
+            - foot
             - bicycle
+            - mtb
             - ski
             - horse
             - icao
@@ -1482,13 +1489,63 @@ tables:
             - alpine_hiking
             - demanding_alpine_hiking
             - difficult_alpine_hiking
+      # 1-based grade, or "" for none — the shape an enumerate would give, but
+      # folding the `+`/`-` variants (`0+`, `1-`, …) into their base grade
+      # rather than dropping them, and they are about 4% of tagged ways.
+      # `mtb:scale` is whitelisted in the global tags.include above: an
+      # expression column has no `key` for imposm to pick up.
+      - name: mtb_scale
+        type: expression
+        args:
+          expression: |
+            let v = get(tags, "mtb:scale") ?? "";
+            let d = v == "" ? "" : v[0:1];
+            d >= "0" && d <= "6" ? string(int(d) + 1) : ""
+      # Categorical, not a scale — kept raw for whatever renders it.
+      - name: surface
+        type: string
+        key: surface
+      - name: piste_difficulty
+        type: enumerate
+        key: "piste:difficulty"
+        args:
+          values:
+            - novice
+            - easy
+            - intermediate
+            - advanced
+            - expert
+            - freeride
+            - extreme
+      # Same shape as mtb:scale — 0-6 with `+`/`-` variants — so the same
+      # normalisation. Needs its global tags.include entry: an expression column
+      # has no `key` for imposm to whitelist.
+      - name: via_ferrata_scale
+        type: expression
+        args:
+          expression: |
+            let v = get(tags, "via_ferrata_scale") ?? "";
+            let d = v == "" ? "" : v[0:1];
+            d >= "0" && d <= "6" ? string(int(d) + 1) : ""
+      - name: smoothness
+        type: enumerate
+        key: smoothness
+        args:
+          values:
+            - excellent
+            - good
+            - intermediate
+            - bad
+            - very_bad
+            - horrible
+            - very_horrible
+            - impassable
       - name: tags
         type: hstore_tags
         args:
           include:
             - assisted_trail
             - ladder
-            - mtb:scale
             - rungs
             - safety_rope
     type: linestring

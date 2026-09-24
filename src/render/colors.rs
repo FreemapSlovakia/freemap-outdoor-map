@@ -248,6 +248,55 @@ pub const GLACIER: Color = parse_color("hsl(216, 65%, 90%)");
 pub const QUARRY: Color = parse_color("hsl(0, 0%, 78%)");
 pub const RESIDENTIAL: Color = parse_color("hsl(100, 0%, 91%)");
 pub const ROAD: Color = parse_color("hsl(40, 60%, 50%)");
+/// SAC hiking scale T1..T6, easy to hard. Indexed by the `sac_scale` enumerate
+/// minus one. Ordered as a single green-to-red ramp so the grade reads off the
+/// colour without a legend.
+pub const SAC_SCALE: [Color; 6] = [
+    parse_color("hsl(150, 50%, 45%)"),
+    parse_color("hsl(68, 70%, 42%)"),
+    parse_color("hsl(42, 95%, 48%)"),
+    parse_color("hsl(22, 95%, 50%)"),
+    parse_color("hsl(0, 85%, 48%)"),
+    parse_color("hsl(348, 75%, 33%)"),
+];
+/// OSM `mtb:scale`, 0 (easiest) to 6. Indexed by the enumerate minus one.
+pub const MTB_SCALE: [Color; 7] = [
+    parse_color("hsl(150, 50%, 45%)"),
+    parse_color("hsl(95, 60%, 40%)"),
+    parse_color("hsl(58, 80%, 44%)"),
+    parse_color("hsl(38, 95%, 48%)"),
+    parse_color("hsl(20, 95%, 50%)"),
+    parse_color("hsl(2, 85%, 47%)"),
+    parse_color("hsl(340, 70%, 34%)"),
+];
+/// OSM `piste:difficulty`, novice to extreme. Not the piste colours of any one
+/// country's signage — those disagree between Europe and North America — but
+/// the same green-to-red ramp the other grades use.
+pub const PISTE_DIFFICULTY: [Color; 7] = [
+    parse_color("hsl(150, 50%, 45%)"),
+    parse_color("hsl(100, 58%, 40%)"),
+    parse_color("hsl(52, 85%, 45%)"),
+    parse_color("hsl(30, 95%, 50%)"),
+    parse_color("hsl(8, 88%, 48%)"),
+    parse_color("hsl(330, 60%, 42%)"),
+    parse_color("hsl(300, 55%, 30%)"),
+];
+/// OSM `via_ferrata_scale`, 0 (easiest) to 6 — the same seven steps as
+/// `mtb:scale`, and deliberately the same ramp: both are alpine difficulty read
+/// off a path, and a reader moving between the two overlays should not have to
+/// relearn the colours.
+pub const VIA_FERRATA_SCALE: [Color; 7] = MTB_SCALE;
+/// OSM `smoothness`, excellent to impassable. Indexed by the enumerate minus one.
+pub const SMOOTHNESS: [Color; 8] = [
+    parse_color("hsl(165, 55%, 42%)"),
+    parse_color("hsl(120, 50%, 42%)"),
+    parse_color("hsl(68, 70%, 42%)"),
+    parse_color("hsl(45, 95%, 48%)"),
+    parse_color("hsl(28, 95%, 50%)"),
+    parse_color("hsl(10, 88%, 50%)"),
+    parse_color("hsl(0, 80%, 40%)"),
+    parse_color("hsl(330, 60%, 30%)"),
+];
 pub const SCREE: Color = parse_color("hsl(0, 0%, 90%)");
 pub const SCRUB: Color = parse_color("hsl(100, 70%, 86%)");
 pub const SILO_STROKE: Color = parse_color("hsl(50, 20%, 30%)");

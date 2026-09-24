@@ -7,3 +7,4 @@ mod tile_coord;
 mod tile_invalidation;
 mod tile_processing_worker;
 mod tile_processor;
+pub mod tile_variants;

@@ -1,85 +1,11 @@
-use crate::render::{
-    ContourCountries, FeatureLineMaskCountries, HillshadingHierarchy, PlaceTypeOverrides,
-    RenderLayer,
+use crate::{
+    app::tile_variants::TileVariants,
+    render::{
+        ContourCountries, FeatureLineMaskCountries, HillshadingHierarchy, PlaceTypeOverrides,
+    },
 };
-use clap::{Parser, ValueEnum, error::ErrorKind};
-use std::{collections::HashSet, net::Ipv4Addr, path::PathBuf, str::FromStr};
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct TileUrlPath(String);
-
-impl TileUrlPath {
-    pub const fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
-impl FromStr for TileUrlPath {
-    type Err = String;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let trimmed = value.trim();
-
-        if trimmed.is_empty() {
-            return Err("tile URL path cannot be empty".into());
-        }
-
-        if !trimmed.starts_with('/') {
-            return Err(format!("tile URL path must start with '/': {trimmed}"));
-        }
-
-        if trimmed == "/" {
-            Ok(Self("/".to_string()))
-        } else {
-            Ok(Self(trimmed.trim_end_matches('/').to_string()))
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct RenderGroup(HashSet<RenderLayer>);
-
-impl RenderGroup {
-    pub const fn layers(&self) -> &HashSet<RenderLayer> {
-        &self.0
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct TileVariantInput {
-    pub url_path: String,
-    pub coverage_geojson: Option<PathBuf>,
-    pub tile_cache_base_path: Option<PathBuf>,
-    pub tile_index: Option<PathBuf>,
-    pub render: HashSet<RenderLayer>,
-}
-
-impl FromStr for RenderGroup {
-    type Err = String;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let mut parsed = HashSet::new();
-
-        for token in value.split(',') {
-            let layer_name = token.trim();
-
-            if layer_name.is_empty() {
-                return Err(format!("render group contains an empty layer: {value}"));
-            }
-
-            let layer = RenderLayer::from_str(layer_name, true)
-                .map_err(|_| format!("unknown render layer '{layer_name}'"))?;
-
-            parsed.insert(layer);
-        }
-
-        if parsed.is_empty() {
-            return Err(format!("render group cannot be empty: {value}"));
-        }
-
-        Ok(Self(parsed))
-    }
-}
+use clap::{Parser, error::ErrorKind};
+use std::{collections::HashSet, net::Ipv4Addr, path::PathBuf};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -197,23 +123,6 @@ pub struct Cli {
     )]
     pub allowed_scales: Vec<f64>,
 
-    /// URL path prefixes for tile routes (e.g. /,/kst).
-    #[arg(
-        long,
-        env = "MAPRENDER_TILE_URL_PATH",
-        value_delimiter = ',',
-        default_value = "/"
-    )]
-    pub tile_url_path: Vec<TileUrlPath>,
-
-    /// Coverage geojson polygon files aligned with tile URL paths.
-    #[arg(long, env = "MAPRENDER_COVERAGE_GEOJSON", value_delimiter = ',')]
-    pub coverage_geojson: Vec<PathBuf>,
-
-    /// Cache base directories aligned with tile URL paths.
-    #[arg(long, env = "MAPRENDER_TILE_CACHE_BASE_PATH", value_delimiter = ',')]
-    pub tile_cache_base_path: Vec<PathBuf>,
-
     /// Serve cached tiles from the filesystem.
     #[arg(
         long,
@@ -231,9 +140,16 @@ pub struct Cli {
     #[arg(long, env = "MAPRENDER_INVALIDATE_MIN_ZOOM", default_value_t = 0)]
     pub invalidate_min_zoom: u8,
 
-    /// Tile index files aligned with tile URL paths.
-    #[arg(long, env = "MAPRENDER_INDEX", value_delimiter = ',')]
-    pub index: Vec<PathBuf>,
+    /// Every tile route, one per `;`-separated entry, lines allowed. An entry is
+    /// a URL path followed by space-separated fields in any order: a format
+    /// (`jpeg` by default, or `png`, `webp`, `webp-lossy`, the lossy ones taking
+    /// an optional `=<quality>` — `jpeg=85`, default 90 and 80), `overlay` to leave
+    /// out the layers the map draws by itself, `+<layers>` to add extras,
+    /// `-<layers>` to drop base layers, and `cache=`, `index=`, `coverage=`.
+    /// A layer is either an extra or part of the map, never both, so naming one
+    /// in the wrong list is an error rather than a silent no-op.
+    #[arg(long, env = "MAPRENDER_TILE_VARIANTS", default_value = "/")]
+    pub tile_variants: TileVariants,
 
     /// Path to the imposm mapping YAML.
     #[arg(long, env = "MAPRENDER_MAPPING_PATH", default_value = "mapping.yaml")]
@@ -247,15 +163,6 @@ pub struct Cli {
         action = clap::ArgAction::Set
     )]
     pub cors: bool,
-
-    #[arg(
-        long,
-        env = "MAPRENDER_RENDER",
-        value_delimiter = ';',
-        num_args = 1..,
-    )]
-    /// Render layers per tile URL path group (items delimited by ',', groups by ';').
-    pub render: Vec<RenderGroup>,
 
     /// Optional overrides for `GET /licenses`, which otherwise answers from each
     /// dataset's own `<hillshading-base-path>/<key>/attribution.json` plus a built-in
@@ -313,15 +220,19 @@ impl Cli {
     }
 
     fn validate(&self) -> Result<(), String> {
-        if self.tile_url_path.is_empty() {
-            return Err("at least one tile URL path is required".into());
-        }
-
-        let variants_len = self.tile_url_path.len();
-        let unique_path_count = self.tile_url_path.iter().collect::<HashSet<_>>().len();
-
-        if unique_path_count != variants_len {
-            return Err("tile URL paths must be unique".into());
+        // Whole numbers because the tile index packs a scale into one byte with
+        // the top bit reserved, so a fractional scale would collide with its
+        // neighbour. The ceiling is far below that bit: a tile side is 256 times
+        // the scale, and the encoders and buffers downstream give out long
+        // before 127 would.
+        if let Some(scale) = self
+            .allowed_scales
+            .iter()
+            .find(|scale| **scale < 1.0 || **scale > 8.0 || scale.fract() != 0.0)
+        {
+            return Err(format!(
+                "allowed-scales must be whole numbers 1..=8, got {scale}"
+            ));
         }
 
         if self.min_zoom > self.max_zoom {
@@ -330,8 +241,6 @@ impl Cli {
                 self.min_zoom, self.max_zoom
             ));
         }
-
-        self.tile_variant_inputs()?;
 
         if let Some(hierarchy) = self.hillshading_hierarchy.as_ref() {
             let keys: HashSet<&str> = hierarchy.entries().iter().map(|e| e.country).collect();
@@ -362,77 +271,4 @@ impl Cli {
         Ok(())
     }
 
-    pub fn tile_variant_inputs(&self) -> Result<Vec<TileVariantInput>, String> {
-        let variants_len = self.tile_url_path.len();
-        let render_by_variant = expand_required_by_variant(&self.render, variants_len, "--render")?;
-        let coverage_by_variant =
-            expand_optional_by_variant(&self.coverage_geojson, variants_len, "--coverage-geojson")?;
-        let cache_by_variant = expand_optional_by_variant(
-            &self.tile_cache_base_path,
-            variants_len,
-            "--tile-cache-base-path",
-        )?;
-        let index_by_variant = expand_optional_by_variant(&self.index, variants_len, "--index")?;
-
-        let mut result = Vec::with_capacity(variants_len);
-
-        for i in 0..variants_len {
-            result.push(TileVariantInput {
-                url_path: self.tile_url_path[i].as_str().to_string(),
-                coverage_geojson: coverage_by_variant[i].clone(),
-                tile_cache_base_path: cache_by_variant[i].clone(),
-                tile_index: index_by_variant[i].clone(),
-                render: render_by_variant[i].layers().clone(),
-            });
-        }
-
-        Ok(result)
-    }
-}
-
-fn validate_optional_count(count: usize, variants_len: usize, name: &str) -> Result<(), String> {
-    if count == 0 || count == 1 || count == variants_len {
-        Ok(())
-    } else {
-        Err(format!(
-            "{name} count ({count}) must be 0, 1, or match --tile-url-path count ({variants_len})"
-        ))
-    }
-}
-
-fn validate_required_count(count: usize, variants_len: usize, name: &str) -> Result<(), String> {
-    if count == 1 || count == variants_len {
-        Ok(())
-    } else {
-        Err(format!(
-            "{name} count ({count}) must be 1 or match --tile-url-path count ({variants_len})"
-        ))
-    }
-}
-
-fn expand_optional_by_variant<T: Clone>(
-    values: &[T],
-    variants_len: usize,
-    name: &str,
-) -> Result<Vec<Option<T>>, String> {
-    validate_optional_count(values.len(), variants_len, name)?;
-
-    Ok(match values.len() {
-        0 => vec![None; variants_len],
-        1 => vec![Some(values[0].clone()); variants_len],
-        _ => values.iter().cloned().map(Some).collect(),
-    })
-}
-
-fn expand_required_by_variant<T: Clone>(
-    values: &[T],
-    variants_len: usize,
-    name: &str,
-) -> Result<Vec<T>, String> {
-    validate_required_count(values.len(), variants_len, name)?;
-
-    Ok(match values.len() {
-        1 => vec![values[0].clone(); variants_len],
-        _ => values.to_vec(),
-    })
 }
