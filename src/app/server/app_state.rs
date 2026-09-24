@@ -15,6 +15,9 @@ pub struct TileVariantState {
     pub(crate) coverage_geometry: Option<Arc<Geometry>>,
     pub(crate) layers: Layers,
     pub(crate) format: ImageFormat,
+    /// Shared with the tile worker, which records a blank tile here rather than
+    /// writing a file.
+    pub(crate) index_db: Option<sled::Db>,
 }
 
 #[derive(Clone)]

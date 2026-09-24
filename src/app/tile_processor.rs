@@ -1,4 +1,7 @@
-use crate::{app::tile_coord::TileCoord, render::Attribution};
+use crate::{
+    app::{tile_coord::TileCoord, tile_processing_worker::SaveTile},
+    render::Attribution,
+};
 use rustix::fs::{XattrFlags, fgetxattr, fsetxattr};
 use sled::Batch;
 use std::{
@@ -21,7 +24,9 @@ const MAX_ATTRIBUTION_LEN: usize = 1024;
 #[derive(Clone)]
 pub struct VariantConfig {
     pub(crate) tile_cache_base_path: Option<PathBuf>,
-    pub(crate) tile_index: Option<PathBuf>,
+    /// Opened by the caller, because the server reads it too — a blank tile is
+    /// recorded here instead of written to disk, and serving one is a lookup.
+    pub(crate) index_db: Option<sled::Db>,
     /// The variant's format, so invalidation deletes the file the route wrote.
     pub(crate) ext: &'static str,
 }
@@ -48,7 +53,7 @@ pub struct TileProcessor {
 // Signature is dictated by sled's merge-operator API; the `Option` return
 // (None = delete) is part of that contract.
 #[allow(clippy::unnecessary_wraps)]
-fn concatenate_merge(
+pub(super) fn concatenate_merge(
     _key: &[u8],              // the key being merged
     old_value: Option<&[u8]>, // the previous value, if one existed
     merged_bytes: &[u8],      // the new bytes being merged in
@@ -62,29 +67,23 @@ fn concatenate_merge(
 }
 
 impl TileProcessor {
-    pub(crate) fn new(config: TileProcessingConfig) -> Result<Self, sled::Error> {
+    pub(crate) fn new(config: TileProcessingConfig) -> Self {
         let mut variants = Vec::with_capacity(config.variants.len());
 
         for variant in config.variants {
-            let db = variant.tile_index.map(sled::open).transpose()?;
-
-            if let Some(ref db) = db {
-                db.set_merge_operator(concatenate_merge);
-            }
-
             variants.push(VariantRuntime {
                 tile_cache_base_path: variant.tile_cache_base_path,
-                db,
+                db: variant.index_db,
                 ext: variant.ext,
             });
         }
 
-        Ok(Self {
+        Self {
             variants,
             invalidate_min_zoom: config.invalidate_min_zoom,
             invalidation_register: HashMap::new(),
             last_prune: SystemTime::now(),
-        })
+        }
     }
 
     pub(crate) const fn last_prune(&self) -> SystemTime {
@@ -95,15 +94,17 @@ impl TileProcessor {
         self.last_prune = now;
     }
 
-    pub(crate) fn handle_save_tile(
-        &self,
-        data: Vec<u8>,
-        attribution: &Attribution,
-        coord: TileCoord,
-        scale: f64,
-        render_started_at: SystemTime,
-        variant_index: usize,
-    ) {
+    pub(crate) fn handle_save_tile(&self, tile: SaveTile) {
+        let SaveTile {
+            data,
+            attribution,
+            coord,
+            scale,
+            render_started_at,
+            variant_index,
+            blank,
+        } = tile;
+
         if self.should_drop_save(coord, render_started_at) {
             return;
         }
@@ -117,7 +118,14 @@ impl TileProcessor {
             return;
         };
 
-        Self::append_index_entry(variant.db.as_ref(), coord, scale);
+        Self::append_index_entry(variant.db.as_ref(), coord, scale, blank);
+
+        // A blank tile is the mark and nothing else: on ext4 a 42-byte file still
+        // takes a 4 KiB block and an inode, and a sparse overlay produces these
+        // by the million.
+        if blank {
+            return;
+        }
 
         let file_path = cached_tile_path(tile_cache_base_path, coord, scale, variant.ext);
 
@@ -127,7 +135,7 @@ impl TileProcessor {
             eprintln!("create tile dir failed: {err}");
         }
 
-        if let Err(err) = write_tile(&file_path, &data, attribution, render_started_at) {
+        if let Err(err) = write_tile(&file_path, &data, &attribution, render_started_at) {
             eprintln!("write tile {coord}@{scale} failed: {err}");
         }
     }
@@ -205,14 +213,14 @@ impl TileProcessor {
         false
     }
 
-    fn append_index_entry(db: Option<&sled::Db>, coord: TileCoord, scale: f64) {
+    fn append_index_entry(db: Option<&sled::Db>, coord: TileCoord, scale: f64, blank: bool) {
         let Some(db) = db else {
             return;
         };
 
         let key: Vec<u8> = coord.into();
 
-        if let Err(err) = db.merge(key, [scale.round() as u8; 1]) {
+        if let Err(err) = db.merge(key, [index_byte(scale, blank); 1]) {
             eprint!("error merging tile {coord}: {err}");
         }
     }
@@ -266,7 +274,9 @@ impl TileProcessor {
         let unique_scales: HashSet<u8> = scales.iter().copied().collect();
 
         for scale in unique_scales {
-            let path = cached_tile_path(base_path, coord, scale as f64, ext);
+            // A blank scale has no file; unlinking a missing one is already
+            // tolerated below, so the mark only has to be taken off the scale.
+            let path = cached_tile_path(base_path, coord, f64::from(scale & !BLANK_MARK), ext);
 
             if let Err(err) = fs::remove_file(&path)
                 && err.kind() != io::ErrorKind::NotFound
@@ -332,6 +342,17 @@ pub fn read_attribution(file: impl AsFd) -> Option<Attribution> {
     std::str::from_utf8(&value[..len])
         .ok()
         .map(Attribution::decode)
+}
+
+/// Set on a scale byte in the index to say the tile was blank, so no file was
+/// written. Scales are 1..=3, so the top bit is free.
+pub const BLANK_MARK: u8 = 0x80;
+
+/// The byte a tile contributes to its index entry.
+pub const fn index_byte(scale: f64, blank: bool) -> u8 {
+    let scale = scale as u8;
+
+    if blank { scale | BLANK_MARK } else { scale }
 }
 
 pub fn cached_tile_path(

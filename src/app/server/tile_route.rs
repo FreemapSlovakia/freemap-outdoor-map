@@ -2,7 +2,8 @@ use crate::{
     app::{
         server::app_state::{AppState, TileRouteState},
         tile_coord::TileCoord,
-        tile_processor::{cached_tile_path, read_attribution},
+        tile_processing_worker::SaveTile,
+        tile_processor::{cached_tile_path, index_byte, read_attribution},
     },
     render::{
         ATTRIBUTION_HEADER, Attribution, ImageFormat, RenderRequest, TileCoverageRelation,
@@ -177,11 +178,7 @@ pub async fn serve_tile(
         {
             // Outside coverage nothing is drawn, so the codes are known to be none —
             // which is not the same as the unknown of a tile cached without them.
-            let blank: &'static [u8] = match variant.format {
-                ImageFormat::Webp(_) => BLANK_TILE_WEBP.as_slice(),
-                ImageFormat::Png => BLANK_TILE_PNG.as_slice(),
-                _ => GRAY_TILE_JPEG.as_slice(),
-            };
+            let blank = blank_tile(variant.format);
 
             return annotate(
                 Response::builder()
@@ -279,6 +276,25 @@ pub async fn serve_tile(
             }
         }
 
+        // The file is absent for a blank tile by design, so before rendering ask
+        // the index whether that is why. Only a miss pays this lookup; a hit
+        // never reaches here.
+        if !rerender
+            && state.serve_cached
+            && index_says_blank(variant.index_db.as_ref(), coord, scale)
+        {
+            return annotate(
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Type", variant.format.content_type())
+                    .header("Cache-Control", TILE_CACHE_CONTROL),
+                TileSource::Cache,
+                Some(&Attribution::default()),
+            )
+            .body(Body::from(Bytes::from(blank_tile(variant.format))))
+            .expect("body should be built");
+        }
+
         Some(file_path)
     } else {
         None
@@ -312,14 +328,15 @@ pub async fn serve_tile(
     if file_path.is_some()
         && let Some(tile_worker) = state.tile_worker.as_ref()
         && let Err(err) = tile_worker
-            .save_tile(
-                rendered.bytes.clone(),
-                rendered.attribution.clone(),
+            .save_tile(SaveTile {
+                data: rendered.bytes.clone(),
+                attribution: rendered.attribution.clone(),
                 coord,
                 scale,
                 render_started_at,
                 variant_index,
-            )
+                blank: rendered.blank,
+            })
             .await
     {
         eprintln!("Enqueue tile {coord}@{scale} save failed: {err}");
@@ -437,6 +454,36 @@ pub fn tile_bounds_to_epsg3857(x: u32, y: u32, zoom: u8, tile_size: u32) -> Rect
     let min_y = (tile_size as f64).mul_add(-pixel_size, max_y);
 
     Rect::new((min_x, min_y), (max_x, max_y))
+}
+
+/// The bytes a variant answers with when there is nothing to draw: transparent
+/// where the format has alpha, and the map's "no data" grey where it does not.
+fn blank_tile(format: ImageFormat) -> &'static [u8] {
+    match format {
+        ImageFormat::Webp(_) => BLANK_TILE_WEBP.as_slice(),
+        ImageFormat::Png => BLANK_TILE_PNG.as_slice(),
+        _ => GRAY_TILE_JPEG.as_slice(),
+    }
+}
+
+/// Whether the index records this tile as blank at this scale, which is how a
+/// blank tile is cached — no file is written for one.
+fn index_says_blank(db: Option<&sled::Db>, coord: TileCoord, scale: f64) -> bool {
+    let Some(db) = db else {
+        return false;
+    };
+
+    let key: Vec<u8> = coord.into();
+
+    match db.get(key) {
+        Ok(Some(scales)) => scales.contains(&index_byte(scale, true)),
+        Ok(None) => false,
+        Err(err) => {
+            eprintln!("read tile index for {coord} failed: {err}");
+
+            false
+        }
+    }
 }
 
 #[cfg(test)]

@@ -32,15 +32,20 @@ struct TileProcessingInner {
     handle: Mutex<Option<thread::JoinHandle<()>>>,
 }
 
+/// One finished tile on its way to the cache.
+pub(super) struct SaveTile {
+    pub(super) data: Vec<u8>,
+    pub(super) attribution: Attribution,
+    pub(super) coord: TileCoord,
+    pub(super) scale: f64,
+    pub(super) render_started_at: SystemTime,
+    pub(super) variant_index: usize,
+    /// Nothing was painted, so the cache records a mark instead of a file.
+    pub(super) blank: bool,
+}
+
 enum TileProcessingMessage {
-    SaveTile {
-        data: Vec<u8>,
-        attribution: Attribution,
-        coord: TileCoord,
-        scale: f64,
-        render_started_at: SystemTime,
-        variant_index: usize,
-    },
+    SaveTile(SaveTile),
     Invalidate {
         coord: TileCoord,
         invalidated_at: SystemTime,
@@ -51,8 +56,7 @@ impl TileProcessingWorker {
     pub(crate) fn new(config: TileProcessingConfig) -> Self {
         let (tx, mut rx) = mpsc::channel(TILE_PROCESSING_QUEUE);
 
-        // TODO propagate error
-        let mut processor = TileProcessor::new(config).expect("tile processor");
+        let mut processor = TileProcessor::new(config);
 
         let handle = thread::Builder::new()
             .name("tile-processing-worker".to_string())
@@ -70,21 +74,9 @@ impl TileProcessingWorker {
                     }
 
                     match message {
-                        TileProcessingMessage::SaveTile {
-                            data,
-                            attribution,
-                            coord,
-                            scale,
-                            render_started_at,
-                            variant_index,
-                        } => processor.handle_save_tile(
-                            data,
-                            &attribution,
-                            coord,
-                            scale,
-                            render_started_at,
-                            variant_index,
-                        ),
+                        TileProcessingMessage::SaveTile(tile) => {
+                            processor.handle_save_tile(tile);
+                        }
                         TileProcessingMessage::Invalidate {
                             coord,
                             invalidated_at,
@@ -104,26 +96,14 @@ impl TileProcessingWorker {
 
     pub(crate) async fn save_tile(
         &self,
-        data: Vec<u8>,
-        attribution: Attribution,
-        coord: TileCoord,
-        scale: f64,
-        render_started_at: SystemTime,
-        variant_index: usize,
+        tile: SaveTile,
     ) -> Result<(), TileProcessingSendError> {
         let tx = {
             let guard = self.inner.tx.lock().expect("mutex not poisoned");
             guard.clone().ok_or(TileProcessingSendError::QueueClosed)?
         };
 
-        tx.send(TileProcessingMessage::SaveTile {
-            data,
-            attribution,
-            coord,
-            scale,
-            render_started_at,
-            variant_index,
-        })
+        tx.send(TileProcessingMessage::SaveTile(tile))
         .await
         .map_err(|_| TileProcessingSendError::QueueClosed)
     }

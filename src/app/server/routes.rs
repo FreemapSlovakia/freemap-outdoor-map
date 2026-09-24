@@ -49,6 +49,7 @@ pub struct TileVariantOptions {
     pub tile_cache_base_path: Option<PathBuf>,
     pub layers: Layers,
     pub format: ImageFormat,
+    pub index_db: Option<sled::Db>,
     pub coverage_geometry: Option<Geometry>,
 }
 
@@ -67,6 +68,7 @@ pub async fn start_server(
             coverage_geometry: variant.coverage_geometry.clone().map(Arc::new),
             layers: variant.layers.clone(),
             format: variant.format,
+            index_db: variant.index_db.clone(),
         })
         .collect();
 
