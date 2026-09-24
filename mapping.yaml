@@ -1503,7 +1503,7 @@ tables:
           include:
             - assisted_trail
             - ladder
-            - mtb:scale
+            - "mtb:scale"
             - rungs
             - safety_rope
     type: linestring
