@@ -118,16 +118,26 @@ impl TileProcessor {
             return;
         };
 
-        Self::append_index_entry(variant.db.as_ref(), coord, scale, blank);
+        Self::record_index_entry(variant.db.as_ref(), coord, scale, blank);
+
+        let file_path = cached_tile_path(tile_cache_base_path, coord, scale, variant.ext);
 
         // A blank tile is the mark and nothing else: on ext4 a 42-byte file still
         // takes a 4 KiB block and an inode, and a sparse overlay produces these
-        // by the million.
-        if blank {
+        // by the million. Only where there is an index to hold the mark, though —
+        // without one the file is the only record there is.
+        if blank && variant.db.is_some() {
+            // A tile that had content and now renders blank must lose its file,
+            // or the file branch of `serve_tile` keeps serving the old one and
+            // the rerender silently does nothing.
+            if let Err(err) = fs::remove_file(&file_path)
+                && err.kind() != io::ErrorKind::NotFound
+            {
+                eprintln!("remove blank tile {coord}@{scale} failed: {err}");
+            }
+
             return;
         }
-
-        let file_path = cached_tile_path(tile_cache_base_path, coord, scale, variant.ext);
 
         if let Some(parent) = file_path.parent()
             && let Err(err) = fs::create_dir_all(parent)
@@ -213,15 +223,31 @@ impl TileProcessor {
         false
     }
 
-    fn append_index_entry(db: Option<&sled::Db>, coord: TileCoord, scale: f64, blank: bool) {
+    /// Record that this tile exists at this scale, and whether it is blank.
+    ///
+    /// Replaces rather than appends: a tile that gains or loses content would
+    /// otherwise end up marked both ways at once, and the blank mark would win
+    /// for as long as the entry survived.
+    fn record_index_entry(db: Option<&sled::Db>, coord: TileCoord, scale: f64, blank: bool) {
         let Some(db) = db else {
             return;
         };
 
         let key: Vec<u8> = coord.into();
+        let want = index_byte(scale, blank);
+        let stale = index_byte(scale, !blank);
 
-        if let Err(err) = db.merge(key, [index_byte(scale, blank); 1]) {
-            eprint!("error merging tile {coord}: {err}");
+        let updated = db.update_and_fetch(key, |old| {
+            let mut scales = old.map(<[u8]>::to_vec).unwrap_or_default();
+
+            scales.retain(|byte| *byte != stale && *byte != want);
+            scales.push(want);
+
+            Some(scales)
+        });
+
+        if let Err(err) = updated {
+            eprintln!("error recording tile {coord} in the index: {err}");
         }
     }
 
@@ -350,7 +376,7 @@ pub const BLANK_MARK: u8 = 0x80;
 
 /// The byte a tile contributes to its index entry.
 pub const fn index_byte(scale: f64, blank: bool) -> u8 {
-    let scale = scale as u8;
+    let scale = scale.round() as u8;
 
     if blank { scale | BLANK_MARK } else { scale }
 }

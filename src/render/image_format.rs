@@ -65,15 +65,19 @@ impl ImageFormat {
     /// [`Self::from_parts`] over a `name[=quality]` token, as a tile variant
     /// spells it.
     pub fn parse(token: &str) -> Option<Result<Self, String>> {
-        let (name, quality) = token.split_once('=').map_or((token, None), |(n, q)| (n, Some(q)));
+        let (name, raw) = token.split_once('=').map_or((token, None), |(n, q)| (n, Some(q)));
 
-        let quality = match quality.map(str::parse::<f32>) {
+        // A name this does not know is not a quality problem — say so before
+        // looking at the other half, or a mistyped field reads as one.
+        Self::from_parts(name, None)?.ok()?;
+
+        let quality = match raw.map(str::parse::<f32>) {
             None => None,
             Some(Ok(q)) => Some(q),
             Some(Err(_)) => {
                 return Some(Err(format!(
                     "quality '{}' is not a number",
-                    quality.unwrap_or_default()
+                    raw.unwrap_or_default()
                 )));
             }
         };

@@ -243,6 +243,17 @@ impl Cli {
             }
         }
 
+        // The tile index packs a scale into one byte with the top bit reserved,
+        // so a fractional scale would collide with its neighbour and serve the
+        // wrong tile.
+        if let Some(scale) = self
+            .allowed_scales
+            .iter()
+            .find(|scale| **scale < 1.0 || **scale > 127.0 || scale.fract() != 0.0)
+        {
+            return Err(format!("allowed-scales must be whole numbers 1..=127, got {scale}"));
+        }
+
         if self.min_zoom > self.max_zoom {
             return Err(format!(
                 "min-zoom {} is greater than max-zoom {}",
