@@ -788,7 +788,11 @@ pub const WAYMARKING_TYPES: [&str; 2] = ["guidepost", "route_marker"];
 
 /// As above, plus the type a nameless guidepost is given — not a thing to select
 /// on, but a legend sample carries it.
-pub const WAYMARKING_LEGEND_TYPES: [&str; 3] = ["guidepost", "guidepost_noname", "route_marker"];
+pub const WAYMARKING_LEGEND_TYPES: [&str; 3] = [
+    WAYMARKING_TYPES[0],
+    "guidepost_noname",
+    WAYMARKING_TYPES[1],
+];
 
 /// The `tags` keys a guidepost or route marker carries to say it serves an
 /// activity. A post may carry several, and one the overlay does not ask about

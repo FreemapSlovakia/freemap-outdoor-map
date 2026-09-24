@@ -281,16 +281,11 @@ pub const PISTE_DIFFICULTY: [Color; 7] = [
     parse_color("hsl(330, 60%, 42%)"),
     parse_color("hsl(300, 55%, 30%)"),
 ];
-/// OSM `via_ferrata_scale`, 0 (easiest) to 6. Indexed by the grade minus one.
-pub const VIA_FERRATA_SCALE: [Color; 7] = [
-    parse_color("hsl(150, 50%, 45%)"),
-    parse_color("hsl(95, 60%, 40%)"),
-    parse_color("hsl(58, 80%, 44%)"),
-    parse_color("hsl(38, 95%, 48%)"),
-    parse_color("hsl(20, 95%, 50%)"),
-    parse_color("hsl(2, 85%, 47%)"),
-    parse_color("hsl(340, 70%, 34%)"),
-];
+/// OSM `via_ferrata_scale`, 0 (easiest) to 6 — the same seven steps as
+/// `mtb:scale`, and deliberately the same ramp: both are alpine difficulty read
+/// off a path, and a reader moving between the two overlays should not have to
+/// relearn the colours.
+pub const VIA_FERRATA_SCALE: [Color; 7] = MTB_SCALE;
 /// OSM `smoothness`, excellent to impassable. Indexed by the enumerate minus one.
 pub const SMOOTHNESS: [Color; 8] = [
     parse_color("hsl(165, 55%, 42%)"),

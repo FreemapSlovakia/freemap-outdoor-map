@@ -190,9 +190,7 @@ pub enum ExportLayer {
 }
 
 impl ExportLayer {
-    /// The extras `layers` toggles. `GroundCover` and `Buildings` are base
-    /// layers, so they are named in `omit` and never here.
-    const TOGGLEABLE: [Self; 12] = [
+    const ALL: [Self; 14] = [
         Self::Shading,
         Self::Contours,
         Self::BicycleTrails,
@@ -205,7 +203,16 @@ impl ExportLayer {
         Self::PisteDifficulty,
         Self::ViaFerrataScale,
         Self::Waymarking,
+        Self::GroundCover,
+        Self::Buildings,
     ];
+
+    /// Whether `layers` may name it. Base layers are governed by `omit`, so
+    /// naming one here is the wrong list — the same rule `Layers::validate`
+    /// applies, asked before the set is built rather than after.
+    fn is_toggleable(self) -> bool {
+        !self.render_layers().iter().any(|layer| layer.is_base())
+    }
 
     fn render_layers(self) -> &'static [RenderLayer] {
         match self {
@@ -361,14 +368,11 @@ pub async fn post(
     {
         // Skipping these would make a base layer in `layers` a silent no-op,
         // where it used to be a 400. It is still the wrong list for them.
-        if layers
-            .iter()
-            .any(|layer| !ExportLayer::TOGGLEABLE.contains(layer))
-        {
+        if layers.iter().any(|layer| !layer.is_toggleable()) {
             return bad_request();
         }
 
-        for export_layer in ExportLayer::TOGGLEABLE {
+        for export_layer in ExportLayer::ALL.into_iter().filter(|l| l.is_toggleable()) {
             let on = layers.contains(&export_layer);
 
             for render_layer in export_layer.render_layers() {
@@ -694,20 +698,11 @@ fn parse_format(
         _ => {}
     }
 
-    if let Some(quality) = quality
-        && !(0.0..=100.0).contains(&quality)
-    {
-        return Err(Box::new(bad_request()));
-    }
+    // Quality is documented as ignored by the lossless formats, so they are not
+    // told it — `from_parts` would otherwise refuse them.
+    let quality = quality.filter(|_| ImageFormat::is_lossy(format));
 
-    // Only the lossy formats are told the quality. The others document it as
-    // ignored, and appending it would make `ImageFormat::parse` refuse them.
-    let token = match quality {
-        Some(q) if matches!(format, "jpeg" | "jpg" | "webp-lossy") => format!("{format}={q}"),
-        _ => format.to_owned(),
-    };
-
-    let parsed = ImageFormat::parse(&token)
+    let parsed = ImageFormat::from_parts(format, quality)
         .ok_or_else(|| Box::new(bad_request()))?
         .map_err(|_| Box::new(bad_request()))?;
 

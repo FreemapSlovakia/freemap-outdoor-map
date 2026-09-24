@@ -3,9 +3,9 @@ use crate::render::{
     legend::{BuildOpts, LegendItem},
 };
 
-/// The graded-way overlays are gated at zoom 12 in `layers::pipeline`: below it the
-/// generalized road tables have dropped the ways that carry the grade.
-const GRADED_FROM_ZOOM: u8 = 12;
+/// Unlike the other legend files, this one can import the zoom it restates: the
+/// graded overlays live in `draw::graded_dots`, which is public.
+use crate::render::draw::graded_dots::MIN_ZOOM as GRADED_FROM_ZOOM;
 
 /// One item per step of an ordered way grade. The id follows the layer, the tag
 /// follows the key — they differ where the OSM key is not a legal column name.
@@ -33,8 +33,11 @@ fn graded(
         .collect()
 }
 
-pub fn graded_ways(opts: BuildOpts) -> Vec<LegendItem<'static>> {
-    let mut items = graded(
+/// Every graded overlay's legend: the layer it draws into, the OSM key its
+/// samples are tagged with, and the value for each step — in the order the
+/// colour ramp indexes them.
+const GRADES: [(&str, &str, &[&str]); 5] = [
+    (
         "sac_scale",
         "sac_scale",
         &[
@@ -45,39 +48,8 @@ pub fn graded_ways(opts: BuildOpts) -> Vec<LegendItem<'static>> {
             "demanding_alpine_hiking",
             "difficult_alpine_hiking",
         ],
-        opts,
-    );
-
-    items.extend(graded(
-        "mtb_scale",
-        "mtb:scale",
-        &["0", "1", "2", "3", "4", "5", "6"],
-        opts,
-    ));
-
-    items.extend(graded(
-        "piste_difficulty",
-        "piste:difficulty",
-        &[
-            "novice",
-            "easy",
-            "intermediate",
-            "advanced",
-            "expert",
-            "freeride",
-            "extreme",
-        ],
-        opts,
-    ));
-
-    items.extend(graded(
-        "via_ferrata_scale",
-        "via_ferrata_scale",
-        &["0", "1", "2", "3", "4", "5", "6"],
-        opts,
-    ));
-
-    items.extend(graded(
+    ),
+    (
         "smoothness",
         "smoothness",
         &[
@@ -90,8 +62,31 @@ pub fn graded_ways(opts: BuildOpts) -> Vec<LegendItem<'static>> {
             "very_horrible",
             "impassable",
         ],
-        opts,
-    ));
+    ),
+    ("mtb_scale", "mtb:scale", &["0", "1", "2", "3", "4", "5", "6"]),
+    (
+        "piste_difficulty",
+        "piste:difficulty",
+        &[
+            "novice",
+            "easy",
+            "intermediate",
+            "advanced",
+            "expert",
+            "freeride",
+            "extreme",
+        ],
+    ),
+    (
+        "via_ferrata_scale",
+        "via_ferrata_scale",
+        &["0", "1", "2", "3", "4", "5", "6"],
+    ),
+];
 
-    items
+pub fn graded_ways(opts: BuildOpts) -> Vec<LegendItem<'static>> {
+    GRADES
+        .iter()
+        .flat_map(|(layer, key, values)| graded(layer, key, values, opts))
+        .collect()
 }

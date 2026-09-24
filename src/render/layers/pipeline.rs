@@ -240,8 +240,22 @@ impl<'a> Prefetcher<'a> {
         self.add_gated(name, legend_name, true, query_fn, render_fn);
     }
 
-    /// `gated` false for a query the pipeline needs for its own sake rather than
-    /// to draw with, which no layer selection may switch off.
+    /// A query the pipeline needs for its own sake rather than to draw with, so
+    /// no layer selection may switch it off.
+    fn add_ungated(
+        &mut self,
+        name: &'static str,
+        query_fn: impl FnOnce(
+            Arc<Ctx>,
+            deadpool_postgres::Object,
+        ) -> BoxFuture<'static, Result<Vec<Row>, tokio_postgres::Error>>
+        + Send
+        + 'static,
+        render_fn: impl FnOnce(Vec<Feature>, Params) -> LayerRenderResult + 'a,
+    ) {
+        self.add_gated(name, None, false, query_fn, render_fn);
+    }
+
     fn add_gated(
         &mut self,
         name: &'static str,
@@ -565,13 +579,11 @@ pub fn render(
         let dry_land = dry_land.clone();
         let ctx_ref = &ctx;
 
-        // `sea_stage` and `draw_sea` already say whether this runs and whether it
-        // draws, so it does not go through the layer gate a second time — which
-        // would drop the mask-only case, whose name has no arm of its own.
-        prefetcher.add_gated(
+        // The surrounding condition already decided this runs, and `draw_sea`
+        // decides whether it paints, so it does not go through the layer gate a
+        // second time — which would drop the mask-only case.
+        prefetcher.add_ungated(
             "sea",
-            None,
-            false,
             move |ctx, conn| async move { layers::sea::query(&ctx, &conn, margin).await }.boxed(),
             move |rows, _params| {
                 let land = layers::sea::project(ctx_ref, &rows)?;
@@ -1414,28 +1426,22 @@ pub fn render(
         );
     }
 
-    // Last of the map layers: the grade qualifies everything drawn below it, and
-    // as an overlay it has nothing of its own to hide behind.
+    // Last of the map layers: a grade qualifies everything drawn below it, and as
+    // an overlay it has nothing of its own to hide behind.
+    //
+    // Every grade reads a column that only exists after an `osm_roads` reimport,
+    // and a missing column fails the whole render rather than drawing nothing —
+    // so a variant naming one must not be deployed ahead of the import.
+    //
+    // One query each. If a variant ever wants several at once, `shared_query` is
+    // the mechanism — but every variant today carries exactly one, where sharing
+    // would be a pessimisation.
     if zoom >= graded_dots::MIN_ZOOM {
-        prefetcher.add(
-            "sac_scale",
-            None,
-            |ctx, conn| {
-                async move { graded_dots::query(&graded_dots::SAC_SCALE, &ctx, &conn).await }
-                    .boxed()
-            },
-            |rows, _params| graded_dots::render(&graded_dots::SAC_SCALE, &ctx, context, rows),
-        );
-    }
+        for (layer, name, dots) in graded_dots::ALL {
+            if !to_render.draws(layer) {
+                continue;
+            }
 
-    // Every grade below reads a column that only exists after an `osm_roads`
-    // reimport, and a missing column fails the whole render rather than drawing
-    // nothing — so a variant naming one must not be deployed ahead of the import.
-    for (dots, name) in [
-        (&graded_dots::PISTE_DIFFICULTY, "piste_difficulty"),
-        (&graded_dots::VIA_FERRATA_SCALE, "via_ferrata_scale"),
-    ] {
-        if zoom >= graded_dots::MIN_ZOOM {
             let ctx = ctx.clone();
 
             prefetcher.add(
@@ -1445,30 +1451,6 @@ pub fn render(
                 move |rows, _params| graded_dots::render(dots, &ctx, context, rows),
             );
         }
-    }
-
-    if zoom >= graded_dots::MIN_ZOOM {
-        prefetcher.add(
-            "mtb_scale",
-            None,
-            |ctx, conn| {
-                async move { graded_dots::query(&graded_dots::MTB_SCALE, &ctx, &conn).await }
-                    .boxed()
-            },
-            |rows, _params| graded_dots::render(&graded_dots::MTB_SCALE, &ctx, context, rows),
-        );
-    }
-
-    if zoom >= graded_dots::MIN_ZOOM {
-        prefetcher.add(
-            "smoothness",
-            None,
-            |ctx, conn| {
-                async move { graded_dots::query(&graded_dots::SMOOTHNESS, &ctx, &conn).await }
-                    .boxed()
-            },
-            |rows, _params| graded_dots::render(&graded_dots::SMOOTHNESS, &ctx, context, rows),
-        );
     }
 
     if let Some(coverage_geometry) = coverage_geometry {

@@ -4,8 +4,7 @@ use crate::render::{
         WAYMARKING_LEGEND_TYPES,
     },
     legend::{
-        BuildOpts, LegendItem, LegendItemBuilder, MAX_LEGEND_ZOOM, PropsBuilder, build_tags_map,
-        leak_str,
+        BuildOpts, LegendItem, LegendItemBuilder, MAX_LEGEND_ZOOM, build_tags_map, leak_str,
         mapping::{self, MappingEntry},
     },
 };
@@ -468,22 +467,30 @@ impl LegendItemBuilder<'_> {
 
         let offset = if self.for_taginfo { 0.0 } else { factor * -2.0 };
 
-        let feature = move |b: PropsBuilder| {
+        let waymarking = WAYMARKING_LEGEND_TYPES.contains(&typ);
+
+        // Only the waymarking samples need the map twice; everything else moves
+        // it into the one call.
+        let second = waymarking.then(|| extra.clone());
+
+        let item = self.add_landcover(bg).add_feature("pois", |b| {
             b.with("type", typ)
                 .with_name()
-                .with("extra", extra.clone())
+                .with("extra", extra)
                 .with("geometry", Point::new(0.0, offset))
-        };
-
-        let item = self.add_landcover(bg).add_feature("pois", feature.clone());
+        });
 
         // Waymarking is drawn by the POI layer on the map and by a layer of its
         // own on an overlay, so its samples are filed under both — or an overlay
         // carrying guideposts would have no legend item for them.
-        if WAYMARKING_LEGEND_TYPES.contains(&typ) {
-            item.add_feature("waymarking", feature)
-        } else {
-            item
+        match second {
+            Some(extra) => item.add_feature("waymarking", |b| {
+                b.with("type", typ)
+                    .with_name()
+                    .with("extra", extra)
+                    .with("geometry", Point::new(0.0, offset))
+            }),
+            None => item,
         }
     }
 }

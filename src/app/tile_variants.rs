@@ -94,7 +94,7 @@ impl FromStr for TileVariants {
                     add: HashSet::new(),
                     omit: HashSet::new(),
                 },
-                format: ImageFormat::Jpeg(DEFAULT_JPEG_QUALITY as u8),
+                format: ImageFormat::Jpeg(DEFAULT_JPEG_QUALITY),
                 tile_cache_base_path: None,
                 tile_index: None,
                 coverage_geojson: None,
@@ -176,7 +176,7 @@ mod tests {
         assert_eq!(v.len(), 3);
 
         assert_eq!(v[0].url_path, "/");
-        assert_eq!(v[0].format, ImageFormat::Jpeg(DEFAULT_JPEG_QUALITY as u8));
+        assert_eq!(v[0].format, ImageFormat::Jpeg(DEFAULT_JPEG_QUALITY));
         assert!(v[0].layers.base_map);
         assert!(v[0].layers.draws(RenderLayer::Shading));
         assert_eq!(
