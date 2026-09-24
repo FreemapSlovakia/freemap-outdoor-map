@@ -19,7 +19,7 @@ log_format json_access escape=json
         '}';
 
 map $uri $tile_bucket {
-        ~^/(?:o/[a-z-]+/)?(?<z>\d+)/  /z/$z;
+        ~^/(?:o/[a-z][a-z0-9_-]*/)?(?<z>\d+)/  /z/$z;
         default                /other;
 }
 

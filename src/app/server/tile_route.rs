@@ -247,6 +247,9 @@ pub async fn serve_tile(
                 .unwrap_or(false)
         };
 
+        // No `Last-Modified`: the index records that a tile is blank, not when it
+        // became so, so there is nothing honest to revalidate against. A blank
+        // tile is tens of bytes, so a client re-fetching it pays headers.
         if blank_in_index {
             return annotate(
                 Response::builder()
@@ -437,11 +440,24 @@ pub fn tile_bounds_to_epsg3857(x: u32, y: u32, zoom: u8, tile_size: u32) -> Rect
 fn blank_tile(format: ImageFormat, scale: f64) -> &'static [u8] {
     let side = TILE_SIZE * (scale.round() as u32).max(1);
 
-    let mut cache = BLANK_TILES.lock().expect("mutex not poisoned");
+    // The key is the extension rather than the format because `encode_blank`
+    // ignores quality — a blank tile is the same picture at any setting. If that
+    // ever stops being true, this key has to carry the quality too.
+    let key = (format.extension(), side);
 
-    cache
-        .entry((format.extension(), side))
-        .or_insert_with(|| encode_blank(format, side).leak())
+    if let Some(bytes) = BLANK_TILES.lock().expect("mutex not poisoned").get(&key) {
+        return bytes;
+    }
+
+    // Encoded outside the lock: holding it across the encoder would let one
+    // failure poison the map for every format, not just this one.
+    let bytes = encode_blank(format, side).leak();
+
+    BLANK_TILES
+        .lock()
+        .expect("mutex not poisoned")
+        .entry(key)
+        .or_insert(bytes)
 }
 
 fn encode_blank(format: ImageFormat, side: u32) -> Vec<u8> {

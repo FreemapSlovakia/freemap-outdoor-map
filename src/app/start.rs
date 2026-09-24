@@ -4,7 +4,7 @@ use crate::app::{
     tile_invalidation,
     tile_variants::TileVariant,
     tile_processing_worker::TileProcessingWorker,
-    tile_processor::{self, TileProcessingConfig, VariantConfig},
+    tile_processor::{TileProcessingConfig, VariantConfig},
 };
 use crate::render::{
     ContourCountries, FALLBACK_KEY, RenderConfig, RenderWorkerPool, set_fonts_path,
@@ -294,13 +294,7 @@ fn open_tile_indexes(cli: &Cli) -> Result<Vec<Option<sled::Db>>, sled::Error> {
             variant
                 .tile_index
                 .as_ref()
-                .map(|path| {
-                    let db = sled::open(path)?;
-
-                    db.set_merge_operator(tile_processor::concatenate_merge);
-
-                    Ok(db)
-                })
+                .map(sled::open)
                 .transpose()
         })
         .collect()

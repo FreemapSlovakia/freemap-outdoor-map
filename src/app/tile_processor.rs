@@ -52,20 +52,6 @@ pub struct TileProcessor {
 
 // Signature is dictated by sled's merge-operator API; the `Option` return
 // (None = delete) is part of that contract.
-#[allow(clippy::unnecessary_wraps)]
-pub(super) fn concatenate_merge(
-    _key: &[u8],              // the key being merged
-    old_value: Option<&[u8]>, // the previous value, if one existed
-    merged_bytes: &[u8],      // the new bytes being merged in
-) -> Option<Vec<u8>> {
-    // set the new value, return None to delete
-    let mut ret = old_value.map(<[u8]>::to_vec).unwrap_or_default();
-
-    ret.extend_from_slice(merged_bytes);
-
-    Some(ret)
-}
-
 impl TileProcessor {
     pub(crate) fn new(config: TileProcessingConfig) -> Self {
         let mut variants = Vec::with_capacity(config.variants.len());
@@ -371,7 +357,7 @@ pub fn read_attribution(file: impl AsFd) -> Option<Attribution> {
 }
 
 /// Set on a scale byte in the index to say the tile was blank, so no file was
-/// written. Scales are 1..=3, so the top bit is free.
+/// written. `--allowed-scales` is held to 1..=8, so the top bit is free.
 pub const BLANK_MARK: u8 = 0x80;
 
 /// The byte a tile contributes to its index entry.

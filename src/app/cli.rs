@@ -243,15 +243,19 @@ impl Cli {
             }
         }
 
-        // The tile index packs a scale into one byte with the top bit reserved,
-        // so a fractional scale would collide with its neighbour and serve the
-        // wrong tile.
+        // Whole numbers because the tile index packs a scale into one byte with
+        // the top bit reserved, so a fractional scale would collide with its
+        // neighbour. The ceiling is far below that bit: a tile side is 256 times
+        // the scale, and the encoders and buffers downstream give out long
+        // before 127 would.
         if let Some(scale) = self
             .allowed_scales
             .iter()
-            .find(|scale| **scale < 1.0 || **scale > 127.0 || scale.fract() != 0.0)
+            .find(|scale| **scale < 1.0 || **scale > 8.0 || scale.fract() != 0.0)
         {
-            return Err(format!("allowed-scales must be whole numbers 1..=127, got {scale}"));
+            return Err(format!(
+                "allowed-scales must be whole numbers 1..=8, got {scale}"
+            ));
         }
 
         if self.min_zoom > self.max_zoom {
