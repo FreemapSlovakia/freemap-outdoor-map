@@ -259,6 +259,16 @@ pub const SAC_SCALE: [Color; 6] = [
     parse_color("hsl(0, 85%, 48%)"),
     parse_color("hsl(348, 75%, 33%)"),
 ];
+/// OSM `mtb:scale`, 0 (easiest) to 6. Indexed by the enumerate minus one.
+pub const MTB_SCALE: [Color; 7] = [
+    parse_color("hsl(150, 50%, 45%)"),
+    parse_color("hsl(95, 60%, 40%)"),
+    parse_color("hsl(58, 80%, 44%)"),
+    parse_color("hsl(38, 95%, 48%)"),
+    parse_color("hsl(20, 95%, 50%)"),
+    parse_color("hsl(2, 85%, 47%)"),
+    parse_color("hsl(340, 70%, 34%)"),
+];
 /// OSM `smoothness`, excellent to impassable. Indexed by the enumerate minus one.
 pub const SMOOTHNESS: [Color; 8] = [
     parse_color("hsl(165, 55%, 42%)"),

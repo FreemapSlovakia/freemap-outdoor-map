@@ -376,6 +376,7 @@ fn whole_catalogue() -> Layers {
         RenderLayer::RoutesSki,
         RenderLayer::SacScale,
         RenderLayer::Smoothness,
+        RenderLayer::MtbScale,
         RenderLayer::Waymarking,
     ]))
 }

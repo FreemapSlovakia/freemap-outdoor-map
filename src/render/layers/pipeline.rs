@@ -161,6 +161,7 @@ fn key_layers(key: &str) -> Option<&'static [RenderLayer]> {
         "country_names" => &[L::CountryNames],
         "sac_scale" => &[L::SacScale],
         "smoothness" => &[L::Smoothness],
+        "mtb_scale" => &[L::MtbScale],
         "waymarking" => &[L::Waymarking],
         "routes" => &[
             L::RoutesHiking,
@@ -1427,6 +1428,18 @@ pub fn render(
 
     // Not in any variant's render list until the roads table is reimported:
     // without the column the query fails the whole render.
+    if zoom >= graded_dots::MIN_ZOOM {
+        prefetcher.add(
+            "mtb_scale",
+            None,
+            |ctx, conn| {
+                async move { graded_dots::query(&graded_dots::MTB_SCALE, &ctx, &conn).await }
+                    .boxed()
+            },
+            |rows, _params| graded_dots::render(&graded_dots::MTB_SCALE, &ctx, context, rows),
+        );
+    }
+
     if zoom >= graded_dots::MIN_ZOOM {
         prefetcher.add(
             "smoothness",

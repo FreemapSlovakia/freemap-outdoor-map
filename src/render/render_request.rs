@@ -25,6 +25,7 @@ pub enum RenderLayer {
     RoutesSki,
     SacScale,
     Smoothness,
+    MtbScale,
     Waymarking,
     Landcover,
     WaterAreas,

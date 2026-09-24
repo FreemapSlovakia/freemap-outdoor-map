@@ -21,9 +21,10 @@ const SPACING: f64 = 2.2;
 /// route, but an overlay sits above every other layer, where a translucent mark
 /// takes its colour from whatever happens to be beneath it.
 pub struct GradedDots {
-    /// The `osm_roads` column holding the grade, as an imposm enumerate: 0 for
-    /// untagged, then 1-based into `colors`.
-    pub column: &'static str,
+    /// SQL over `osm_roads` yielding the grade: 0 for untagged, otherwise
+    /// 1-based into `colors`. An imposm enumerate already counts that way, so
+    /// for most grades this is just the column name.
+    pub grade: &'static str,
     pub colors: &'static [Color],
 }
 
@@ -32,12 +33,19 @@ pub struct GradedDots {
 pub const MIN_ZOOM: u8 = 12;
 
 pub const SAC_SCALE: GradedDots = GradedDots {
-    column: "sac_scale",
+    grade: "sac_scale",
     colors: &colors::SAC_SCALE,
 };
 
+/// The mapping's expression already folds `1+` and `1-` into a 1 and writes the
+/// 1-based grade, so this only has to read it back.
+pub const MTB_SCALE: GradedDots = GradedDots {
+    grade: "COALESCE(NULLIF(mtb_scale, '')::int, 0)",
+    colors: &colors::MTB_SCALE,
+};
+
 pub const SMOOTHNESS: GradedDots = GradedDots {
-    column: "smoothness",
+    grade: "smoothness",
     colors: &colors::SMOOTHNESS,
 };
 
@@ -53,20 +61,26 @@ pub async fn query(
     // Half a dot, plus its ring, bleeds in from either side.
     let buffer_px = dot_diameter(ctx.zoom).mul_add(0.5, OUTLINE_PX + 1.0);
 
-    let column = dots.column;
+    let grade = dots.grade;
 
     #[cfg_attr(any(), rustfmt::skip)]
     let sql = format!("
         SELECT
             geometry,
-            {column} AS grade
-        FROM
-            osm_roads
+            grade
+        FROM (
+            SELECT
+                geometry,
+                {grade} AS grade
+            FROM
+                osm_roads
+            WHERE
+                geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+        ) graded
         WHERE
-            {column} > 0 AND
-            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            grade > 0
         ORDER BY
-            {column}
+            grade
     ");
 
     client.query(&sql, &ctx.bbox_query_params(Some(buffer_px)).as_params()).await
