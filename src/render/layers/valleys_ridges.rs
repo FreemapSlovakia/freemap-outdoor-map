@@ -67,6 +67,14 @@ pub async fn query_ridges(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<
     client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params()).await
 }
 
+const fn size_factors(zoom: u8) -> &'static [f64] {
+    match zoom {
+        ..=13 => &[1.0],
+        14 => &[1.0, 0.75],
+        _ => &[1.0, 0.75, 0.5],
+    }
+}
+
 fn render_rows(
     ctx: &Ctx,
     context: &Context,
@@ -84,39 +92,51 @@ fn render_rows(
 
         let offset_factor = row.get_f64("offset_factor")?;
 
-        let mut options = TextOnLineOptions {
-            flo: FontAndLayoutOptions {
-                style: Style::Italic,
-                letter_spacing,
-                size,
-                ..Default::default()
-            },
-            color: colors::TRAM,
-            halo_opacity: 0.9,
-            distribution: Distribution::Align {
-                align: Align::Center,
-                repeat: Repeat::Spaced(200.0),
-            },
-            offset: offset_factor.mul_add(off, size / 2.0),
-            ..Default::default()
-        };
-
         let geom = geom.chaikin_smoothing(3);
 
-        #[allow(clippy::while_float)]
-        while options.flo.letter_spacing >= 0.0 {
-            let drawn = draw_text_on_line(context, &geom, &name, Some(collision), &options)?;
+        // The label does not grow relatively shorter as you zoom in, so a valley too short
+        // for its name at full size stays that way at every zoom: it needs a smaller face,
+        // not a closer look.
+        for (attempt, factor) in size_factors(ctx.zoom).iter().enumerate() {
+            let size = size * factor;
+
+            let mut options = TextOnLineOptions {
+                flo: FontAndLayoutOptions {
+                    style: Style::Italic,
+                    // `letter_spacing` is in pixels, so it does not follow the smaller face.
+                    // Tracking it out again would only widen a label the full size already
+                    // failed to fit untracked.
+                    letter_spacing: if attempt == 0 { letter_spacing } else { 0.0 },
+                    size,
+                    ..Default::default()
+                },
+                color: colors::TRAM,
+                halo_opacity: 0.9,
+                distribution: Distribution::Align {
+                    align: Align::Center,
+                    repeat: Repeat::Spaced(200.0),
+                },
+                offset: offset_factor.mul_add(off, size / 2.0),
+                ..Default::default()
+            };
+
+            let mut drawn = false;
+
+            #[allow(clippy::while_float)]
+            while options.flo.letter_spacing >= 0.0 {
+                drawn = draw_text_on_line(context, &geom, &name, Some(collision), &options)?;
+
+                if drawn {
+                    break;
+                }
+
+                options.flo.letter_spacing = (options.flo.letter_spacing + 1.0).mul_add(0.8, -2.0);
+            }
 
             if drawn {
                 break;
             }
-
-            options.flo.letter_spacing = (options.flo.letter_spacing + 1.0).mul_add(0.8, -2.0);
         }
-
-        // TODO
-        // {z > 13 && <Placement characterSpacing={0} size={size * 0.75} />}
-        // {z > 14 && <Placement characterSpacing={0} size={size * 0.5} />}
     }
 
     Ok(())
