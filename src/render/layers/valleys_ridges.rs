@@ -67,6 +67,10 @@ pub async fn query_ridges(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<
     client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params()).await
 }
 
+/// Letter spacing a valley name keeps, as a fraction of its size, before the layer
+/// prefers a smaller face. Named valleys average about 0.43 em.
+const MIN_TRACKING_EM: f64 = 0.15;
+
 const fn size_factors(zoom: u8) -> &'static [f64] {
     match zoom {
         ..=13 => &[1.0],
@@ -94,19 +98,27 @@ fn render_rows(
 
         let geom = geom.chaikin_smoothing(3);
 
+        let factors = size_factors(ctx.zoom);
+
         // The label does not grow relatively shorter as you zoom in, so a valley too short
         // for its name at full size stays that way at every zoom: it needs a smaller face,
         // not a closer look.
-        for (attempt, factor) in size_factors(ctx.zoom).iter().enumerate() {
+        for (step, factor) in factors.iter().enumerate() {
             let size = size * factor;
+
+            // Tracking is what makes a name read as a valley rather than a rotated word, so
+            // a face that would have to give up nearly all of it yields to the next one
+            // down. The last step has nothing to yield to and takes whatever fits.
+            let min_letter_spacing = if step + 1 == factors.len() {
+                0.0
+            } else {
+                size * MIN_TRACKING_EM
+            };
 
             let mut options = TextOnLineOptions {
                 flo: FontAndLayoutOptions {
                     style: Style::Italic,
-                    // `letter_spacing` is in pixels, so it does not follow the smaller face.
-                    // Tracking it out again would only widen a label the full size already
-                    // failed to fit untracked.
-                    letter_spacing: if attempt == 0 { letter_spacing } else { 0.0 },
+                    letter_spacing,
                     size,
                     ..Default::default()
                 },
@@ -123,7 +135,7 @@ fn render_rows(
             let mut drawn = false;
 
             #[allow(clippy::while_float)]
-            while options.flo.letter_spacing >= 0.0 {
+            while options.flo.letter_spacing >= min_letter_spacing {
                 drawn = draw_text_on_line(context, &geom, &name, Some(collision), &options)?;
 
                 if drawn {
