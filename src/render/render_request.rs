@@ -23,6 +23,20 @@ pub enum RenderLayer {
     RoutesHorse,
     RoutesBicycle,
     RoutesSki,
+    SacScale,
+    Smoothness,
+    MtbScale,
+    PisteDifficulty,
+    ViaFerrataScale,
+    Waymarking,
+    Landcover,
+    WaterAreas,
+    Buildings,
+    PierAreas,
+    BridgeAreas,
+    SolarPlants,
+    Trees,
+    Cutlines,
 }
 
 #[derive(Deserialize, Debug, Clone, Copy)]
@@ -100,13 +114,97 @@ pub struct AttributionDecoration {
     pub overrides: HashMap<String, String>,
 }
 
+impl RenderLayer {
+    /// Whether the map draws this of its own accord. A base layer is part of the
+    /// map and goes only when a request takes it away; an extra is never drawn
+    /// unless a request asks for it.
+    ///
+    /// The split is what lets [`Layers`] keep two lists that each mean one thing.
+    pub const fn is_base(self) -> bool {
+        matches!(
+            self,
+            Self::Sea
+                | Self::Landcover
+                | Self::WaterAreas
+                | Self::Buildings
+                | Self::PierAreas
+                | Self::BridgeAreas
+                | Self::SolarPlants
+                | Self::Trees
+                | Self::Cutlines
+        )
+    }
+}
+
+/// Which layers a request draws.
+///
+/// `add` names extras to draw and `omit` names base layers to drop — never the
+/// other way round, which [`Layers::validate`] enforces. An overlay is
+/// `base_map: false` plus the extras it wants; an overlay for something that
+/// draws its own ground, an aerial image above all, is `base_map: true` with the
+/// ground omitted.
+///
+/// Anything but `base_map: true` with an empty `omit` leaves part of the surface
+/// unpainted, so it needs an alpha-capable format to be of any use.
+#[derive(Debug, Clone)]
+pub struct Layers {
+    /// Whether the layers the map draws by itself are drawn at all.
+    pub base_map: bool,
+    /// Extras to draw. Only [`RenderLayer`]s that are not `is_base`.
+    pub add: HashSet<RenderLayer>,
+    /// Base layers to drop. Only [`RenderLayer`]s that are `is_base`.
+    pub omit: HashSet<RenderLayer>,
+}
+
+impl Layers {
+    /// The whole map, plus `add`.
+    pub fn map(add: HashSet<RenderLayer>) -> Self {
+        Self {
+            base_map: true,
+            add,
+            omit: HashSet::new(),
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        if let Some(layer) = self.add.iter().find(|layer| layer.is_base()) {
+            return Err(format!(
+                "{layer:?} is part of the map, so it belongs in the omit list, not the render list"
+            ));
+        }
+
+        if let Some(layer) = self.omit.iter().find(|layer| !layer.is_base()) {
+            return Err(format!(
+                "{layer:?} is not part of the map, so omitting it does nothing - leave it out of the render list instead"
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Whether `layer` is drawn.
+    pub fn draws(&self, layer: RenderLayer) -> bool {
+        if layer.is_base() {
+            self.base_map && !self.omit.contains(&layer)
+        } else {
+            self.add.contains(&layer)
+        }
+    }
+
+    /// Whether the map's own layers are drawn untouched — the only case that
+    /// paints the whole surface.
+    pub fn is_whole_map(&self) -> bool {
+        self.base_map && self.omit.is_empty()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RenderRequest {
     pub bbox: Rect<f64>,
     pub zoom: u8,
     pub scale: f64,
     pub format: ImageFormat,
-    pub to_render: HashSet<RenderLayer>,
+    pub layers: Layers,
     pub coverage_geometry: Option<Arc<Geometry>>,
     pub custom_layer: Option<CustomLayer>,
     pub legend: Option<LegendItemData>,
@@ -119,7 +217,7 @@ impl RenderRequest {
         zoom: u8,
         scale: f64,
         format: ImageFormat,
-        to_render: HashSet<RenderLayer>,
+        layers: Layers,
         coverage_geometry: Option<Arc<Geometry>>,
     ) -> Self {
         Self {
@@ -127,7 +225,7 @@ impl RenderRequest {
             zoom,
             scale,
             format,
-            to_render,
+            layers,
             coverage_geometry,
             custom_layer: None,
             legend: None,

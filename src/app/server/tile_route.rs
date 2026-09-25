@@ -2,7 +2,8 @@ use crate::{
     app::{
         server::app_state::{AppState, TileRouteState},
         tile_coord::TileCoord,
-        tile_processor::{cached_tile_path, read_attribution},
+        tile_processing_worker::SaveTile,
+        tile_processor::{cached_tile_path, index_byte, read_attribution},
     },
     render::{
         ATTRIBUTION_HEADER, Attribution, ImageFormat, RenderRequest, TileCoverageRelation,
@@ -16,44 +17,33 @@ use axum::{
 };
 use geo::Rect;
 use httpdate::parse_http_date;
-use image::{ColorType, codecs::jpeg::JpegEncoder};
+use image::{ColorType, ExtendedColorType, ImageEncoder, codecs::jpeg::JpegEncoder};
 use std::{
+    collections::HashMap,
     io::{self, Read},
     os::unix::fs::MetadataExt,
-    sync::LazyLock,
+    sync::{LazyLock, Mutex},
     time::{Duration, SystemTime},
 };
 use tokio::task;
 
 const TILE_CACHE_CONTROL: &str = "no-cache";
 
-static GRAY_TILE_JPEG: LazyLock<Vec<u8>> = LazyLock::new(|| {
-    const TILE_SIZE: usize = 256;
-    const RED: u8 = 209;
-    const GREEN: u8 = 204;
-    const BLUE: u8 = 199;
+/// The map's "no data" grey.
+const GRAY_RED: u8 = 209;
+const GRAY_GREEN: u8 = 204;
+const GRAY_BLUE: u8 = 199;
 
-    let mut pixels = vec![0; TILE_SIZE * TILE_SIZE * 3];
+/// One tile side at scale 1. A blank tile is built at the size the request
+/// asked for, so an `@2x` client is not handed a 256-px image.
+const TILE_SIZE: u32 = 256;
 
-    for px in pixels.chunks_exact_mut(3) {
-        px[0] = RED;
-        px[1] = GREEN;
-        px[2] = BLUE;
-    }
+/// Blank tiles already built, keyed by format extension and side length. A
+/// handful of entries over the life of the process: a few formats by the few
+/// allowed scales.
+type BlankTiles = HashMap<(&'static str, u32), &'static [u8]>;
 
-    let mut encoded = Vec::new();
-
-    JpegEncoder::new(&mut encoded)
-        .encode(
-            &pixels,
-            TILE_SIZE as u32,
-            TILE_SIZE as u32,
-            ColorType::Rgb8.into(),
-        )
-        .expect("encode gray tile jpeg");
-
-    encoded
-});
+static BLANK_TILES: LazyLock<Mutex<BlankTiles>> = LazyLock::new(|| Mutex::new(BlankTiles::new()));
 
 #[derive(serde::Deserialize)]
 pub struct QueryParams {
@@ -122,9 +112,15 @@ pub async fn serve_tile(
             .expect("body should be built");
     }
 
-    let ext = ext.unwrap_or("jpeg");
+    let variant_ext = variant.format.extension();
 
-    if ext != "jpg" && ext != "jpeg" {
+    // The variant decides the format; the request may only name it, and "jpg"
+    // is allowed for the jpeg one because clients in the wild ask for both.
+    let ext_ok = ext.is_none_or(|ext| {
+        ext == variant_ext || (variant_ext == "jpeg" && ext == "jpg")
+    });
+
+    if !ext_ok {
         return Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::empty())
@@ -140,21 +136,23 @@ pub async fn serve_tile(
         {
             // Outside coverage nothing is drawn, so the codes are known to be none —
             // which is not the same as the unknown of a tile cached without them.
+            let blank = blank_tile(variant.format, scale);
+
             return annotate(
                 Response::builder()
                     .status(StatusCode::OK)
-                    .header("Content-Type", "image/jpeg")
+                    .header("Content-Type", variant.format.content_type())
                     .header("Cache-Control", TILE_CACHE_CONTROL),
                 TileSource::OutsideCoverage,
                 Some(&Attribution::default()),
             )
-            .body(Body::from(Bytes::from_static(GRAY_TILE_JPEG.as_slice())))
+            .body(Body::from(Bytes::from(blank)))
             .expect("body should be built");
         }
     }
 
     let file_path = if let Some(ref tile_cache_base_path) = variant.tile_cache_base_path {
-        let file_path = cached_tile_path(tile_cache_base_path, coord, scale);
+        let file_path = cached_tile_path(tile_cache_base_path, coord, scale, variant_ext);
 
         enum ModifiedOrFresh {
             Modified(Vec<u8>, Option<SystemTime>, Option<Attribution>),
@@ -203,7 +201,7 @@ pub async fn serve_tile(
                     let mut builder = annotate(
                         Response::builder()
                             .status(StatusCode::OK)
-                            .header("Content-Type", "image/jpeg")
+                            .header("Content-Type", variant.format.content_type())
                             .header("Cache-Control", TILE_CACHE_CONTROL),
                         TileSource::Cache,
                         attribution.as_ref(),
@@ -236,6 +234,35 @@ pub async fn serve_tile(
             }
         }
 
+        // The file is absent for a blank tile by design, so before rendering ask
+        // the index whether that is why. Only a miss pays this lookup; a hit
+        // never reaches here.
+        let blank_in_index = if rerender || !state.serve_cached {
+            false
+        } else {
+            let db = variant.index_db.clone();
+
+            task::spawn_blocking(move || index_says_blank(db.as_ref(), coord, scale))
+                .await
+                .unwrap_or(false)
+        };
+
+        // No `Last-Modified`: the index records that a tile is blank, not when it
+        // became so, so there is nothing honest to revalidate against. A blank
+        // tile is tens of bytes, so a client re-fetching it pays headers.
+        if blank_in_index {
+            return annotate(
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Type", variant.format.content_type())
+                    .header("Cache-Control", TILE_CACHE_CONTROL),
+                TileSource::Cache,
+                Some(&Attribution::default()),
+            )
+            .body(Body::from(Bytes::from(blank_tile(variant.format, scale))))
+            .expect("body should be built");
+        }
+
         Some(file_path)
     } else {
         None
@@ -247,8 +274,8 @@ pub async fn serve_tile(
         bbox,
         coord.zoom,
         scale,
-        ImageFormat::Jpeg,
-        variant.render.clone(),
+        variant.format,
+        variant.layers.clone(),
         variant.coverage_geometry.clone(),
     );
 
@@ -266,17 +293,26 @@ pub async fn serve_tile(
         }
     };
 
+    // A blank tile drew nothing, so it credits nothing — and the copy served
+    // from the index later must say the same.
+    let attribution = if rendered.blank {
+        Attribution::default()
+    } else {
+        rendered.attribution.clone()
+    };
+
     if file_path.is_some()
         && let Some(tile_worker) = state.tile_worker.as_ref()
         && let Err(err) = tile_worker
-            .save_tile(
-                rendered.bytes.clone(),
-                rendered.attribution.clone(),
+            .save_tile(SaveTile {
+                data: rendered.bytes.clone(),
+                attribution: attribution.clone(),
                 coord,
                 scale,
                 render_started_at,
                 variant_index,
-            )
+                blank: rendered.blank,
+            })
             .await
     {
         eprintln!("Enqueue tile {coord}@{scale} save failed: {err}");
@@ -285,11 +321,11 @@ pub async fn serve_tile(
     annotate(
         Response::builder()
             .status(StatusCode::OK)
-            .header("Content-Type", "image/jpeg")
+            .header("Content-Type", variant.format.content_type())
             .header("Cache-Control", TILE_CACHE_CONTROL)
             .header("Last-Modified", httpdate::fmt_http_date(render_started_at)),
         TileSource::Render,
-        Some(&rendered.attribution),
+        Some(&attribution),
     )
     .body(Body::from(rendered.bytes))
     .expect("body should be built")
@@ -394,6 +430,95 @@ pub fn tile_bounds_to_epsg3857(x: u32, y: u32, zoom: u8, tile_size: u32) -> Rect
     let min_y = (tile_size as f64).mul_add(-pixel_size, max_y);
 
     Rect::new((min_x, min_y), (max_x, max_y))
+}
+
+/// The bytes a variant answers with when there is nothing to draw: transparent
+/// where the format has alpha, and the map's "no data" grey where it does not.
+///
+/// Leaked on first use per (format, size) so the bytes can be handed out as
+/// `&'static` and sent without copying, the way the statics above are.
+fn blank_tile(format: ImageFormat, scale: f64) -> &'static [u8] {
+    let side = TILE_SIZE * (scale.round() as u32).max(1);
+
+    // The key is the extension rather than the format because `encode_blank`
+    // ignores quality — a blank tile is the same picture at any setting. If that
+    // ever stops being true, this key has to carry the quality too.
+    let key = (format.extension(), side);
+
+    if let Some(bytes) = BLANK_TILES.lock().expect("mutex not poisoned").get(&key) {
+        return bytes;
+    }
+
+    // Encoded outside the lock: holding it across the encoder would let one
+    // failure poison the map for every format, not just this one.
+    let bytes = encode_blank(format, side).leak();
+
+    BLANK_TILES
+        .lock()
+        .expect("mutex not poisoned")
+        .entry(key)
+        .or_insert(bytes)
+}
+
+fn encode_blank(format: ImageFormat, side: u32) -> Vec<u8> {
+    match format {
+        ImageFormat::Webp(_) => {
+            let pixels = vec![0u8; (side * side * 4) as usize];
+
+            webp::Encoder::from_rgba(&pixels, side, side)
+                .encode_simple(true, 75.0)
+                .expect("encode blank webp tile")
+                .to_vec()
+        }
+        ImageFormat::Png => {
+            let pixels = vec![0u8; (side * side * 4) as usize];
+            let mut encoded = Vec::new();
+
+            image::codecs::png::PngEncoder::new(&mut encoded)
+                .write_image(&pixels, side, side, ExtendedColorType::Rgba8)
+                .expect("encode blank png tile");
+
+            encoded
+        }
+        _ => {
+            let mut pixels = vec![0; (side * side * 3) as usize];
+
+            for px in pixels.chunks_exact_mut(3) {
+                px.copy_from_slice(&[GRAY_RED, GRAY_GREEN, GRAY_BLUE]);
+            }
+
+            let mut encoded = Vec::new();
+
+            JpegEncoder::new(&mut encoded)
+                .encode(&pixels, side, side, ColorType::Rgb8.into())
+                .expect("encode gray tile jpeg");
+
+            encoded
+        }
+    }
+}
+
+/// Whether the index records this tile as blank at this scale, which is how a
+/// blank tile is cached — no file is written for one.
+///
+/// Reads sled on the caller's thread, so callers wrap it: the cached-file read
+/// beside it is on `spawn_blocking` for the same reason.
+fn index_says_blank(db: Option<&sled::Db>, coord: TileCoord, scale: f64) -> bool {
+    let Some(db) = db else {
+        return false;
+    };
+
+    let key: Vec<u8> = coord.into();
+
+    match db.get(key) {
+        Ok(Some(scales)) => scales.contains(&index_byte(scale, true)),
+        Ok(None) => false,
+        Err(err) => {
+            eprintln!("read tile index for {coord} failed: {err}");
+
+            false
+        }
+    }
 }
 
 #[cfg(test)]

@@ -1,7 +1,8 @@
 use crate::app::{
-    cli::{Cli, TileVariantInput},
+    cli::Cli,
     server::{LicenseCatalog, ServerOptions, TileVariantOptions, start_server},
     tile_invalidation,
+    tile_variants::TileVariant,
     tile_processing_worker::TileProcessingWorker,
     tile_processor::{TileProcessingConfig, VariantConfig},
 };
@@ -35,7 +36,12 @@ pub fn start() {
     set_mapping_path(cli.mapping_path.clone());
     set_fonts_path(cli.fonts_path.clone());
 
-    let tile_variants = match build_tile_variants(&cli) {
+    let tile_indexes = match open_tile_indexes(&cli) {
+        Ok(indexes) => indexes,
+        Err(err) => panic!("failed to open tile index: {err}"),
+    };
+
+    let tile_variants = match build_tile_variants(&cli, &tile_indexes) {
         Ok(config) => config,
         Err(err) => panic!("invalid tile route configuration: {err}"),
     };
@@ -81,10 +87,7 @@ pub fn start() {
         licenses
     };
 
-    let tile_processing_variants = match build_tile_processing_variants(&cli) {
-        Ok(config) => config,
-        Err(err) => panic!("invalid tile processing configuration: {err}"),
-    };
+    let tile_processing_variants = build_tile_processing_variants(&cli, &tile_indexes);
 
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -268,29 +271,51 @@ fn spawn_connection_recycler(
     });
 }
 
-fn build_tile_variants(cli: &Cli) -> Result<Vec<TileVariantOptions>, String> {
-    let variant_inputs = cli.tile_variant_inputs()?;
-
-    variant_inputs
-        .into_iter()
-        .map(tile_variant_input_to_server_variant)
+fn build_tile_variants(
+    cli: &Cli,
+    indexes: &[Option<sled::Db>],
+) -> Result<Vec<TileVariantOptions>, String> {
+    cli.tile_variants
+        .entries()
+        .iter()
+        .zip(indexes)
+        .map(|(variant, index_db)| tile_variant_input_to_server_variant(variant, index_db.clone()))
         .collect()
 }
 
-fn build_tile_processing_variants(cli: &Cli) -> Result<Vec<VariantConfig>, String> {
-    let variant_inputs = cli.tile_variant_inputs()?;
-
-    Ok(variant_inputs
-        .into_iter()
-        .map(|variant| VariantConfig {
-            tile_cache_base_path: variant.tile_cache_base_path,
-            tile_index: variant.tile_index,
+/// One handle per variant, in the order the variants are configured. `sled::Db`
+/// is reference-counted, so the clones the worker and the server hold are the
+/// same database.
+fn open_tile_indexes(cli: &Cli) -> Result<Vec<Option<sled::Db>>, sled::Error> {
+    cli.tile_variants
+        .entries()
+        .iter()
+        .map(|variant| {
+            variant
+                .tile_index
+                .as_ref()
+                .map(sled::open)
+                .transpose()
         })
-        .collect())
+        .collect()
+}
+
+fn build_tile_processing_variants(cli: &Cli, indexes: &[Option<sled::Db>]) -> Vec<VariantConfig> {
+    cli.tile_variants
+        .entries()
+        .iter()
+        .zip(indexes)
+        .map(|(variant, index_db)| VariantConfig {
+            tile_cache_base_path: variant.tile_cache_base_path.clone(),
+            index_db: index_db.clone(),
+            ext: variant.format.extension(),
+        })
+        .collect()
 }
 
 fn tile_variant_input_to_server_variant(
-    variant: TileVariantInput,
+    variant: &TileVariant,
+    index_db: Option<sled::Db>,
 ) -> Result<TileVariantOptions, String> {
     let coverage_geometry =
         match variant.coverage_geojson.as_ref() {
@@ -301,9 +326,11 @@ fn tile_variant_input_to_server_variant(
         };
 
     Ok(TileVariantOptions {
-        url_path: variant.url_path,
-        tile_cache_base_path: variant.tile_cache_base_path,
-        render: variant.render,
+        url_path: variant.url_path.clone(),
+        tile_cache_base_path: variant.tile_cache_base_path.clone(),
+        layers: variant.layers.clone(),
+        format: variant.format,
+        index_db,
         coverage_geometry,
     })
 }

@@ -1,4 +1,5 @@
 use crate::render::{
+    RenderLayer,
     layers::Category,
     legend::{BuildOpts, LegendItem, leak_str, mapping::MappingEntry},
 };
@@ -150,6 +151,10 @@ pub fn feature_lines(
                     b.with("type", "pole")
                         .with("geometry", Point::new(0.0, 0.0))
                 });
+            } else if types[0] == "cutline" {
+                // Drawn by feature_lines but switched by a layer of its own, so
+                // a variant that omits cutlines must not list this sample.
+                item = item.requires(&[RenderLayer::Cutlines]);
             }
 
             item.build()

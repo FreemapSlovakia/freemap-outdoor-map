@@ -100,6 +100,29 @@ is by connectivity, not by area.
 Filling voids under buildings and water is harmless for rendering, because both
 are drawn as their own layers on top of the shading.
 
+**First establish what nodata actually is, because a delivery may not say.**
+Baden-Württemberg's DGM1 ships as XYZ ASCII with a z on every line, and writes
+out-of-coverage as `0.00` — flagged nowhere, exactly as Poland overloads 0.
+Converted with `-a_nodata -9999` it marks nothing, and a border tile becomes
+half real terrain and half sea level: `dgm1_32_581_5276` reads min 0.00, max
+1021.99, mean 446. A roughness scan cannot tell that from a cliff, and ranked
+thirty such tiles above every mountain in the state at up to 12.361 against a
+median of 0.032.
+
+Establish it by measurement, not by reading the spec: across 400 random BW
+rasters not one pixel falls in (0, 80) m and the lowest real elevation is
+89.10 m, so 0 is unambiguous there. In a country with genuine terrain near sea
+level that test would fail and the answer would have to come from elsewhere.
+
+**Masking the sentinel is not always enough.** The cells immediately inside the
+coverage edge can hold a partial value between real ground and the sentinel, so
+the rim still steps hundreds of metres in one pixel — and
+`feature-preserving-smoothing` keeps a step that sharp, exactly as it keeps
+Italy's pixel-doubled staircase. Check whether the low values hug the nodata
+boundary: in BW all 742 of them did, none isolated, so eroding the valid mask by
+one pixel in a `prefilter` removes the rim and nothing else
+(`erode_nodata_fringe.py`).
+
 ## 3. Mercator alignment — the expensive one
 
 **A mosaic whose extent is not a whole multiple of `2^levels` pixels produces an

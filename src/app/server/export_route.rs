@@ -2,8 +2,8 @@ use crate::{
     app::server::{app_state::AppState, routes::ServerOptions},
     render::{
         ATTRIBUTION_HEADER, Attribution, AttributionDecoration, CustomLayer, CustomLayerOrder,
-        Decorations, Glow, ImageFormat, LabelStyle, RenderLayer, RenderRequest, RenderWorkerPool,
-        bbox_size_in_pixels,
+        Decorations, Glow, ImageFormat, LabelStyle, Layers, RenderLayer, RenderRequest,
+        RenderWorkerPool, bbox_size_in_pixels,
     },
 };
 use axum::{
@@ -17,6 +17,7 @@ use geo::Rect;
 use geojson::{Feature, GeoJson};
 use rand::TryRng;
 use serde::Deserialize;
+use clap::ValueEnum as _;
 use serde_json::json;
 use std::{
     collections::{HashMap, HashSet},
@@ -24,7 +25,7 @@ use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
     sync::{
-        Arc,
+        Arc, LazyLock,
         atomic::{AtomicUsize, Ordering},
     },
     time::Duration,
@@ -107,6 +108,9 @@ pub struct ExportRequest {
     zoom: u8,
     bbox: [f64; 4],
     format: Option<String>,
+    /// Quality for the lossy formats, `jpeg` and `webp-lossy`, 0..=100.
+    /// Ignored by the others.
+    quality: Option<f32>,
     scale: Option<f64>,
     features: Option<ExportFeatures>,
     decorations: Option<ExportDecorations>,
@@ -151,6 +155,16 @@ impl ExportAttribution {
     }
 }
 
+/// Every base layer but `Buildings` — derived from [`RenderLayer::is_base`] so a
+/// new one cannot be added to the renderer and forgotten here.
+static GROUND_COVER: LazyLock<Vec<RenderLayer>> = LazyLock::new(|| {
+    RenderLayer::value_variants()
+        .iter()
+        .copied()
+        .filter(|layer| layer.is_base() && *layer != RenderLayer::Buildings)
+        .collect()
+});
+
 /// Client-toggleable map layers. Each maps to one [`RenderLayer`]; the set sent
 /// in the request lists exactly which of these are enabled (membership = on).
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -162,36 +176,80 @@ pub enum ExportLayer {
     HorseTrails,
     HikingTrails,
     SkiTrails,
+    SacScale,
+    Smoothness,
+    MtbScale,
+    PisteDifficulty,
+    ViaFerrataScale,
+    Waymarking,
+    /// Everything that covers the ground, as one switch: an aerial image shows
+    /// all of it better than the map can, and until a client wants them apart
+    /// there is no reason to make it name eight.
+    GroundCover,
+    Buildings,
 }
 
 impl ExportLayer {
-    const ALL: [Self; 6] = [
+    const ALL: [Self; 14] = [
         Self::Shading,
         Self::Contours,
         Self::BicycleTrails,
         Self::HorseTrails,
         Self::HikingTrails,
         Self::SkiTrails,
+        Self::SacScale,
+        Self::Smoothness,
+        Self::MtbScale,
+        Self::PisteDifficulty,
+        Self::ViaFerrataScale,
+        Self::Waymarking,
+        Self::GroundCover,
+        Self::Buildings,
     ];
 
-    const fn render_layer(self) -> RenderLayer {
+    /// Whether `layers` may name it. Base layers are governed by `omit`, so
+    /// naming one here is the wrong list — the same rule `Layers::validate`
+    /// applies, asked before the set is built rather than after.
+    fn is_toggleable(self) -> bool {
+        !self.render_layers().iter().any(|layer| layer.is_base())
+    }
+
+    fn render_layers(self) -> &'static [RenderLayer] {
         match self {
-            Self::Shading => RenderLayer::Shading,
-            Self::Contours => RenderLayer::Contours,
-            Self::BicycleTrails => RenderLayer::RoutesBicycle,
-            Self::HorseTrails => RenderLayer::RoutesHorse,
-            Self::HikingTrails => RenderLayer::RoutesHiking,
-            Self::SkiTrails => RenderLayer::RoutesSki,
+            Self::Shading => &[RenderLayer::Shading],
+            Self::Contours => &[RenderLayer::Contours],
+            Self::BicycleTrails => &[RenderLayer::RoutesBicycle],
+            Self::HorseTrails => &[RenderLayer::RoutesHorse],
+            Self::HikingTrails => &[RenderLayer::RoutesHiking],
+            Self::SkiTrails => &[RenderLayer::RoutesSki],
+            Self::SacScale => &[RenderLayer::SacScale],
+            Self::Smoothness => &[RenderLayer::Smoothness],
+            Self::MtbScale => &[RenderLayer::MtbScale],
+            Self::PisteDifficulty => &[RenderLayer::PisteDifficulty],
+            Self::ViaFerrataScale => &[RenderLayer::ViaFerrataScale],
+            Self::Waymarking => &[RenderLayer::Waymarking],
+            Self::Buildings => &[RenderLayer::Buildings],
+            // Every base layer but `Buildings`, which stays its own switch.
+            Self::GroundCover => &GROUND_COVER,
         }
     }
 }
 
+// A client sending a field this no longer has - `layerMode`, say - should hear
+// about it rather than quietly get the whole map.
 #[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExportFeatures {
     /// Toggleable layers that are enabled. Absent keeps the server defaults; a
     /// present set explicitly turns each toggleable layer on (in set) or off.
     layers: Option<HashSet<ExportLayer>>,
+    /// Whether to draw the layers the map draws by itself. False makes the
+    /// export an overlay of nothing but `layers`. Defaults to true.
+    base_map: Option<bool>,
+    /// Base-map layers to drop — for an overlay over something that draws its
+    /// own ground, an aerial image above all. `layers` adds, this takes away.
+    #[serde(default)]
+    omit: HashSet<ExportLayer>,
     /// Custom `GeoJSON` overlay layer and its rendering options. Absent means no
     /// overlay.
     custom_layer: Option<ExportCustomLayer>,
@@ -247,7 +305,8 @@ pub async fn post(
     State(state): State<AppState>,
     Json(request): Json<ExportRequest>,
 ) -> Response<Body> {
-    let (format, ext, content_type) = match parse_format(request.format.as_deref()) {
+    let (format, ext, content_type) = match parse_format(request.format.as_deref(), request.quality)
+    {
         Ok(value) => value,
         Err(response) => return *response,
     };
@@ -290,23 +349,69 @@ pub async fn post(
 
     let file_path = std::env::temp_dir().join(&filename);
 
-    let mut render = state.default_render.clone();
+    let base_map = request
+        .features
+        .as_ref()
+        .and_then(|features| features.base_map)
+        .unwrap_or(true);
+
+    // An overlay names the extras it wants outright; the server defaults
+    // describe the map, and would arrive uninvited.
+    let mut render = if base_map {
+        state.default_render.clone()
+    } else {
+        HashSet::new()
+    };
 
     if let Some(features) = &request.features
         && let Some(layers) = &features.layers
     {
-        for export_layer in ExportLayer::ALL {
-            let render_layer = export_layer.render_layer();
+        // Skipping these would make a base layer in `layers` a silent no-op,
+        // where it used to be a 400. It is still the wrong list for them.
+        if layers.iter().any(|layer| !layer.is_toggleable()) {
+            return bad_request();
+        }
 
-            if layers.contains(&export_layer) {
-                render.insert(render_layer);
-            } else {
-                render.remove(&render_layer);
+        for export_layer in ExportLayer::ALL.into_iter().filter(|l| l.is_toggleable()) {
+            let on = layers.contains(&export_layer);
+
+            for render_layer in export_layer.render_layers() {
+                if on {
+                    render.insert(*render_layer);
+                } else {
+                    render.remove(render_layer);
+                }
             }
         }
     }
 
-    let mut render_request = RenderRequest::new(rect, request.zoom, scale, format, render, None);
+    let layers = Layers {
+        base_map,
+        add: render,
+        omit: request
+            .features
+            .as_ref()
+            .map_or_else(HashSet::new, |features| {
+                features
+                    .omit
+                    .iter()
+                    .flat_map(|layer| layer.render_layers())
+                    .copied()
+                    .collect()
+            }),
+    };
+
+    if layers.validate().is_err() {
+        return bad_request();
+    }
+
+    // Same reason as the variant check: an overlay in an opaque format comes out
+    // on solid black, which is not what anyone asking for one wants.
+    if !layers.is_whole_map() && !format.has_alpha() {
+        return bad_request();
+    }
+
+    let mut render_request = RenderRequest::new(rect, request.zoom, scale, format, layers, None);
 
     render_request.custom_layer = if let Some(custom_layer) = request
         .features
@@ -575,19 +680,39 @@ fn generate_token() -> String {
     })
 }
 
+/// `quality` reaches the lossy formats only. An export is a file someone keeps,
+/// so plain `webp` is the lossless one and asking for loss is explicit.
+///
+/// The raster names, their defaults and the quality rule belong to
+/// [`ImageFormat::parse`]; only the vector formats and the `jpg` spelling of the
+/// extension are the export's own.
 fn parse_format(
     format: Option<&str>,
+    quality: Option<f32>,
 ) -> Result<(ImageFormat, &'static str, &'static str), Box<Response<Body>>> {
     let format = format.unwrap_or("pdf");
 
     match format {
-        "pdf" => Ok((ImageFormat::Pdf, "pdf", "application/pdf")),
-        "svg" => Ok((ImageFormat::Svg, "svg", "image/svg+xml")),
-        "jpeg" => Ok((ImageFormat::Jpeg, "jpeg", "image/jpeg")),
-        "jpg" => Ok((ImageFormat::Jpeg, "jpg", "image/jpeg")),
-        "png" => Ok((ImageFormat::Png, "png", "image/png")),
-        _ => Err(Box::new(bad_request())),
+        "pdf" => return Ok((ImageFormat::Pdf, "pdf", "application/pdf")),
+        "svg" => return Ok((ImageFormat::Svg, "svg", "image/svg+xml")),
+        _ => {}
     }
+
+    // Quality is documented as ignored by the lossless formats, so they are not
+    // told it — `from_parts` would otherwise refuse them.
+    let quality = quality.filter(|_| ImageFormat::is_lossy(format));
+
+    let parsed = ImageFormat::from_parts(format, quality)
+        .ok_or_else(|| Box::new(bad_request()))?
+        .map_err(|_| Box::new(bad_request()))?;
+
+    let ext = if format == "jpg" {
+        "jpg"
+    } else {
+        parsed.extension()
+    };
+
+    Ok((parsed, ext, parsed.content_type()))
 }
 
 /// Parse a CSS color string (hex `#rgb`/`#rrggbb`/`#rrggbbaa` or

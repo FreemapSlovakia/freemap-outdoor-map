@@ -18,6 +18,7 @@ use cairo::Context;
 pub async fn query(
     ctx: &Ctx,
     client: &tokio_postgres::Client,
+    cutlines: bool,
 ) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let mut types = vec![];
 
@@ -44,7 +45,13 @@ pub async fn query(
     }
 
     if ctx.zoom >= 12 {
-        types.extend(["cutline", "weir", "dam", "tree_row", "line"]);
+        types.extend(["weir", "dam", "tree_row", "line"]);
+
+        // A cutline is a strip of felled forest, which an aerial image shows
+        // better than any line can.
+        if cutlines {
+            types.push("cutline");
+        }
     }
 
     if ctx.zoom >= 14 {

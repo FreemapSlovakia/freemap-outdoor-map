@@ -1,5 +1,8 @@
 use crate::render::{
-    PlaceTypeOverrides, attribution::Attribution, image_format::ImageFormat, layers,
+    PlaceTypeOverrides,
+    attribution::Attribution,
+    image_format::{ImageFormat, WebpQuality},
+    layers,
     render_request::RenderRequest, svg_repo::SvgRepo, xyz::bbox_size_in_pixels,
 };
 use cairo::{Format, ImageSurface, PdfSurface, Surface, SvgSurface};
@@ -26,6 +29,10 @@ pub enum RenderError {
 pub struct RenderOutput {
     pub bytes: Vec<u8>,
     pub attribution: Attribution,
+    /// Nothing was painted — every pixel fully transparent. An overlay produces
+    /// these by the thousand, and the cache stores them as a mark rather than a
+    /// file. Always false for a format without alpha, which paints its ground.
+    pub blank: bool,
 }
 
 pub fn render(
@@ -66,6 +73,7 @@ pub fn render(
             let attribution = render(&surface)?;
 
             Ok(RenderOutput {
+                blank: false,
                 bytes: *surface
                     .finish_output_stream()
                     .expect("finished output stream")
@@ -86,6 +94,7 @@ pub fn render(
             let attribution = render(&surface)?;
 
             Ok(RenderOutput {
+                blank: false,
                 bytes: *surface
                     .finish_output_stream()
                     .expect("finished output stream")
@@ -94,12 +103,48 @@ pub fn render(
                 attribution,
             })
         }
+        ImageFormat::Webp(quality) => {
+            let scale = request.scale;
+
+            let mut surface = ImageSurface::create(
+                Format::ARgb32,
+                (size.width as f64 * scale) as i32,
+                (size.height as f64 * scale) as i32,
+            )?;
+
+            let attribution = render(&surface)?;
+
+            let _span = tracy_client::span!("render_tile::encode_webp");
+
+            let (rgba, width, height) = argb32_to_rgba(&mut surface);
+
+            let encoder = webp::Encoder::from_rgba(&rgba, width, height);
+
+            // `encode`/`encode_lossless` unwrap internally, and a render worker has
+            // no unwind guard — one oversized surface would kill it for the life of
+            // the process. libwebp caps a side at 16383 px, which an export's
+            // `scale` can exceed.
+            let (lossless, q) = match quality {
+                WebpQuality::Lossless => (true, 75.0),
+                WebpQuality::Lossy(q) => (false, q),
+            };
+
+            let encoded = encoder
+                .encode_simple(lossless, q)
+                .map_err(|err| RenderError::ImageEncoding(format!("{err:?}").into()))?;
+
+            Ok(RenderOutput {
+                bytes: encoded.to_vec(),
+                attribution,
+                blank: surface_is_blank(&mut surface),
+            })
+        }
         ImageFormat::Png => {
             let scale = request.scale;
 
             let mut buffer = Vec::new();
 
-            let surface = ImageSurface::create(
+            let mut surface = ImageSurface::create(
                 Format::ARgb32,
                 (size.width as f64 * scale) as i32,
                 (size.height as f64 * scale) as i32,
@@ -116,9 +161,10 @@ pub fn render(
             Ok(RenderOutput {
                 bytes: buffer,
                 attribution,
+                blank: surface_is_blank(&mut surface),
             })
         }
-        ImageFormat::Jpeg => {
+        ImageFormat::Jpeg(quality) => {
             let scale = request.scale;
 
             let mut surface = ImageSurface::create(
@@ -152,14 +198,67 @@ pub fn render(
 
             let mut buffer = Vec::new();
 
-            JpegEncoder::new_with_quality(&mut buffer, 90)
+            JpegEncoder::new_with_quality(&mut buffer, quality)
                 .write_image(&rgb_data, width, height, ExtendedColorType::Rgb8)
                 .map_err(|err| RenderError::ImageEncoding(Box::new(err)))?;
 
             Ok(RenderOutput {
                 bytes: buffer,
                 attribution,
+                blank: false,
             })
         }
     }
+}
+
+/// Cairo's `ARgb32` is premultiplied BGRA in native byte order; WebP wants
+/// straight RGBA. Undoing the premultiply is what keeps a half-transparent
+/// label its own colour instead of a darkened one.
+fn argb32_to_rgba(surface: &mut ImageSurface) -> (Vec<u8>, u32, u32) {
+    let width = surface.width() as u32;
+    let height = surface.height() as u32;
+    let stride = surface.stride() as usize;
+    let data = surface.data().expect("surface data");
+
+    let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+
+    for y in 0..height as usize {
+        let row_start = y * stride;
+        let row = &data[row_start..row_start + width as usize * 4];
+
+        for chunk in row.chunks_exact(4) {
+            let (b, g, r, a) = (chunk[0], chunk[1], chunk[2], chunk[3]);
+
+            // Overlays are drawn opaque, so all but the antialiased edges take
+            // one of the two cheap arms; the divide is for the fringe.
+            if a == 0 {
+                rgba.extend_from_slice(&[0, 0, 0, 0]);
+            } else if a == 255 {
+                rgba.extend_from_slice(&[r, g, b, 255]);
+            } else {
+                let un = |c: u8| ((c as u32 * 255 + a as u32 / 2) / a as u32).min(255) as u8;
+
+                rgba.extend_from_slice(&[un(r), un(g), un(b), a]);
+            }
+        }
+    }
+
+    (rgba, width, height)
+}
+
+/// Whether the surface has any painted pixel. Stops at the first one, so a tile
+/// with content pays almost nothing and only a truly blank one is walked whole.
+fn surface_is_blank(surface: &mut ImageSurface) -> bool {
+    let width = surface.width() as usize;
+    let height = surface.height() as usize;
+    let stride = surface.stride() as usize;
+    let data = surface.data().expect("surface data");
+
+    // Premultiplied `ARgb32`, so a zero alpha is a zero pixel; the byte at index
+    // 3 of each chunk is the alpha on every little-endian target cairo builds for.
+    (0..height).all(|y| {
+        let row = &data[y * stride..y * stride + width * 4];
+
+        row.chunks_exact(4).all(|px| px[3] == 0)
+    })
 }
