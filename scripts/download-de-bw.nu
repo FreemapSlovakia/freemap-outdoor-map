@@ -249,7 +249,8 @@ if ($tiles | length) != $EXPECTED {
 # built.
 #
 # One empty file per processed archive, listed once, is also far cheaper than
-# globbing 36k rasters on exFAT.
+# globbing 36k rasters on the DGM drive: it is NTFS over ntfs-3g, so every stat
+# is a FUSE round trip.
 def done-set [dest: string]: nothing -> record {
     do { ^find $"($dest)/.done" -maxdepth 1 -type f -printf "%f\n" } | complete
       | get stdout | lines
@@ -316,7 +317,7 @@ if ($pending | is-not-empty) {
 
             # EXTRACT TO RAM, NOT TO THE DRIVE. The .xyz are 29 MB each and
             # exist only to be converted, so unpacking them beside the rasters
-            # would push 1.06 TB through the USB filesystem and read it all
+            # would push 1.06 TB through the DGM drive and read it all
             # back — which measured slower than the download itself.
             let work = $"/dev/shm/bw_($stem)"
             rm -rf $work

@@ -58,7 +58,7 @@
 #   those districts and the download will pull the originals back.
 #
 # ARCHIVES ARE STAGED ON NVMe, NOT ON THE DGM DRIVE. They are transit: writing
-#   66 GB of zip to the USB filesystem and reading it straight back saturates
+#   66 GB of zip to the DGM drive and reading it straight back saturates
 #   it and starves the download, measured on Baden-Württemberg at 6 MB/s
 #   against 43 MB/s once the buffer moved. Only the finished rasters land on
 #   the slow disk.
