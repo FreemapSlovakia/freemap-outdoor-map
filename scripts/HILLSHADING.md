@@ -123,6 +123,30 @@ boundary: in BW all 742 of them did, none isolated, so eroding the valid mask by
 one pixel in a `prefilter` removes the rim and nothing else
 (`erode_nodata_fringe.py`).
 
+**An honest nodata declaration does not mean the data is free of sentinels.**
+Hessen declares −9999 and means it almost everywhere, yet 17 of its 22776
+rasters carry a top row that is entirely 0.00, with real ground in the next row
+— a 386 m cliff across one pixel. That is 0.000075% of the state and it
+produced 13 wrong contours out of 254373, small enough to pass every aggregate
+check.
+
+**So check the finished contours' height range against the region's known
+extremes.** It is the cheapest end-to-end test there is, it costs one SQL query,
+and it catches what sampling misses:
+
+```sql
+SELECT MIN(height), MAX(height) FROM <layer>;
+```
+
+Hessen's maximum came out at 950 m, exactly the Wasserkuppe, while the minimum
+was 60 m against a true floor of about 81 m at the Rhine — the only visible
+symptom of those 17 rasters. Trace each offending level back to the source
+before fixing anything: half the sub-80 m lines here were the defect and half
+were genuine Rhine water level, so masking everything below a threshold would
+have deleted real data. Repair the source tiles, then rebuild only the affected
+windows — the shading grid is resumable per window, so 15 of 7242 had to be
+recomputed rather than all of them.
+
 ## 3. Mercator alignment — the expensive one
 
 **A mosaic whose extent is not a whole multiple of `2^levels` pixels produces an

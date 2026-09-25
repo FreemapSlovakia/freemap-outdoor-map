@@ -46,9 +46,16 @@
 # THE .tfw AND .aux.xml SIDECARS ARE REDUNDANT and are not kept: a raster reads
 #   with the right origin on its own, verified with the sidecars removed.
 #
-# NODATA IS HONESTLY -9999, declared in the files. Unlike Baden-Württemberg,
-#   which writes 0.00 for out-of-coverage and flags it nowhere, nothing special
-#   is needed here — no -srcnodata on the VRT and no fringe prefilter.
+# NODATA IS -9999 AND DECLARED, so unlike Baden-Württemberg there is no
+#   -srcnodata on the VRT and no fringe prefilter.
+#
+#   BUT 17 RASTERS CARRY A ZERO TOP ROW, repaired in place on 2026-09-25. Each
+#   held 1000 pixels of 0.00 across row 0 with real ground in row 1 — a 386 m
+#   cliff in one pixel — all of them on the state's northern edge (northings
+#   5693 to 5721). 0.000075% of the state, and the only symptom downstream was
+#   a 60 m contour in a state whose floor is about 81 m. They are now -9999.
+#   If this dataset is ever re-fetched, re-check: remove the .done markers for
+#   those districts and the download will pull the originals back.
 #
 # ARCHIVES ARE STAGED ON NVMe, NOT ON THE DGM DRIVE. They are transit: writing
 #   66 GB of zip to the USB filesystem and reading it straight back saturates
