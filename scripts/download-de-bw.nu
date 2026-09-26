@@ -71,10 +71,9 @@ const MOUNT = "/run/media/martin/2190983A5767510F"   # assert the drive, not the
 const DEST = "/run/media/martin/2190983A5767510F/DGM1/Baden-Wuerttemberg"
 const EPSG = "EPSG:25832"
 const UA   = "Mozilla/5.0 (X11; Linux x86_64)"
-# Converters draining the archive buffer. Measured on 24 cores while download
-# and conversion were still in lockstep: 6 gave 79 rasters/min and 10 gave 66,
-# so the drive, not the CPU, is the limit and oversubscribing it costs
-# throughput. Raise only alongside a measurement.
+# Converters draining the archive buffer. Measured on 24 cores: 6 gave 79
+# rasters/min and 10 gave 66, so the drive, not the CPU, is the limit and
+# oversubscribing it costs throughput. Raise only alongside a measurement.
 const PAR = 8
 
 # Concurrent downloads. Independent of PAR now that the two run side by side;
@@ -288,10 +287,18 @@ if ($pending | is-not-empty) {
     ($pending | each {|t| $"($BASE)/dgm1_32_($t.e)_($t.n)_2_bw.zip" } | str join "\n")
       | save -f $"($zipdir)/urls.txt"
 
-    # Detached, so the conversion loop below starts draining immediately.
-    (do {
-        ^bash -c $"nohup aria2c -i '($zipdir)/urls.txt' -j ($DL_PAR) -x4 -s4 --continue=true --auto-file-renaming=false --user-agent '($UA)' --console-log-level=error --summary-interval=0 -d '($zipdir)' > '($zipdir)/aria2.log' 2>&1; touch '($zipdir)/.dl-done' &"
-    } | complete) | ignore
+    # THE FETCH GOES IN A SCRIPT FILE SO `&` HAS ONE COMMAND TO BACKGROUND.
+    # `bash -c "aria2c ...; touch done &"` backgrounds only the touch and runs
+    # aria2c in the foreground, so the conversion loop below never starts until
+    # the whole download has finished — the archives pile up and the link and
+    # the CPU take turns instead of overlapping.
+    [
+        "#!/bin/sh"
+        $"aria2c -i '($zipdir)/urls.txt' -j ($DL_PAR) -x4 -s4 --continue=true --auto-file-renaming=false --user-agent '($UA)' --console-log-level=error --summary-interval=0 -d '($zipdir)' > '($zipdir)/aria2.log' 2>&1"
+        $"touch '($zipdir)/.dl-done'"
+    ] | str join "\n" | save -f $"($zipdir)/fetch.sh"
+
+    (do { ^bash -c $"nohup sh '($zipdir)/fetch.sh' > /dev/null 2>&1 &" } | complete) | ignore
     print $"==> downloader started \(($DL_PAR) concurrent\), draining with ($PAR) converters"
 
     loop {
