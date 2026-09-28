@@ -233,7 +233,17 @@ if ($missing | is-not-empty) {
 } else {
     if not ($"($DEST)/all.vrt" | path exists) {
         print "==> building all.vrt"
-        gdal build-vrt $have $"($DEST)/all.vrt" --index $"($DEST)/tiles.txt"
+        # -vrtnodata IS NOT A SENTINEL MASK, IT IS THE FILL FOR UNCOVERED GROUND.
+        # The delivery declares no nodata and 0.00 is real marsh here, so there
+        # is deliberately no -srcnodata; but without -vrtnodata everything
+        # outside the state reads as 0.00 too, which is the same value as the
+        # Wilstermarsch. The shading would then see terrain at sea level across
+        # Denmark, Hamburg and the North Sea instead of nothing. -9999 appears
+        # nowhere in the sources (the state minimum is about -3.7 m), so it can
+        # only ever mean "no tile here".
+        (gdal build-vrt $have $"($DEST)/all.vrt"
+           --extra [-vrtnodata -9999]
+           --index $"($DEST)/tiles.txt")
     }
     rm -rf $STAGE
     rm -rf $WORK
