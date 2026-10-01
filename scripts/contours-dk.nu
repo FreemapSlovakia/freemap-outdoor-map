@@ -13,18 +13,20 @@
 # The consolidation pass is not skipped — gdal_contour over a many-thousand-tile
 # VRT is pathologically slow, reopening tiles per scanline.
 
-# INTERVAL 10 m, as everywhere except the Netherlands. The country runs from
-# -24.8 m in a Copenhagen excavation to 170.86 m at Møllehøj, which is twenty
-# levels, -20 to 170.
-
-# DENMARK WILL CARRY FEWER LINES THAN ANY REGION IN THIS REPOSITORY AND THAT IS
-# CORRECT. National roughness p50 is 0.025 against Mecklenburg-Vorpommern's
-# 0.020 and Schleswig-Holstein's 0.036, but the relief is the lowest of the
-# three: Møllehøj, the highest natural point, is 170.86 m, and half the country
-# sits under 31 m. Do not reach for a 5 m interval to fill the gaps — the
-# renderer's height filter draws multiples of 10 below z15, so the extra lines
-# would roughly double the table while showing nothing at the zooms where flat
-# country is actually viewed.
+# INTERVAL 5 m, as in the Netherlands and nowhere else. The country runs from
+# -24.8 m in a Copenhagen excavation to 170.86 m at Møllehøj.
+#
+# TEN METRES LEAVES A THIRD OF THE COUNTRY BLANK. Measured over 630 mostly-land
+# rasters drawn at random: 36.3% of them hold under 10 m of relief across their
+# whole square kilometre, so at a 10 m interval they carry one line or none, and
+# the median raster has 12.5 m of relief and carries one. Delivered at 10 m,
+# Denmark came to 4.71 km of line per km² against the Netherlands' 7.42 at 5 m.
+#
+# THE RENDERER DRAWS THE 5 m LINES WHERE THEY MATTER. Its height filter is
+# `% 50` at z12, `% 20` at z13-14 and `% 5` from z15 up, so the extra lines
+# appear exactly at the zooms where flat country is examined closely, and
+# nowhere below. Widths keep the hierarchy readable: 0.6 at multiples of 100,
+# 0.3 at 10, 0.2 between. Labels are unaffected, being multiples of 50.
 
 # DATUM: EPSG:25832 is ETRS89 / UTM 32N, so the path to 3857 is a null transform
 # and there is nothing to get wrong — no England/OSTN15 hazard.
@@ -137,8 +139,8 @@ contours run {
     height_col:   "height"
     nodata:       "-9999"
     epsg:         $EPSG
-    interval:     10
-    off_interval: 10
+    interval:     5                                # m — see header
+    off_interval: 5
     parallel_off: 3                                # concurrent gdal_contour passes
     cachemax_mb:  2048                             # per process
 }
