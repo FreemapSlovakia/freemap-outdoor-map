@@ -39,11 +39,25 @@
 # EVERY TILE SHIPS AN .md5 BESIDE IT, which is checked before conversion. A
 #   block whose archive is intact can still hold a truncated member.
 #
-# 0.00 IS EVERYWHERE AND IS PROBABLY SEA, BUT VERIFY BEFORE RENDERING. The
-#   first coastal tile sampled is 93% exact zeros. Denmark's lowest land is
-#   about -7 m in the Lammefjord polder, so a scan comparing against that floor
-#   will separate sea from real ground — do not assume either way. Four German
-#   states in this repository each used 0.00 differently.
+# 0.00 IS THE SEA, MEASURED OVER 800 RANDOM RASTERS. Of 125 million exact
+#   zeros only 0.176% touch a non-zero neighbour, so they are a few enormous
+#   contiguous blobs and not scattered ground, and exact 0.00 outnumbers the
+#   two 0.25 m bands either side of it by 23 times — real terrain crossing the
+#   datum would be smooth across zero, not spiked at it. 56 of the 800 are
+#   entirely zero. So the VRT masks it with -srcnodata 0, which is the
+#   Mecklenburg-Vorpommern decision and the opposite of Schleswig-Holstein's.
+#
+#   THE LAND BELOW SEA LEVEL SURVIVES THAT MASK because it is not written as
+#   zero: Lammefjord, the lowest land in the country, runs -7.65 m to -1.41 m
+#   across a whole tile, and the polders generally sit between -1 m and -4 m.
+#
+# -9999 IS WRITTEN, AND ONLY AS WHOLE TILES. 28 rasters are entirely -9999 and
+#   are rewritten to 0.00 below, because -srcnodata 0 stops -9999 being nodata
+#   and a survivor would become terrain 9999 m down. Nothing downstream
+#   notices until gdal_contour refuses "too many levels" an hour later, which
+#   is what happened in Hamburg. They are found by file size: a constant tile
+#   DEFLATEs to 4946 bytes, so the 3228 candidates are read and the rest of the
+#   91 GB is not touched.
 #
 # A BLOCK IS MARKED DONE ONLY WHEN EVERY TILE IN IT CONVERTED. The marker is
 #   what makes a re-run skip a block, and the completeness test at the end
@@ -71,6 +85,8 @@ const EPSG  = "EPSG:25832"                           # ETRS89 / UTM zone 32N
 # converters keep up because each block is only a few hundred tiles.
 const DL_PAR = 6
 const PAR    = 8
+const SYS_PYTHON = "/usr/bin/python3"
+const VOIDFIX = "/home/martin/fm/freemap-outdoor-map/scripts/normalise_voids.py"
 
 gdal assert-mounted $MOUNT
 gdal require-proj $EPSG "download-dk.nu"
@@ -219,10 +235,23 @@ if ($missing | is-not-empty) {
     print "==> INCOMPLETE — re-run to pick up the stragglers; VRT not built"
     print $"    first few: ($missing | first 5 | str join ', ')"
 } else {
+    # See the header: whole-tile voids must stop being -9999 before
+    # -srcnodata 0 takes the marker away from them. Only constant tiles can be
+    # entirely void, and a constant tile compresses to a few kilobytes.
+    print "==> normalising whole-tile voids"
+    let nv = (do { ^$SYS_PYTHON $VOIDFIX $DEST } | complete)
+    print ($nv.stdout | str trim)
+    if $nv.exit_code != 0 {
+        error make {msg: "normalise_voids.py failed — fix before building the VRT"}
+    }
+
     if not ($"($DEST)/all.vrt" | path exists) {
         print "==> building all.vrt"
-        # nodata is declared honestly at source and survives the warp.
-        gdal build-vrt $have $"($DEST)/all.vrt" --index $"($DEST)/tiles.txt"
+        # -srcnodata 0 masks the sea; -vrtnodata -9999 keeps ground no tile
+        # covers out of the mosaic rather than reading it as the datum.
+        (gdal build-vrt $have $"($DEST)/all.vrt"
+           --extra [-srcnodata 0 -vrtnodata -9999]
+           --index $"($DEST)/tiles.txt")
     }
     rm -rf $STAGE
     print $"==> Done -> ($DEST)/all.vrt"
