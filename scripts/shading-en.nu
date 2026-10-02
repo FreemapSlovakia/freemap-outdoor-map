@@ -45,7 +45,8 @@
 #   coarser than the 1 m source, which the measurement says does not matter.
 #   Re-run sample-zoom-en.nu on a different TILE to test that claim elsewhere.
 #
-# DATUM: THE DELIVERED PRODUCTS ARE ~1.9 m OFF TRUE WGS84. KNOWN, ACCEPTED.
+# DATUM: BOTH PRODUCTS ARE NOW ON OSTN15. THE HISTORY BELOW EXPLAINS WHY IT
+# MATTERS AND WHAT A PARTIAL RE-RENDER WOULD STILL BREAK.
 #
 # EPSG:27700 is on the OSGB36 datum, and getting from there to WGS84/Web
 # Mercator needs a datum shift. The correct one is OSTN15, OS's official NTv2
@@ -58,11 +59,13 @@
 #     median 1.90 m   p95 3.57 m   max 4.67 m
 #     mid-England 1.89 m | Lake District 0.94 m | London 1.74 m
 #
-# A z16 pixel here is 1.34-1.54 ground metres, so this is 1-3 px of systematic
+# A z16 pixel here is 1.34-1.54 ground metres, so this was 1-3 px of systematic
 # misregistration against OSM, and it VARIES SPATIALLY — no constant offset can
-# correct it. Both shading.tif and contours_en carry it, so at least they agree
-# with each other. england_contours.gpkg and the raw DTM tiles are native
-# EPSG:27700 and therefore unaffected; only reprojected outputs are.
+# correct it. BOTH PRODUCTS HAVE SINCE BEEN REBUILT ON OSTN15: shading.tif on
+# 2026-08-19 and contours_en on 2026-10-02, the latter by reloading the
+# untouched EPSG:27700 GPKG through the splitter. Neither carries the error
+# now. england_contours.gpkg and the raw DTM tiles are native EPSG:27700 and
+# were never affected; only reprojected outputs were.
 #
 # MIXED-DATUM HAZARD — READ BEFORE ANY PARTIAL RE-RENDER. The OSTN15 grid is now
 # present at ~/.local/share/proj/uk_os_OSTN15_NTv2_OSGBtoETRS.tif, which the geo
