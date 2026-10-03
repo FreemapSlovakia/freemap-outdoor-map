@@ -97,6 +97,21 @@ impl Def {
     pub(crate) fn icon_key<'a>(&'a self, typ: &'a str) -> &'a str {
         icon_key_of(&self.extra, typ)
     }
+
+    /// The legend item this type is listed under: its icon's, unless it borrows that
+    /// icon and recolours it - the red `volcano` on the `peak` glyph, the red
+    /// `landing_site` on the `helipad` one. A recoloured glyph is a different symbol to
+    /// the reader, so it gets an item of its own instead of joining the icon's owner.
+    pub(crate) fn legend_key<'a>(&'a self, typ: &'a str) -> &'a str {
+        let icon = self.icon_key(typ);
+
+        let recoloured = POIS
+            .get(icon)
+            .and_then(|defs| defs.first())
+            .is_some_and(|owner| owner.color() != self.color());
+
+        if recoloured { typ } else { icon }
+    }
 }
 
 fn color_of(category: Category, extra: &Extra) -> Color {
@@ -421,6 +436,10 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (15, 16, N, N, Sport, "public_bath", Extra::default()),
         (15, 16, N, N, Sport, "fishing", Extra::default()),
         (15, 16, N, N, Transport, "helipad", Extra::default()),
+        // Not a public helipad but a spot the rescue services may land on - the same H, in red.
+        // Usually access=no for everyone else, which is the point, not a reason to hide it.
+        // https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/107
+        (15, 16, N, N, Health, "landing_site", Extra { icon: Some("helipad"), needs_access: Some(false), ..Extra::default() }),
         (15, 16, N, N, Transport, "charging_station", Extra::default()),
         (15, 16, N, N, Historic, "tower_defensive", Extra::default()),
         (15, 16, N, N, ManMade, "tower_cooling", Extra::default()),
@@ -1162,6 +1181,18 @@ pub async fn query(
                         osm_pois.osm_id = b.osm_id
                 )
             ) AND
+            -- A helipad that is also tagged emergency=landing_site imports as two rows;
+            -- draw it once, as the more specific red landing site.
+            (
+                type <> 'helipad' OR
+                NOT EXISTS (
+                    SELECT 1
+                    FROM osm_pois b
+                    WHERE
+                        type = 'landing_site' AND
+                        osm_pois.osm_id = b.osm_id
+                )
+            ) AND
             (
                 type <> 'tree' OR
                 tags->'protected' NOT IN ('', 'no') OR
@@ -1669,22 +1700,24 @@ mod tests {
         }
     }
 
-    /// The legend groups POI types by the icon they draw and gives the whole group the
-    /// category of whichever member ranks first, so two types sharing an icon have to agree
-    /// on their category - otherwise one of them is quietly filed under the other's heading
-    /// with nothing in the legend to show it happened.
+    /// The legend groups POI types by [`Def::legend_key`] and gives the whole group the
+    /// category of whichever member ranks first, so two types sharing a legend item have to
+    /// agree on their category - otherwise one of them is quietly filed under the other's
+    /// heading with nothing in the legend to show it happened.
     #[test]
     fn types_sharing_an_icon_share_a_category() {
-        let mut by_icon: HashMap<&str, (&str, Category)> = HashMap::new();
+        let mut by_key: HashMap<&str, (&str, Category)> = HashMap::new();
 
-        for (_, _, _, _, category, typ, extra) in POI_ENTRIES.iter() {
-            let icon = icon_key_of(extra, typ);
+        for (_, _, _, _, category, typ, _) in POI_ENTRIES.iter() {
+            let def = POIS[typ].first().expect("every entry has a definition");
 
-            let (first_typ, first_category) = by_icon.entry(icon).or_insert((typ, *category));
+            let key = def.legend_key(typ);
+
+            let (first_typ, first_category) = by_key.entry(key).or_insert((typ, *category));
 
             assert_eq!(
                 first_category, category,
-                "{typ} and {first_typ} both draw the {icon} icon but are in different \
+                "{typ} and {first_typ} share the {key} legend item but are in different \
                  categories, so the legend lists them under whichever ranks first"
             );
         }
@@ -1805,28 +1838,27 @@ mod tests {
     }
     #[test]
     fn types_sharing_an_icon_share_a_colour() {
-        let mut by_icon: HashMap<&str, (&str, String)> = HashMap::new();
+        let mut by_key: HashMap<&str, (&str, String)> = HashMap::new();
 
         for (_, _, _, _, category, typ, extra) in POI_ENTRIES.iter() {
-            // Mirrors `legend::pois`, which gives `volcano` a legend entry of its own
-            // rather than folding it into the `peak` icon's, and skips `*_noname`
-            // entirely. Those are the types allowed to draw a shared icon in their own
-            // colour, because the legend shows them separately.
-            if *typ == "volcano" || typ.ends_with("_noname") {
+            // Mirrors `legend::pois`, which skips `*_noname` entirely.
+            if typ.ends_with("_noname") {
                 continue;
             }
 
-            let icon = icon_key_of(extra, typ);
+            let def = POIS[typ].first().expect("every entry has a definition");
+
+            let key = def.legend_key(typ);
 
             let color = colors::rgb_hex(color_of(*category, extra));
 
             let (first_typ, first_color) =
-                by_icon.entry(icon).or_insert_with(|| (typ, color.clone()));
+                by_key.entry(key).or_insert_with(|| (typ, color.clone()));
 
             assert_eq!(
                 *first_color, color,
-                "{typ} draws the {icon} icon in {color} but {first_typ} draws it in \
-                 {first_color} - the same glyph would appear on the map in two colours"
+                "{typ} and {first_typ} share the {key} legend item but draw it in {color} \
+                 and {first_color} - one swatch cannot show both"
             );
         }
     }

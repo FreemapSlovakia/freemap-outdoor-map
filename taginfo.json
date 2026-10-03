@@ -564,6 +564,13 @@
       "description": "Rendered as icon. Icon from zoom 18. Label (name/ref) from zoom 19."
     },
     {
+      "key": "emergency",
+      "value": "landing_site",
+      "object_types": ["node", "area"],
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/poi_landing_site?mode=taginfo",
+      "description": "Rendered as red helipad icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
       "key": "amenity",
       "value": "theatre",
       "object_types": ["node", "area"],

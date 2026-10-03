@@ -1013,17 +1013,25 @@ tables:
             mapping:
               emergency:
                 - access_point
+                - air_rescue_service
                 - ambulance_station
+                - assembly_point
                 - defibrillator
+                - disaster_help_point
                 - fire_extinguisher
                 - fire_hydrant
+                - fire_lookout
+                - fire_water_pond
                 - first_aid_kit
+                - landing_site # https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/107
                 - lifeguard
                 - life_ring
                 - mountain_rescue
                 - phone
                 - siren
+                - suction_point
                 - water_rescue
+                - water_tank
           highway:
             mapping:
               highway:
