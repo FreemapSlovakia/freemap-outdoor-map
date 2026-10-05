@@ -105,11 +105,14 @@ mamba activate geo
 gdalinfo --format GTiff | grep -i jxl   # should print "JXL"
 ```
 
-For `cargo build` to link against this GDAL, put a `.cargo/config.toml` at the repo root pointing at the env (adjust the path to your miniforge install):
+For `cargo build` to link against this GDAL, put a `.cargo/config.toml` at the repo root pointing at the env (adjust the path to your miniforge install). `target-cpu=native` builds for the instruction set of the machine doing the build, so the binary may not run on an older CPU:
 
 ```toml
 [build]
-rustflags = ["-C", "link-arg=-Wl,-rpath,/home/<you>/miniforge3/envs/geo/lib"]
+rustflags = [
+  "-C", "target-cpu=native",
+  "-C", "link-arg=-Wl,-rpath,/home/<you>/miniforge3/envs/geo/lib",
+]
 
 [env]
 PKG_CONFIG_PATH = "/home/<you>/miniforge3/envs/geo/lib/pkgconfig"
