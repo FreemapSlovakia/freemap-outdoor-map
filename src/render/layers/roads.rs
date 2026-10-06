@@ -182,7 +182,8 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
                 apply_highway_defaults(3.666);
                 draw()?;
             }
-            (_, "highway", "primary_link" | "secondary") | (_, _, "construction") => {
+            (_, "highway", "primary_link" | "secondary" | "construction")
+            | (14.., "railway", "construction") => {
                 apply_highway_defaults(3.333);
                 draw()?;
             }

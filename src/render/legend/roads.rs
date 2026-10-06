@@ -21,8 +21,6 @@ fn road_from_zoom(class: &str, typ: &str) -> u8 {
             "light_rail" | "tram" | "miniature" | "monorail" | "funicular" | "narrow_gauge"
             | "subway",
         ) => 13,
-        // Construction ways get a bare glow from zoom 12 via the catch-all `(_, _,
-        // "construction")` arm of the glow pass, but no rails until 14.
         ("railway", _) => 14, // construction, disused, preserved
         (
             _,
@@ -387,46 +385,37 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
         ]
         .iter()
         .map(|types| {
-            let builder = LegendItem::builder(
+            LegendItem::builder(
                 format!("railway_{}", types[0]).leak(),
                 Category::Railway,
                 17,
                 opts,
-            );
-
-            // Only construction ways get the glow-without-rails treatment; the rest appear
-            // for real at the zoom they are declared at.
-            let builder = if types[0] == "construction" {
-                builder.min_zoom_unprobeable(road_from_zoom("railway", types[0]))
-            } else {
-                builder.min_zoom(road_from_zoom("railway", types[0]))
-            };
-
-            builder
-                .add_tag_set(|mut ts| {
-                    for tag_set in types.iter().flat_map(|typ| match *typ {
-                        "rail" => vec![
-                            IndexMap::from([("railway", "rail")]),
-                            IndexMap::from([("railway", "rail"), ("service", "main")]),
-                        ],
-                        "light_rail" => vec![
-                            IndexMap::from([("railway", "light_rail")]),
-                            IndexMap::from([("railway", "rail"), ("service", "≠main")]),
-                        ],
-                        _ => vec![IndexMap::from([("railway", *typ)])],
-                    }) {
-                        ts = ts.add_tags(|mut tb| {
-                            for (k, v) in &tag_set {
-                                tb = tb.add(k, v);
-                            }
-                            tb
-                        });
-                    }
-                    ts
-                })
-                .add_landcover("residential")
-                .add_feature("roads", |b| b.with_road(types[0]).with("class", "railway"))
-                .build()
+            )
+            .min_zoom(road_from_zoom("railway", types[0]))
+            .add_tag_set(|mut ts| {
+                for tag_set in types.iter().flat_map(|typ| match *typ {
+                    "rail" => vec![
+                        IndexMap::from([("railway", "rail")]),
+                        IndexMap::from([("railway", "rail"), ("service", "main")]),
+                    ],
+                    "light_rail" => vec![
+                        IndexMap::from([("railway", "light_rail")]),
+                        IndexMap::from([("railway", "rail"), ("service", "≠main")]),
+                    ],
+                    _ => vec![IndexMap::from([("railway", *typ)])],
+                }) {
+                    ts = ts.add_tags(|mut tb| {
+                        for (k, v) in &tag_set {
+                            tb = tb.add(k, v);
+                        }
+                        tb
+                    });
+                }
+                ts
+            })
+            .add_landcover("residential")
+            .add_feature("roads", |b| b.with_road(types[0]).with("class", "railway"))
+            .build()
         }),
     )
     .chain([
