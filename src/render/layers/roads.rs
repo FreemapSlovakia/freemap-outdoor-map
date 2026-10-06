@@ -9,7 +9,10 @@ use crate::render::{
 use cairo::Context;
 use std::borrow::Cow;
 
-pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+pub async fn query(
+    ctx: &Ctx,
+    client: &tokio_postgres::Client,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let zoom = ctx.zoom;
 
     let table = match zoom {
@@ -67,7 +70,9 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
             {table}.osm_id
     ");
 
-    client.query(&query, &ctx.bbox_query_params(Some(BUFFER_PX)).as_params()).await
+    client
+        .query(&query, &ctx.bbox_query_params(Some(BUFFER_PX)).as_params())
+        .await
 }
 
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {

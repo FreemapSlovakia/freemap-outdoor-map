@@ -275,10 +275,7 @@ pub fn pois(
                 .zoom_range_of(poi_zooms_of("chalet"))
                 .add_poi(
                     "chalet",
-                    HashMap::<String, Option<String>>::from([(
-                        "ruins".into(),
-                        Some("yes".into()),
-                    )]),
+                    HashMap::<String, Option<String>>::from([("ruins".into(), Some("yes".into()))]),
                     Category::Other,
                 )
                 .build()
@@ -490,4 +487,3 @@ impl LegendItemBuilder<'_> {
         }
     }
 }
-

@@ -2,9 +2,9 @@ use crate::app::{
     cli::Cli,
     server::{LicenseCatalog, ServerOptions, TileVariantOptions, start_server},
     tile_invalidation,
-    tile_variants::TileVariant,
     tile_processing_worker::TileProcessingWorker,
     tile_processor::{TileProcessingConfig, VariantConfig},
+    tile_variants::TileVariant,
 };
 use crate::render::{
     ContourCountries, FALLBACK_KEY, RenderConfig, RenderWorkerPool, set_fonts_path,
@@ -290,13 +290,7 @@ fn open_tile_indexes(cli: &Cli) -> Result<Vec<Option<sled::Db>>, sled::Error> {
     cli.tile_variants
         .entries()
         .iter()
-        .map(|variant| {
-            variant
-                .tile_index
-                .as_ref()
-                .map(sled::open)
-                .transpose()
-        })
+        .map(|variant| variant.tile_index.as_ref().map(sled::open).transpose())
         .collect()
 }
 
@@ -381,8 +375,14 @@ fn shutdown_tile_workers(
     tile_invalidation_watcher: &Arc<Mutex<Option<tile_invalidation::TileInvalidationWatcher>>>,
     tile_processing_worker: &Arc<Mutex<Option<TileProcessingWorker>>>,
 ) {
-    let watcher = tile_invalidation_watcher.lock().expect("mutex not poisoned").take();
-    let worker = tile_processing_worker.lock().expect("mutex not poisoned").take();
+    let watcher = tile_invalidation_watcher
+        .lock()
+        .expect("mutex not poisoned")
+        .take();
+    let worker = tile_processing_worker
+        .lock()
+        .expect("mutex not poisoned")
+        .take();
 
     if let Some(watcher) = watcher {
         println!("Stopping tile invalidation watcher.");
@@ -413,9 +413,13 @@ pub fn load_geometry_from_geojson(path: &Path) -> Result<Geometry, String> {
 
     let failed = Cell::new(false);
 
-    geometry.map_coords_in_place(|coord: Coord| if let Ok((x, y)) = proj.convert((coord.x, coord.y)) { Coord { x, y } } else {
-        failed.set(true);
-        coord
+    geometry.map_coords_in_place(|coord: Coord| {
+        if let Ok((x, y)) = proj.convert((coord.x, coord.y)) {
+            Coord { x, y }
+        } else {
+            failed.set(true);
+            coord
+        }
     });
 
     if failed.get() {

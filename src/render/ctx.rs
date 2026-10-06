@@ -25,7 +25,10 @@ impl SqlParams {
     }
 
     pub fn as_params(&self) -> Vec<&(dyn ToSql + Sync)> {
-        self.params.iter().map(std::convert::AsRef::as_ref).collect()
+        self.params
+            .iter()
+            .map(std::convert::AsRef::as_ref)
+            .collect()
     }
 }
 

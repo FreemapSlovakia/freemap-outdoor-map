@@ -82,7 +82,8 @@ pub async fn query(
         ""
     };
 
-    let sql = &format!("
+    let sql = &format!(
+        "
         SELECT
             geometry,
             CASE
@@ -99,7 +100,8 @@ pub async fn query(
             (type = ANY($6){obstacles})
             AND
             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-    ");
+    "
+    );
 
     client
         .query(

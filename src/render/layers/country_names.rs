@@ -12,7 +12,10 @@ use crate::render::{
 use cairo::Context;
 use std::f64;
 
-pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+pub async fn query(
+    ctx: &Ctx,
+    client: &tokio_postgres::Client,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let sql = r#"
         SELECT
             name,
@@ -24,7 +27,9 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
     "#;
 
-    client.query(sql, &ctx.bbox_query_params(Some(128.0)).as_params()).await
+    client
+        .query(sql, &ctx.bbox_query_params(Some(128.0)).as_params())
+        .await
 }
 
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
@@ -38,9 +43,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
             ..Default::default()
         },
         halo_width: 2.0,
-        distribution: Distribution::Justify {
-            min_spacing: 0.0,
-        },
+        distribution: Distribution::Justify { min_spacing: 0.0 },
         concave_spacing_factor: 0.0,
         ..Default::default()
     };
@@ -52,9 +55,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
         },
         halo_width: 2.0,
         color: colors::AREA_LABEL,
-        distribution: Distribution::Justify {
-            min_spacing: 0.0,
-        },
+        distribution: Distribution::Justify { min_spacing: 0.0 },
         concave_spacing_factor: 0.0,
         ..Default::default()
     };

@@ -524,8 +524,7 @@ fn label_offsets(
     }
 
     // Step between label starts when repeating is enabled: pack by (advance + spacing).
-    let step = spacing
-        .map_or(total_length, |s| (label_span + s).max(label_span * 0.2));
+    let step = spacing.map_or(total_length, |s| (label_span + s).max(label_span * 0.2));
 
     // How many full labels can we fit (repetition only if spacing is Some).
     let count = if spacing.is_some() {
@@ -666,7 +665,9 @@ struct LaidOut<'a> {
 enum Rejection {
     Drop,
     /// The glyph ending at `span_end` on the prepared line sits on too sharp a bend.
-    Bend { span_end: f64 },
+    Bend {
+        span_end: f64,
+    },
 }
 
 const MAX_RETRIES: usize = 5;

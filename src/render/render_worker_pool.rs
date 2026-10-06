@@ -94,8 +94,7 @@ impl RenderWorkerPool {
             let jh = std::thread::Builder::new()
                 .name(format!("render-worker-{worker_id}"))
                 .spawn(move || {
-                    let mut svg_repo =
-                        SvgRepo::new(config.svg_base_path.as_ref().to_path_buf());
+                    let mut svg_repo = SvgRepo::new(config.svg_base_path.as_ref().to_path_buf());
 
                     loop {
                         let task = {

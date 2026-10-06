@@ -94,18 +94,15 @@ impl TileProcessingWorker {
         }
     }
 
-    pub(crate) async fn save_tile(
-        &self,
-        tile: SaveTile,
-    ) -> Result<(), TileProcessingSendError> {
+    pub(crate) async fn save_tile(&self, tile: SaveTile) -> Result<(), TileProcessingSendError> {
         let tx = {
             let guard = self.inner.tx.lock().expect("mutex not poisoned");
             guard.clone().ok_or(TileProcessingSendError::QueueClosed)?
         };
 
         tx.send(TileProcessingMessage::SaveTile(tile))
-        .await
-        .map_err(|_| TileProcessingSendError::QueueClosed)
+            .await
+            .map_err(|_| TileProcessingSendError::QueueClosed)
     }
 
     pub(crate) fn invalidate_blocking(

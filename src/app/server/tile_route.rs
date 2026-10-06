@@ -116,9 +116,8 @@ pub async fn serve_tile(
 
     // The variant decides the format; the request may only name it, and "jpg"
     // is allowed for the jpeg one because clients in the wild ask for both.
-    let ext_ok = ext.is_none_or(|ext| {
-        ext == variant_ext || (variant_ext == "jpeg" && ext == "jpg")
-    });
+    let ext_ok =
+        ext.is_none_or(|ext| ext == variant_ext || (variant_ext == "jpeg" && ext == "jpg"));
 
     if !ext_ok {
         return Response::builder()

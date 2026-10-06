@@ -34,7 +34,9 @@ pub async fn query_centroids(
             area DESC
     ";
 
-    client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params()).await
+    client
+        .query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
+        .await
 }
 
 pub async fn query_borders(
@@ -56,7 +58,9 @@ pub async fn query_borders(
             area DESC
     ";
 
-    client.query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params()).await
+    client
+        .query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
+        .await
 }
 
 pub fn render_centroids(

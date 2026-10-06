@@ -11,13 +11,13 @@ use axum::{
     extract::{Json, Query, State},
     http::{Response, StatusCode},
 };
+use clap::ValueEnum as _;
 use colorsys::{Rgb, RgbRatio};
 use cosmic_text::Weight;
 use geo::Rect;
 use geojson::{Feature, GeoJson};
 use rand::TryRng;
 use serde::Deserialize;
-use clap::ValueEnum as _;
 use serde_json::json;
 use std::{
     collections::{HashMap, HashSet},

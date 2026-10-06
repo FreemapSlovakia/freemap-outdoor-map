@@ -300,7 +300,9 @@ pub async fn query_marking(
         _ => return Ok(Vec::new()),
     };
 
-    client.query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params()).await
+    client
+        .query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params())
+        .await
 }
 
 pub fn render_marking(
@@ -476,7 +478,9 @@ pub async fn query_labels(
 ) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let query = get_routes_query(render, None, "");
 
-    client.query(&query, &ctx.bbox_query_params(Some(2048.0)).as_params()).await
+    client
+        .query(&query, &ctx.bbox_query_params(Some(2048.0)).as_params())
+        .await
 }
 
 pub fn render_labels(

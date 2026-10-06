@@ -539,7 +539,11 @@ impl MaskBits {
     fn full_word(&self, i: usize) -> u64 {
         let used = (self.pixels - i * 64).min(64);
 
-        if used == 64 { u64::MAX } else { (1 << used) - 1 }
+        if used == 64 {
+            u64::MAX
+        } else {
+            (1 << used) - 1
+        }
     }
 }
 

@@ -25,7 +25,10 @@ static REPLACEMENTS: LazyLock<Vec<Replacement>> = LazyLock::new(|| {
     ]
 });
 
-pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+pub async fn query(
+    ctx: &Ctx,
+    client: &tokio_postgres::Client,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     // Only types that are actually drawn: a name whose line is missing would float over
     // the water with nothing under it.
     let w = if ctx.zoom < 14 {
@@ -64,7 +67,9 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
     "
     );
 
-    client.query(&sql, &ctx.bbox_query_params(Some(2048.0)).as_params()).await
+    client
+        .query(&sql, &ctx.bbox_query_params(Some(2048.0)).as_params())
+        .await
 }
 
 pub fn render(

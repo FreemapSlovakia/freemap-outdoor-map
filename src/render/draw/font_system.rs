@@ -85,9 +85,7 @@ pub fn draw_with_halo(
 static FONTS_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 pub fn set_fonts_path(path: PathBuf) {
-    FONTS_PATH
-        .set(path)
-        .expect("fonts path already configured");
+    FONTS_PATH.set(path).expect("fonts path already configured");
 }
 
 fn configured_fonts_path() -> &'static Path {

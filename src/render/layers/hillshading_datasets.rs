@@ -111,9 +111,7 @@ impl HillshadingDatasets {
 
                 let (keep, expired): (Vec<_>, Vec<_>) = std::mem::take(&mut state.idle)
                     .into_iter()
-                    .partition(|(_, returned_at)| {
-                        now.duration_since(*returned_at) <= EVICT_AFTER
-                    });
+                    .partition(|(_, returned_at)| now.duration_since(*returned_at) <= EVICT_AFTER);
 
                 state.idle = keep;
                 state.open -= expired.len();
@@ -316,7 +314,9 @@ impl Deref for DatasetGuard<'_> {
     type Target = Dataset;
 
     fn deref(&self) -> &Dataset {
-        self.dataset.as_ref().expect("dataset is only taken on drop")
+        self.dataset
+            .as_ref()
+            .expect("dataset is only taken on drop")
     }
 }
 

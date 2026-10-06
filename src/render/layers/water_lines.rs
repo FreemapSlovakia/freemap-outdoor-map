@@ -21,7 +21,10 @@ use cairo::Context;
 pub(super) const DRAWN_TYPES: &str = "('canal', 'canoe_pass', 'ditch', 'drain', \
      'fish_pass', 'pressurised', 'rapids', 'river', 'stream')";
 
-pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+pub async fn query(
+    ctx: &Ctx,
+    client: &tokio_postgres::Client,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     // ST_Simplify returns NULL for closed lines collapsing under the tolerance, hence the COALESCE
     let geom_query = match ctx.zoom {
         12 => "ST_Segmentize(COALESCE(ST_Simplify(geometry, 24), geometry), 200) AS geometry",
@@ -50,7 +53,9 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
             type IN {DRAWN_TYPES}
     ");
 
-    client.query(&sql, &ctx.bbox_query_params(Some(8.0)).as_params()).await
+    client
+        .query(&sql, &ctx.bbox_query_params(Some(8.0)).as_params())
+        .await
 }
 
 pub fn render(

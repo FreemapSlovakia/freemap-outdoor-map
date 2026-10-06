@@ -47,9 +47,7 @@ impl ImageFormat {
             || quality.map_or(Ok(()), |_| Err(format!("format '{name}' takes no quality")));
 
         Some(match name {
-            "jpeg" | "jpg" => {
-                lossy(f32::from(DEFAULT_JPEG_QUALITY)).map(|q| Self::Jpeg(q as u8))
-            }
+            "jpeg" | "jpg" => lossy(f32::from(DEFAULT_JPEG_QUALITY)).map(|q| Self::Jpeg(q as u8)),
             "webp-lossy" => lossy(DEFAULT_WEBP_QUALITY).map(|q| Self::Webp(WebpQuality::Lossy(q))),
             "png" => lossless().map(|()| Self::Png),
             "webp" => lossless().map(|()| Self::Webp(WebpQuality::Lossless)),
@@ -65,7 +63,9 @@ impl ImageFormat {
     /// [`Self::from_parts`] over a `name[=quality]` token, as a tile variant
     /// spells it.
     pub fn parse(token: &str) -> Option<Result<Self, String>> {
-        let (name, raw) = token.split_once('=').map_or((token, None), |(n, q)| (n, Some(q)));
+        let (name, raw) = token
+            .split_once('=')
+            .map_or((token, None), |(n, q)| (n, Some(q)));
 
         // A name this does not know is not a quality problem — say so before
         // looking at the other half, or a mistyped field reads as one.

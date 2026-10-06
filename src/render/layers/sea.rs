@@ -9,7 +9,11 @@ use crate::render::{
 use cairo::Context;
 use geo::Geometry;
 
-pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client, margin_px: f64) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+pub async fn query(
+    ctx: &Ctx,
+    client: &tokio_postgres::Client,
+    margin_px: f64,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let table = match ctx.zoom {
         ..=7 => "land_z5_7",
         8..=10 => "land_z8_10",
@@ -30,12 +34,14 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client, margin_px: f64) -
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
         ");
 
-    client.query(
-        &sql,
-        &ctx.bbox_query_params(Some(margin_px))
-            .push((20.0 - ctx.zoom as f64).exp2() / 25.0)
-            .as_params(),
-    ).await
+    client
+        .query(
+            &sql,
+            &ctx.bbox_query_params(Some(margin_px))
+                .push((20.0 - ctx.zoom as f64).exp2() / 25.0)
+                .as_params(),
+        )
+        .await
 }
 
 pub fn project(ctx: &Ctx, rows: &[Feature]) -> Result<Vec<Geometry>, LayerRenderError> {

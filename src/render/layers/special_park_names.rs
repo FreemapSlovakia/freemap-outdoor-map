@@ -13,7 +13,10 @@ use crate::render::{
 use cairo::Context;
 use cosmic_text::Style;
 
-pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+pub async fn query(
+    ctx: &Ctx,
+    client: &tokio_postgres::Client,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let sql = "
         SELECT
             name,
@@ -28,7 +31,9 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
             osm_id
     ";
 
-    client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params()).await
+    client
+        .query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())
+        .await
 }
 
 pub fn render(

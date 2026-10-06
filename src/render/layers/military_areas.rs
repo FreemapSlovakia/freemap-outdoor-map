@@ -8,7 +8,10 @@ use crate::render::{
 };
 use cairo::Context;
 
-pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+pub async fn query(
+    ctx: &Ctx,
+    client: &tokio_postgres::Client,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let sql = "
         SELECT
             geometry
@@ -20,12 +23,14 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
             AND area / POWER(4, 19 - $6) > 10
     ";
 
-    client.query(
-        sql,
-        &ctx.bbox_query_params(Some(10.0))
-            .push(ctx.zoom as i32)
-            .as_params(),
-    ).await
+    client
+        .query(
+            sql,
+            &ctx.bbox_query_params(Some(10.0))
+                .push(ctx.zoom as i32)
+                .as_params(),
+        )
+        .await
 }
 
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {

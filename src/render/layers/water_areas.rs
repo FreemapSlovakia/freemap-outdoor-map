@@ -9,7 +9,11 @@ use crate::render::{
 use cairo::Context;
 use geo::Geometry;
 
-pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client, margin_px: f64) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+pub async fn query(
+    ctx: &Ctx,
+    client: &tokio_postgres::Client,
+    margin_px: f64,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let table_suffix = match ctx.zoom {
         ..=9 => "_gen0",
         10..=11 => "_gen1",
@@ -27,7 +31,9 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client, margin_px: f64) -
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
         ");
 
-    client.query(&sql, &ctx.bbox_query_params(Some(margin_px)).as_params()).await
+    client
+        .query(&sql, &ctx.bbox_query_params(Some(margin_px)).as_params())
+        .await
 }
 
 /// Also returns the permanent water it projected. Intermittent and seasonal beds are left

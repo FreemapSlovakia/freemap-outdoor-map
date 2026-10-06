@@ -4,10 +4,10 @@ use crate::{
 };
 use axum::{
     Json,
-    response::IntoResponse,
     body::Body,
     extract::{Path, Query, State},
     http::{Response, StatusCode},
+    response::IntoResponse,
 };
 use serde::Deserialize;
 
@@ -56,10 +56,12 @@ fn variant_layers(
         .variant_by_path(path)
         .map(|variant| Some(variant.layers.clone()))
         .ok_or_else(|| {
-            Box::new(Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from("no such tile variant"))
-                .expect("body should be built"))
+            Box::new(
+                Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Body::from("no such tile variant"))
+                    .expect("body should be built"),
+            )
         })
 }
 

@@ -12,8 +12,8 @@ use crate::render::{
     regex_replacer::{Replacement, replace},
 };
 use cairo::Context;
-use geo::ChaikinSmoothing;
 use cosmic_text::Style;
+use geo::ChaikinSmoothing;
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -47,10 +47,15 @@ pub async fn query_valleys(
             ST_Length(geometry) {dir}
     ");
 
-    client.query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params()).await
+    client
+        .query(&sql, &ctx.bbox_query_params(Some(512.0)).as_params())
+        .await
 }
 
-pub async fn query_ridges(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+pub async fn query_ridges(
+    ctx: &Ctx,
+    client: &tokio_postgres::Client,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let sql = "
         SELECT
             geometry, name, 0::double precision AS offset_factor
@@ -64,7 +69,9 @@ pub async fn query_ridges(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<
             ST_Length(geometry) DESC
     ";
 
-    client.query(sql, &ctx.bbox_query_params(Some(512.0)).as_params()).await
+    client
+        .query(sql, &ctx.bbox_query_params(Some(512.0)).as_params())
+        .await
 }
 
 /// Letter spacing a valley name keeps, as a fraction of its size, before the layer

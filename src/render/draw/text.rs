@@ -96,8 +96,7 @@ pub fn draw_text(
             && scale > 0.0
             && scale != 1.0
         {
-            let scaled_metrics =
-                Metrics::new(flo.size as f32 * scale, line_height as f32 * scale);
+            let scaled_metrics = Metrics::new(flo.size as f32 * scale, line_height as f32 * scale);
             let sub_attrs = base_attrs.clone().metrics(scaled_metrics);
 
             let mut lines: Vec<BufferLine> = Vec::new();
@@ -292,47 +291,46 @@ fn place(
 
     let x_base = point.x() - layout_width / 2.0;
 
-    let (idx, x, y, boxes) =
-        options
-            .placements
-            .iter()
-            .enumerate()
-            .find_map(|(i, &(dx, dy))| {
-                let y_anchor = match (options.valign_by_placement, dy) {
-                    (true, dy) if dy > 0.0 => first_baseline - cap_height,
-                    (true, dy) if dy < 0.0 => last_baseline,
-                    _ => center,
-                };
+    let (idx, x, y, boxes) = options
+        .placements
+        .iter()
+        .enumerate()
+        .find_map(|(i, &(dx, dy))| {
+            let y_anchor = match (options.valign_by_placement, dy) {
+                (true, dy) if dy > 0.0 => first_baseline - cap_height,
+                (true, dy) if dy < 0.0 => last_baseline,
+                _ => center,
+            };
 
-                let y = dy + point.y() - y_anchor;
-                let x = dx + x_base;
+            let y = dy + point.y() - y_anchor;
+            let x = dx + x_base;
 
-                let boxes = lines
-                    .iter()
-                    .map(|line| {
-                        let line_x = (layout_width - line.line_w as f64) / 2.0;
+            let boxes = lines
+                .iter()
+                .map(|line| {
+                    let line_x = (layout_width - line.line_w as f64) / 2.0;
 
-                        let ci = Rect::new(
-                            (
-                                x + line_x + line.ink_left as f64 - halo_width,
-                                y + line.ink_top as f64 - halo_width,
-                            ),
-                            (
-                                x + line_x + line.ink_right as f64 + halo_width,
-                                y + line.ink_bottom as f64 + halo_width,
-                            ),
-                        );
+                    let ci = Rect::new(
+                        (
+                            x + line_x + line.ink_left as f64 - halo_width,
+                            y + line.ink_top as f64 - halo_width,
+                        ),
+                        (
+                            x + line_x + line.ink_right as f64 + halo_width,
+                            y + line.ink_bottom as f64 + halo_width,
+                        ),
+                    );
 
-                        let collides = collision
-                            .as_deref()
-                            .is_some_and(|collision| collision.collides(&ci, options.omit_bbox));
+                    let collides = collision
+                        .as_deref()
+                        .is_some_and(|collision| collision.collides(&ci, options.omit_bbox));
 
-                        (!collides).then_some(ci)
-                    })
-                    .collect::<Option<Vec<_>>>()?;
+                    (!collides).then_some(ci)
+                })
+                .collect::<Option<Vec<_>>>()?;
 
-                Some((i + 1, x, y, boxes))
-            })?;
+            Some((i + 1, x, y, boxes))
+        })?;
 
     if let Some(collision) = collision {
         for bb in &boxes {

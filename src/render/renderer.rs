@@ -3,7 +3,9 @@ use crate::render::{
     attribution::Attribution,
     image_format::{ImageFormat, WebpQuality},
     layers,
-    render_request::RenderRequest, svg_repo::SvgRepo, xyz::bbox_size_in_pixels,
+    render_request::RenderRequest,
+    svg_repo::SvgRepo,
+    xyz::bbox_size_in_pixels,
 };
 use cairo::{Format, ImageSurface, PdfSurface, Surface, SvgSurface};
 use deadpool_postgres::Pool;

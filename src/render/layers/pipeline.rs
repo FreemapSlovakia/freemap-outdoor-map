@@ -191,9 +191,7 @@ fn key_layers(key: &str) -> Option<&'static [RenderLayer]> {
 /// variant's selection without building a pipeline.
 pub fn key_enabled(selection: &Layers, name: &str, legend_key: &str) -> bool {
     match key_layers(name).or_else(|| key_layers(legend_key)) {
-        Some(layers) if !layers.is_empty() => {
-            layers.iter().any(|layer| selection.draws(*layer))
-        }
+        Some(layers) if !layers.is_empty() => layers.iter().any(|layer| selection.draws(*layer)),
         _ => selection.base_map,
     }
 }
@@ -296,7 +294,9 @@ impl<'a> Prefetcher<'a> {
         let ctx = self.ctx.clone();
 
         let jh = self.handle.spawn(async move {
-            let conn = db_pool_stats::get(&pool, name).await.map_err(LayerRenderError::from)?;
+            let conn = db_pool_stats::get(&pool, name)
+                .await
+                .map_err(LayerRenderError::from)?;
             let rows = query_fn(ctx, conn).await.map_err(LayerRenderError::from)?;
             Ok::<Vec<Feature>, LayerRenderError>(rows.into_iter().map(Feature::from).collect())
         });
@@ -344,7 +344,9 @@ impl<'a> Prefetcher<'a> {
         let name = slot.name;
 
         let jh = self.handle.spawn(async move {
-            let conn = db_pool_stats::get(&pool, name).await.map_err(LayerRenderError::from)?;
+            let conn = db_pool_stats::get(&pool, name)
+                .await
+                .map_err(LayerRenderError::from)?;
             let rows = query_fn(ctx, conn).await.map_err(LayerRenderError::from)?;
             Ok::<Vec<Feature>, LayerRenderError>(rows.into_iter().map(Feature::from).collect())
         });
@@ -618,10 +620,9 @@ pub fn render(
     // but the query is identical for all of them, so fetch it once and let each stage
     // borrow the cached rows. The lowest stage gate is zoom 11 (stage 3).
     let feature_lines_slot = if zoom >= 11 {
-        prefetcher
-            .shared_query("feature_lines", move |ctx, conn| {
-                async move { layers::feature_lines::query(&ctx, &conn, cutlines).await }.boxed()
-            })
+        prefetcher.shared_query("feature_lines", move |ctx, conn| {
+            async move { layers::feature_lines::query(&ctx, &conn, cutlines).await }.boxed()
+        })
     } else {
         None
     };

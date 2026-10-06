@@ -12,7 +12,10 @@ use crate::render::{
 use cairo::Context;
 use cosmic_text::Style;
 
-pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+pub async fn query(
+    ctx: &Ctx,
+    client: &tokio_postgres::Client,
+) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
     let sql = "
         SELECT
             name,
@@ -25,7 +28,9 @@ pub async fn query(ctx: &Ctx, client: &tokio_postgres::Client) -> Result<Vec<tok
             ogc_fid
     ";
 
-    client.query(sql, &ctx.bbox_query_params(Some(20.0)).as_params()).await
+    client
+        .query(sql, &ctx.bbox_query_params(Some(20.0)).as_params())
+        .await
 }
 
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
@@ -37,9 +42,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
             style: Style::Italic,
             ..Default::default()
         },
-        distribution: Distribution::Justify {
-            min_spacing: 0.0,
-        },
+        distribution: Distribution::Justify { min_spacing: 0.0 },
         halo_opacity: 1.0,
         color: colors::TRAM,
         halo_width: 2.0,

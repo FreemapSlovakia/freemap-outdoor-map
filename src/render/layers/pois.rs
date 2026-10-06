@@ -807,11 +807,8 @@ pub const WAYMARKING_TYPES: [&str; 2] = ["guidepost", "route_marker"];
 
 /// As above, plus the type a nameless guidepost is given — not a thing to select
 /// on, but a legend sample carries it.
-pub const WAYMARKING_LEGEND_TYPES: [&str; 3] = [
-    WAYMARKING_TYPES[0],
-    "guidepost_noname",
-    WAYMARKING_TYPES[1],
-];
+pub const WAYMARKING_LEGEND_TYPES: [&str; 3] =
+    [WAYMARKING_TYPES[0], "guidepost_noname", WAYMARKING_TYPES[1]];
 
 /// The `tags` keys a guidepost or route marker carries to say it serves an
 /// activity. A post may carry several, and one the overlay does not ask about
@@ -860,9 +857,7 @@ pub async fn query_waymarking(
 
     let route_marker_cond = route_marker_cond(zoom, false);
 
-    let waymarking_types = WAYMARKING_TYPES
-        .map(|typ| format!("'{typ}'"))
-        .join(", ");
+    let waymarking_types = WAYMARKING_TYPES.map(|typ| format!("'{typ}'")).join(", ");
 
     // A post serves the activity the overlay is about. One that says nothing is
     // left out: over half of those that do say are for cycling here, so silence
@@ -901,7 +896,9 @@ pub async fn query_waymarking(
             {kst_cond}
     ");
 
-    client.query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params()).await
+    client
+        .query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
+        .await
 }
 
 pub async fn query(

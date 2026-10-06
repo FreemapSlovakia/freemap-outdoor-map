@@ -17,8 +17,8 @@ pub use render_request::{
     RenderLayer, RenderRequest,
 };
 pub use render_worker_pool::RenderWorkerPool;
-pub use xyz::bbox_size_in_pixels;
 use std::path::PathBuf;
+pub use xyz::bbox_size_in_pixels;
 
 mod attribution;
 mod categories;

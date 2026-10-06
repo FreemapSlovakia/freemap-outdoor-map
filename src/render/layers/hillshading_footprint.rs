@@ -330,7 +330,11 @@ fn grow(bits: &[u64], grid_width: usize, grid_height: usize) -> Vec<u64> {
             let value = bits[base + word];
 
             // The neighbouring cell can sit in the neighbouring word.
-            let from_left = if word > 0 { bits[base + word - 1] >> 63 } else { 0 };
+            let from_left = if word > 0 {
+                bits[base + word - 1] >> 63
+            } else {
+                0
+            };
 
             let from_right = if word + 1 < words_per_row {
                 bits[base + word + 1] << 63
@@ -499,7 +503,15 @@ mod tests {
             bits,
         };
 
-        let column = |x: f64| Rect::new(Coord { x, y: 129.0 }, Coord { x: x + 1.0, y: 130.0 });
+        let column = |x: f64| {
+            Rect::new(
+                Coord { x, y: 129.0 },
+                Coord {
+                    x: x + 1.0,
+                    y: 130.0,
+                },
+            )
+        };
 
         assert!(footprint.covers(&column(69.0)));
         assert!(!footprint.covers(&column(68.0)));
@@ -547,7 +559,11 @@ mod against_real_data {
             footprint.grid_width,
             footprint.grid_height,
             footprint.words_per_row,
-            footprint.bits.iter().map(|word| word.count_ones()).sum::<u32>(),
+            footprint
+                .bits
+                .iter()
+                .map(|word| word.count_ones())
+                .sum::<u32>(),
         );
     }
 }

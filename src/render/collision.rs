@@ -30,9 +30,8 @@ fn cell_range(rect: &Rect) -> Option<(i32, i32, i32, i32)> {
     let (x1, y1) = (cell(rect.max().x), cell(rect.max().y));
 
     // Casts saturate, so far-off boxes merely share edge cells; `hits` still tests exactly.
-    ((x1 - x0 + 1.0) * (y1 - y0 + 1.0) <= MAX_CELLS).then_some((
-        x0 as i32, y0 as i32, x1 as i32, y1 as i32,
-    ))
+    ((x1 - x0 + 1.0) * (y1 - y0 + 1.0) <= MAX_CELLS)
+        .then_some((x0 as i32, y0 as i32, x1 as i32, y1 as i32))
 }
 
 impl<'a> Collision<'a> {

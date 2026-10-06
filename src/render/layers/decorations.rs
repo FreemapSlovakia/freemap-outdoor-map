@@ -73,7 +73,10 @@ const FREEMAP: &str = "©\u{a0}Freemap Slovakia";
 /// drew that the renderer cannot know — then the datasets that contributed a
 /// pixel. A title is named once however many codes carry it, under the
 /// strongest claim it has.
-fn compose_attribution(decoration: &AttributionDecoration, attribution: &Attribution) -> Vec<String> {
+fn compose_attribution(
+    decoration: &AttributionDecoration,
+    attribution: &Attribution,
+) -> Vec<String> {
     let mut ranked: Vec<(u8, &str)> = Vec::new();
 
     for code in attribution.codes() {

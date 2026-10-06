@@ -3,8 +3,8 @@ use geo::{
 };
 use geo_postgis::FromPostgis;
 use postgis::ewkb::GeometryT as EwkbGeometry;
-use tokio_postgres::Row;
 use std::collections::HashMap;
+use tokio_postgres::Row;
 
 #[derive(Clone, Debug)]
 pub enum LegendValue {

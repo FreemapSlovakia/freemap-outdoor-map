@@ -122,10 +122,8 @@ impl LicenseCatalog {
                 for namespace in &attribution.covers {
                     match namespace.as_str() {
                         SHADING | CONTOURS => {
-                            licenses.insert(
-                                format!("{namespace}:{key}"),
-                                attribution.sources.clone(),
-                            );
+                            licenses
+                                .insert(format!("{namespace}:{key}"), attribution.sources.clone());
                         }
                         other => warnings.push(format!(
                             "{}: unknown namespace '{other}' in `covers`",
@@ -273,8 +271,16 @@ mod tests {
 
         // The dataset that said nothing, and the contour code nothing resolves.
         assert_eq!(warnings.len(), 2, "{warnings:?}");
-        assert!(warnings.iter().any(|w| w.contains("shading:at will not resolve")));
-        assert!(warnings.iter().any(|w| w.contains("nothing resolves contours:pl")));
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains("shading:at will not resolve"))
+        );
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains("nothing resolves contours:pl"))
+        );
     }
 
     #[test]
@@ -308,8 +314,7 @@ mod tests {
 
         // No `_` dataset directory at all: the override is what answers for it, so
         // there is nothing to warn about.
-        let (catalog, warnings) =
-            LicenseCatalog::build(Some(&base), &["_"], &[], Some(&overrides));
+        let (catalog, warnings) = LicenseCatalog::build(Some(&base), &["_"], &[], Some(&overrides));
 
         assert!(body(&catalog).contains(r#""shading:_""#));
         assert!(warnings.is_empty(), "{warnings:?}");

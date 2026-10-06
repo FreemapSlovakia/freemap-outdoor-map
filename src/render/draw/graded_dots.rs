@@ -99,8 +99,16 @@ pub const ALL: [(RenderLayer, &str, &GradedDots); 5] = [
     (RenderLayer::SacScale, "sac_scale", &SAC_SCALE),
     (RenderLayer::Smoothness, "smoothness", &SMOOTHNESS),
     (RenderLayer::MtbScale, "mtb_scale", &MTB_SCALE),
-    (RenderLayer::PisteDifficulty, "piste_difficulty", &PISTE_DIFFICULTY),
-    (RenderLayer::ViaFerrataScale, "via_ferrata_scale", &VIA_FERRATA_SCALE),
+    (
+        RenderLayer::PisteDifficulty,
+        "piste_difficulty",
+        &PISTE_DIFFICULTY,
+    ),
+    (
+        RenderLayer::ViaFerrataScale,
+        "via_ferrata_scale",
+        &VIA_FERRATA_SCALE,
+    ),
 ];
 
 fn dot_diameter(zoom: u8) -> f64 {
@@ -132,7 +140,9 @@ pub async fn query(
             grade
     ");
 
-    client.query(&sql, &ctx.bbox_query_params(Some(buffer_px)).as_params()).await
+    client
+        .query(&sql, &ctx.bbox_query_params(Some(buffer_px)).as_params())
+        .await
 }
 
 pub fn render(

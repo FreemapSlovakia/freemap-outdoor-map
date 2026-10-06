@@ -37,10 +37,7 @@ impl TileInvalidationWatcher {
     }
 }
 
-pub fn start_watcher(
-    watch_base: &Path,
-    worker: TileProcessingWorker,
-) -> TileInvalidationWatcher {
+pub fn start_watcher(watch_base: &Path, worker: TileProcessingWorker) -> TileInvalidationWatcher {
     let watch_base = watch_base.to_owned();
     let (tx, rx) = mpsc::channel();
 
@@ -178,8 +175,7 @@ fn read_with_retry(path: &Path) -> std::io::Result<String> {
 
         match fs::read_to_string(path) {
             Ok(value) => {
-                let size_after = fs::metadata(path)
-                    .map_or(size_before, |meta| meta.len());
+                let size_after = fs::metadata(path).map_or(size_before, |meta| meta.len());
                 let stable = size_before == size_after;
                 let complete = value.is_empty() || value.ends_with('\n');
                 if stable && complete {

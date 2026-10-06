@@ -21,14 +21,19 @@ fn graded(
         .iter()
         .enumerate()
         .map(|(i, value)| {
-            LegendItem::builder(format!("{layer}_{value}").leak(), Category::RoadsAndPaths, 17, opts)
-                .add_tag_set(|ts| ts.add_tags(|tags| tags.add(key, value)))
-                .min_zoom(GRADED_FROM_ZOOM)
-                .add_landcover("wood")
-                .add_feature(layer, |b| {
-                    b.with_line_string(false).with("grade", i as i32 + 1)
-                })
-                .build()
+            LegendItem::builder(
+                format!("{layer}_{value}").leak(),
+                Category::RoadsAndPaths,
+                17,
+                opts,
+            )
+            .add_tag_set(|ts| ts.add_tags(|tags| tags.add(key, value)))
+            .min_zoom(GRADED_FROM_ZOOM)
+            .add_landcover("wood")
+            .add_feature(layer, |b| {
+                b.with_line_string(false).with("grade", i as i32 + 1)
+            })
+            .build()
         })
         .collect()
 }
@@ -63,7 +68,11 @@ const GRADES: [(&str, &str, &[&str]); 5] = [
             "impassable",
         ],
     ),
-    ("mtb_scale", "mtb:scale", &["0", "1", "2", "3", "4", "5", "6"]),
+    (
+        "mtb_scale",
+        "mtb:scale",
+        &["0", "1", "2", "3", "4", "5", "6"],
+    ),
     (
         "piste_difficulty",
         "piste:difficulty",
