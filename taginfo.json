@@ -222,6 +222,13 @@
     },
     {
       "key": "amenity",
+      "value": "bicycle_parking",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/bicycle_parking.svg",
+      "description": "Rendered as icon. Icon from zoom 18. Label (name/ref) from zoom 19."
+    },
+    {
+      "key": "amenity",
       "value": "bicycle_rental",
       "object_types": ["node", "area"],
       "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/bicycle_rental.svg",
