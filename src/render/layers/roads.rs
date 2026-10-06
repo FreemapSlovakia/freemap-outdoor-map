@@ -188,7 +188,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
                 draw()?;
             }
             (_, "highway", "primary_link" | "secondary" | "construction")
-            | (14.., "railway", "construction") => {
+            | (13.., "railway", "construction") => {
                 apply_highway_defaults(3.333);
                 draw()?;
             }
@@ -367,7 +367,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
             ) => {
                 draw_rail(colors::TRAM, 1.0, 4.5, 7.5, 1.0)?;
             }
-            (14.., "railway", "construction") => {
+            (13.., "railway", "construction") => {
                 draw_rail(colors::RAILWAY_DISUSED, 1.0, 4.5, 7.5, 1.0)?;
 
                 apply_highway_defaults(1.5 + 1.0 / 3.0);

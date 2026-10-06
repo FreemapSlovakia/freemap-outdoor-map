@@ -19,9 +19,9 @@ fn road_from_zoom(class: &str, typ: &str) -> u8 {
         (
             "railway",
             "light_rail" | "tram" | "miniature" | "monorail" | "funicular" | "narrow_gauge"
-            | "subway",
+            | "subway" | "construction",
         ) => 13,
-        ("railway", _) => 14, // construction, disused, preserved
+        ("railway", _) => 14, // disused, preserved
         (
             _,
             "motorway" | "trunk" | "motorway_link" | "trunk_link" | "primary" | "primary_link"
