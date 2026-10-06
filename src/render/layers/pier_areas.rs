@@ -8,12 +8,7 @@ use crate::render::{
 };
 use cairo::Context;
 
-/// Pier decks, from both places imposm can put them.
-///
-/// `area=yes` piers and multipolygon relations only reach the polygon table; a plain closed
-/// way reaches both it and `osm_roads`, and before the mapping change that added `pier` to
-/// `landcovers` it reached only `osm_roads` - so take the closed ways from there as well and
-/// drop the ones the polygon table already has. `layers::roads` leaves closed piers to us.
+/// Pier decks. `layers::roads` leaves the piers found here to us.
 pub async fn query(
     ctx: &Ctx,
     client: &tokio_postgres::Client,
@@ -26,20 +21,6 @@ pub async fn query(
         WHERE
             geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857) AND
             type = 'pier'
-        UNION ALL
-        SELECT
-            geometry
-        FROM
-            osm_roads
-        WHERE
-            geometry && ST_MakeEnvelope($1, $2, $3, $4, 3857) AND
-            type = 'pier' AND
-            ST_IsClosed(geometry) AND
-            ST_NPoints(geometry) > 3 AND
-            NOT EXISTS (
-                SELECT 1 FROM osm_landcovers
-                WHERE osm_landcovers.osm_id = osm_roads.osm_id AND osm_landcovers.type = 'pier'
-            )
     ";
 
     client

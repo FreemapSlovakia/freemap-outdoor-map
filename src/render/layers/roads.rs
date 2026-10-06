@@ -45,6 +45,20 @@ pub async fn query(
         "".into()
     };
 
+    // A closed way without `area=no` lands in `osm_landcovers` too, and `pier_areas` fills it
+    // from there; `area=no` keeps a closed pier out of it, so it is still drawn as a line.
+    let select_pier_area = if zoom >= 14 {
+        format!(
+            ",
+            {table}.type = 'pier' AND EXISTS (
+                SELECT 1 FROM osm_landcovers
+                WHERE osm_landcovers.osm_id = {table}.osm_id AND osm_landcovers.type = 'pier'
+            ) AS is_pier_area"
+        )
+    } else {
+        String::new()
+    };
+
     #[cfg_attr(any(), rustfmt::skip)]
     let query = format!("
         SELECT
@@ -59,6 +73,7 @@ pub async fn query(
             foot,
             trail_visibility
             {select_member}
+            {select_pier_area}
         FROM
             {table}
             {join_members}
@@ -344,9 +359,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
         let trail_visibility = 0.666f64.powf(row.get_i32("trail_visibility")? as f64);
 
         match (zoom, class, typ) {
-            // A closed pier is an area; `pier_areas` fills it from `osm_landcovers`, where
-            // imposm puts it as well.
-            (14.., _, "pier") if !geom.is_closed() => {
+            (14.., _, "pier") if !row.get_bool("is_pier_area")? => {
                 apply_highway_defaults(2.0);
                 context.set_source_color(colors::PIER);
                 draw()?;
