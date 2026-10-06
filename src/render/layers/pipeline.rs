@@ -404,6 +404,7 @@ impl<'a> Prefetcher<'a> {
 
     fn run(
         self,
+        context: &Context,
         svg_repo: &mut SvgRepo,
         hsd: Option<&HillshadingDatasets>,
         collision: &mut Collision,
@@ -429,7 +430,7 @@ impl<'a> Prefetcher<'a> {
                             .map_err(|_| RenderError::TaskPanic)?
                             .with_layer(name)?;
 
-                        render_fn(features, params).with_layer(name)?;
+                        isolated(context, || render_fn(features, params)).with_layer(name)?;
                     }
                     PendingLayer::Shared {
                         name,
@@ -456,15 +457,16 @@ impl<'a> Prefetcher<'a> {
                         let guard = slot.features.borrow();
                         let features = guard.as_deref().expect("shared features present");
 
-                        render_fn(features, params).with_layer(name)?;
+                        isolated(context, || render_fn(features, params)).with_layer(name)?;
                     }
                     PendingLayer::Legend {
                         name,
                         features,
                         render_fn,
                     } => {
-                        render_fn(features, params).with_layer(name)?;
+                        isolated(context, || render_fn(features, params)).with_layer(name)?;
                     }
+                    // Not isolated: push stages open and close groups spanning other stages.
                     PendingLayer::Push(f) => {
                         f(params)?;
                     }
@@ -474,6 +476,16 @@ impl<'a> Prefetcher<'a> {
             Ok(())
         })
     }
+}
+
+/// Runs a layer between `save` and `restore`, so the cairo state it leaves behind
+/// cannot reach the next layer.
+fn isolated(context: &Context, render_fn: impl FnOnce() -> LayerRenderResult) -> LayerRenderResult {
+    context.save()?;
+    render_fn()?;
+    context.restore()?;
+
+    Ok(())
 }
 
 /// Optional hillshading / contour inputs threaded through the render pipeline.
@@ -500,6 +512,9 @@ pub fn render(
     let bbox = request.bbox;
 
     let context = &Context::new(surface)?;
+
+    // Mapnik's default; cairo's 10 lets miter spikes reach 10x the half width.
+    context.set_miter_limit(4.0);
 
     let scale = request.scale;
 
@@ -1533,7 +1548,7 @@ pub fn render(
 
     let collision = &mut Collision::new(Some(context));
 
-    prefetcher.run(svg_repo, shading.datasets, collision)?;
+    prefetcher.run(context, svg_repo, shading.datasets, collision)?;
 
     let mut attribution = Rc::try_unwrap(attribution)
         .expect("all layer render_fns already dropped")
