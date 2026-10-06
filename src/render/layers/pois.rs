@@ -452,6 +452,7 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (15, 16, N, N, Culture, "casino", Extra::default()),
         (15, 16, N, N, Culture, "gallery", Extra::default()),
         (15, 16, N, N, Culture, "arts_centre", Extra::default()),
+        (15, 16, N, N, Culture, "library", Extra::default()),
         (15, 16, N, N, Culture, "nightclub", Extra::default()),
         (15, 16, N, N, Sport, "sauna", Extra::default()),
         (16, 17, N, N, Sport, "massage", Extra::default()),

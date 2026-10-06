@@ -425,6 +425,13 @@
     },
     {
       "key": "amenity",
+      "value": "library",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/library.svg",
+      "description": "Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "amenity",
       "value": "marketplace",
       "object_types": ["node", "area"],
       "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/marketplace.svg",
