@@ -1351,7 +1351,13 @@ fn spring_variant(extra: &HashMap<String, Option<String>>) -> (Vec<String>, Opti
 
     let is_mineral = extra
         .get("water_characteristic")
-        .is_some_and(|v| v.is_some() && v.as_deref() != Some(""));
+        .and_then(|v| v.as_deref())
+        .is_some_and(|v| {
+            !matches!(
+                v,
+                "" | "fresh" | "freshwater" | "intermittent" | "resurgence"
+            )
+        });
 
     let mut names = vec![
         (if is_mineral {
