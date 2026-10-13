@@ -357,6 +357,7 @@ tables:
             - scrub
             - shingle
             - shrubbery
+            - tree_group
             - tundra
             - wetland
             - wood
@@ -1152,7 +1153,6 @@ tables:
                 - stone
                 - strait # also as way
                 - tree
-                - tree_group
                 - tree_stump
                 - volcano
           office:

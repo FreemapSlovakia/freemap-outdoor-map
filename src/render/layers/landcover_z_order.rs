@@ -15,6 +15,7 @@ pub const LANDCOVER_Z_ORDER: &[&str] = &[
     "weir",
     "clearcut",
     "wetland",
+    "tree_group",
     "scrub",
     "orchard",
     "vineyard",

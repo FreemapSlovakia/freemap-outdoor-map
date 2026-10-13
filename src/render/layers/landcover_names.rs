@@ -112,6 +112,7 @@ pub fn render(
             typ,
             "forest"
                 | "wood"
+                | "tree_group"
                 | "scrub"
                 | "heath"
                 | "grassland"

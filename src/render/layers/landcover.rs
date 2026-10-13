@@ -25,7 +25,7 @@ pub enum Paint {
 
 #[rustfmt::skip]
 pub const PAINT_DEFS: &[(&[&str], &[Paint])] = &[
-    (&["forest", "wood"], &[Paint::Fill(FOREST)]),
+    (&["forest", "wood", "tree_group"], &[Paint::Fill(FOREST)]),
     (&["meadow", "village_green", "fell", "grass", "grassland"], &[Paint::Fill(GRASSY)]),
     (&["scrub"], &[Paint::Fill(SCRUB), Paint::Pattern("scrub")]),
     (&["heath"], &[Paint::Fill(HEATH)]),
