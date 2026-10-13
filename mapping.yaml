@@ -28,6 +28,7 @@ tags:
     - foot
     - generator:method
     - generator:source
+    - hgv
     - hiking
     - horse
     - icao
@@ -35,6 +36,8 @@ tags:
     - ladder
     - local_ref # bus stop number, shown instead of the name - https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/43
     - location
+    - motorcar
+    - motorcycle
     - mtb
     - mtb:scale
     - operator
@@ -47,6 +50,7 @@ tags:
     - ruins
     - rungs
     - safety_rope
+    - scooter
     - seasonal
     - shelter_type
     - ski
@@ -712,6 +716,11 @@ tables:
             - mtb
             - ski
             - horse
+            # vehicle kinds a charging_station serves - https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/113
+            - motorcar
+            - motorcycle
+            - scooter
+            - hgv
             - icao
             - intermittent
             - local_ref # https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/43
