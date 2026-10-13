@@ -2,13 +2,14 @@ use crate::render::{
     ContourCountries, Feature, HillshadingHierarchy,
     attribution::{Attribution, FALLBACK_KEY},
     ctx::Ctx,
+    draw::mask,
     layer_render_error::{LayerRenderError, LayerRenderResult},
     layers::{
         bridge_areas, contours, dry_land::DryLand, hillshading, hillshading::MaskBits,
         hillshading_datasets::HillshadingDatasets,
     },
 };
-use cairo::{Context, Format, ImageSurface, SurfacePattern};
+use cairo::{Context, ImageSurface};
 use std::collections::{HashMap, HashSet};
 
 /// Hillshading / contour data sources and toggles for [`render`].
@@ -82,6 +83,9 @@ pub fn render(
     // (CC, CC, CC, (mask-$cc, mask-$cc, mask-$cc, (fallback_contours, fallback_final):src-out):src-over)
 
     if do_shading {
+        // Merged first, so a PDF embeds one shading image rather than one per country.
+        let mut shading: Option<ImageSurface> = None;
+
         for entry in hierarchy.entries() {
             let country = entry.country;
 
@@ -119,67 +123,61 @@ pub fn render(
                 }
             }
 
-            context.push_group(); // country-contours-and-shading
-
-            hillshading::paint_surface(ctx, context, mask_surface, 1.0)?;
-
-            context.set_operator(cairo::Operator::In);
-            hillshading::paint_surface(ctx, context, &shading_surface, fade_alpha)?;
-
-            for &better_country in &entry.better {
-                if let Some((_, Some(bc_mask))) =
-                    country_masks.iter().find(|(c, _)| *c == better_country)
-                {
-                    context.set_operator(cairo::Operator::DestOut);
-                    hillshading::paint_surface(ctx, context, bc_mask, 1.0)?;
+            let composite = mask::compose(ctx, |cc| {
+                mask::paint_whole(cc, mask_surface, 1.0)?;
+                cc.set_operator(cairo::Operator::In);
+                mask::paint_whole(cc, &shading_surface, fade_alpha)?;
+                cc.set_operator(cairo::Operator::DestOut);
+                for &better_country in &entry.better {
+                    if let Some((_, Some(bc_mask))) =
+                        country_masks.iter().find(|(c, _)| *c == better_country)
+                    {
+                        mask::paint_whole(cc, bc_mask, 1.0)?;
+                    }
                 }
-            }
+                Ok(())
+            })?;
 
-            context.pop_group_to_source()?; // country-contours-and-shading
-            context.paint()?;
+            merge(&mut shading, composite)?;
         }
 
         // fallback
-        if !tile_covered {
-            context.push_group(); // mask
-
-            for (_, s) in &country_masks {
-                if let Some(mask_surface) = s {
-                    hillshading::paint_surface(ctx, context, mask_surface, 1.0)?;
-                }
-            }
-
-            context.set_operator(cairo::Operator::Out);
-
-            if let Some(mut surface) = hillshading::load_surface(
+        if !tile_covered
+            && let Some(mut surface) = hillshading::load_surface(
                 ctx,
                 FALLBACK_KEY,
                 hillshading_datasets,
                 hillshading::Mode::Shading,
-            )? {
-                // The fallback is what is left after `Out`, so its own alpha decides:
-                // a tile the country masks leave uncovered may still have no fallback
-                // data there.
-                let covered: Vec<&MaskBits> = mask_bits.values().collect();
+            )?
+        {
+            // The fallback is what is left after `Out`, so its own alpha decides:
+            // a tile the country masks leave uncovered may still have no fallback
+            // data there.
+            let covered: Vec<&MaskBits> = mask_bits.values().collect();
 
-                if MaskBits::from_surface(&mut surface)?.has_any_outside(&covered) {
-                    attribution.add_shading(FALLBACK_KEY);
-                }
-
-                hillshading::paint_surface(ctx, context, &surface, fade_alpha)?;
+            if MaskBits::from_surface(&mut surface)?.has_any_outside(&covered) {
+                attribution.add_shading(FALLBACK_KEY);
             }
 
-            context.pop_group_to_source()?; // mask
-            context.paint()?;
+            let composite = mask::compose(ctx, |cc| {
+                for mask_surface in country_masks.iter().filter_map(|(_, s)| s.as_ref()) {
+                    mask::paint_whole(cc, mask_surface, 1.0)?;
+                }
+                cc.set_operator(cairo::Operator::Out);
+                mask::paint_whole(cc, &surface, fade_alpha)
+            })?;
+
+            merge(&mut shading, composite)?;
+        }
+
+        if let Some(shading) = shading {
+            hillshading::paint_surface(ctx, context, &shading, 1.0)?;
         }
     }
 
     if ctx.zoom >= 12
         && let Some(contour_countries) = contour_countries
     {
-        let scaled_w = (ctx.size.width as f64 * ctx.scale) as i32;
-        let scaled_h = (ctx.size.height as f64 * ctx.scale) as i32;
-
         context.push_group(); // all contours — composited at 0.33 opacity via OVER
 
         // Countries that have a country-specific contour source. Countries with hillshading
@@ -226,35 +224,24 @@ pub fn render(
                 attribution.add_contours(country);
             }
 
-            // Build combined mask on a CPU ImageSurface (DestOut is fine here — not on SVG context).
-            let combined = ImageSurface::create(Format::ARgb32, scaled_w, scaled_h)?;
-            {
-                let cc = Context::new(&combined)?;
-                cc.set_source_surface(mask_surface, 0.0, 0.0)?;
-                cc.paint()?;
+            let combined = mask::compose(ctx, |cc| {
+                mask::paint_whole(cc, mask_surface, 1.0)?;
                 cc.set_operator(cairo::Operator::DestOut);
                 for &bc in &entry.better {
                     if countries_with_contour_data.contains(bc)
                         && let Some((_, Some(bc_mask))) =
                             country_masks.iter().find(|(c, _)| *c == bc)
                     {
-                        cc.set_source_surface(bc_mask, 0.0, 0.0)?;
-                        cc.paint()?;
+                        mask::paint_whole(cc, bc_mask, 1.0)?;
                     }
                 }
-            }
-
-            let mask_pattern = SurfacePattern::create(&combined);
-            #[allow(clippy::float_cmp)] // exact identity check: skip transform when scale is 1.0
-            if ctx.scale != 1.0 {
-                mask_pattern
-                    .set_matrix(cairo::Matrix::new(ctx.scale, 0.0, 0.0, ctx.scale, 0.0, 0.0));
-            }
+                Ok(())
+            })?;
 
             context.push_group();
             contours::render(ctx, context, rows, dry_land)?;
             context.pop_group_to_source()?;
-            context.mask(&mask_pattern)?;
+            mask::mask_with(ctx, context, &combined)?;
         }
 
         // Fallback: render contours outside the masks of countries that have contour data.
@@ -274,38 +261,38 @@ pub fn render(
         {
             attribution.add_contours(FALLBACK_KEY);
 
-            let complement = ImageSurface::create(Format::ARgb32, scaled_w, scaled_h)?;
-            {
-                let cc = Context::new(&complement)?;
-                cc.set_source_rgba(1.0, 1.0, 1.0, 1.0);
+            let complement = mask::compose(ctx, |cc| {
                 cc.paint()?;
                 cc.set_operator(cairo::Operator::DestOut);
                 for (country, s) in &country_masks {
                     if countries_with_contour_data.contains(country)
                         && let Some(mask_surface) = s
                     {
-                        cc.set_source_surface(mask_surface, 0.0, 0.0)?;
-                        cc.paint()?;
+                        mask::paint_whole(cc, mask_surface, 1.0)?;
                     }
                 }
-            }
-
-            let mask_pattern = SurfacePattern::create(&complement);
-            #[allow(clippy::float_cmp)] // exact identity check: skip transform when scale is 1.0
-            if ctx.scale != 1.0 {
-                mask_pattern
-                    .set_matrix(cairo::Matrix::new(ctx.scale, 0.0, 0.0, ctx.scale, 0.0, 0.0));
-            }
+                Ok(())
+            })?;
 
             context.push_group();
             contours::render(ctx, context, rows, dry_land)?;
             context.pop_group_to_source()?;
-            context.mask(&mask_pattern)?;
+            mask::mask_with(ctx, context, &complement)?;
         }
 
         context.pop_group_to_source()?;
         context.paint_with_alpha(0.33)?;
     }
+
+    Ok(())
+}
+
+fn merge(acc: &mut Option<ImageSurface>, surface: ImageSurface) -> LayerRenderResult {
+    if let Some(acc) = acc.as_ref() {
+        return mask::paint_whole(&Context::new(acc)?, &surface, 1.0);
+    }
+
+    *acc = Some(surface);
 
     Ok(())
 }

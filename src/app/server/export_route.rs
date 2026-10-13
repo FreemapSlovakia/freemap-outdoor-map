@@ -413,6 +413,8 @@ pub async fn post(
 
     let mut render_request = RenderRequest::new(rect, request.zoom, scale, format, layers, None);
 
+    render_request.print_density = true;
+
     render_request.custom_layer = if let Some(custom_layer) = request
         .features
         .as_ref()

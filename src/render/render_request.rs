@@ -209,6 +209,8 @@ pub struct RenderRequest {
     pub custom_layer: Option<CustomLayer>,
     pub legend: Option<LegendItemData>,
     pub decorations: Option<Decorations>,
+    /// Write `96 × scale` DPI into a raster image, for a file that gets printed.
+    pub print_density: bool,
 }
 
 impl RenderRequest {
@@ -230,6 +232,7 @@ impl RenderRequest {
             custom_layer: None,
             legend: None,
             decorations: None,
+            print_density: false,
         }
     }
 }

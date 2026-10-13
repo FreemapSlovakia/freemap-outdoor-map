@@ -3,6 +3,7 @@ pub(super) mod font_system;
 pub(super) mod hatch;
 pub(super) mod line_pattern;
 pub(super) mod markers_on_path;
+pub(super) mod mask;
 pub(super) mod offset_line;
 pub(super) mod path_geom;
 pub(super) mod smooth_line;

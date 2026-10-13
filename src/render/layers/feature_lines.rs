@@ -6,6 +6,7 @@ use crate::render::{
     draw::{
         line_pattern::{draw_line_pattern, draw_line_pattern_scaled},
         markers_on_path::draw_markers_on_path,
+        mask,
         path_geom::path_line_string,
     },
     layer_render_error::{LayerRenderError, LayerRenderResult},
@@ -330,8 +331,6 @@ pub fn render(
                         ..Default::default()
                     })?;
 
-                    // NOTE: use ink_extents() rather than extents(): the surface is an
-                    // *unbounded* recording surface, for which extents() returns None.
                     let (ox, oy, w, h) = surface.ink_extents();
 
                     let hw = ox + w / 2.0;
@@ -395,19 +394,17 @@ pub fn render(
             return Ok(());
         }
 
-        context.push_group();
-
-        for mask_surface in &mask_surfaces {
-            hillshading::paint_surface(ctx, context, mask_surface, 1.0)?;
-        }
-
-        context.pop_group_to_source()?;
-
-        context.set_operator(cairo::Operator::DestOut);
-        context.paint()?;
+        let complement = mask::compose(ctx, |cc| {
+            cc.paint()?;
+            cc.set_operator(cairo::Operator::DestOut);
+            for mask_surface in &mask_surfaces {
+                mask::paint_whole(cc, mask_surface, 1.0)?;
+            }
+            Ok(())
+        })?;
 
         context.pop_group_to_source()?;
-        context.paint()?;
+        mask::mask_with(ctx, context, &complement)?;
     } else {
         draw(true)?;
     }

@@ -985,6 +985,7 @@ dependencies = [
  "clap",
  "colorsys",
  "cosmic-text",
+ "crc32fast",
  "deadpool-postgres",
  "dotenvy",
  "enumset",

@@ -67,6 +67,7 @@ pub struct Options {
     /// Stroke opacity for the glow; see [`halo_opacity_under_fade`] when the caller
     /// fades the icon afterwards.
     pub halo_opacity: f64,
+    /// Bound the surface by the document viewport; otherwise by the ink.
     pub use_extents: bool,
 }
 
@@ -363,6 +364,11 @@ impl SvgRepo {
                 source: Some(err.into()),
             };
 
+            let map_render_error = |err: rsvg::RenderingError| SvgRepoError {
+                msg: format!("Rendering error ({})", what()),
+                source: Some(err.into()),
+            };
+
             let renderer = rsvg::CairoRenderer::new(&handle);
 
             let dim = renderer.intrinsic_size_in_pixels().unwrap_or((16.0, 16.0));
@@ -376,10 +382,43 @@ impl SvgRepo {
 
             renderer
                 .render_document(&context, &rect)
-                .map_err(|err| SvgRepoError {
-                    msg: format!("Rendering error ({})", what()),
-                    source: Some(err.into()),
-                })?;
+                .map_err(map_render_error)?;
+
+            drop(context);
+
+            // An unbounded source is never left to the caller: the PDF backend drops
+            // some repeats of one.
+            let surface = if key.use_extents {
+                surface
+            } else {
+                let (x, y, w, h) = surface.ink_extents();
+
+                // Padded: the antialiased fringe spills past the ink box by a
+                // device pixel, 1/scale units; 8 covers scales down to 1/8.
+                // `ink_extents` still reports the ink alone.
+                const PAD: f64 = 8.0;
+
+                let bounded = RecordingSurface::create(
+                    Content::ColorAlpha,
+                    Some(Rectangle::new(
+                        x - PAD,
+                        y - PAD,
+                        2.0f64.mul_add(PAD, w),
+                        2.0f64.mul_add(PAD, h),
+                    )),
+                )
+                .map_err(map_cairo_error)?;
+
+                // Rendered again rather than painted from `surface`: replaying a
+                // nested recording resamples it at a fractional offset.
+                let context = cairo::Context::new(&bounded).map_err(map_cairo_error)?;
+                renderer
+                    .render_document(&context, &rect)
+                    .map_err(map_render_error)?;
+                drop(context);
+
+                bounded
+            };
 
             // Cloned only here, on a miss - once per key for the life of the worker.
             svg_map.insert(key.clone(), surface);

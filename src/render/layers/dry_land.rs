@@ -2,10 +2,12 @@
 //! report elevations.
 
 use crate::render::{
-    ctx::Ctx, draw::path_geom::path_geometry, layer_render_error::LayerRenderResult,
+    ctx::Ctx,
+    draw::{mask, path_geom::path_geometry},
+    layer_render_error::LayerRenderResult,
     layers::contours,
 };
-use cairo::{Context, Format, ImageSurface, SurfacePattern};
+use cairo::{Context, Format, ImageSurface};
 use geo::{BoundingRect, Contains, Coord, Geometry, Intersects, Point, Rect};
 
 /// Below it there are no contours, and offshore shading bleed is sub-pixel.
@@ -126,15 +128,6 @@ impl DryLand {
             }
         }
 
-        let pattern = SurfacePattern::create(&mask);
-
-        #[allow(clippy::float_cmp)] // exact identity check: skip transform when scale is 1.0
-        if ctx.scale != 1.0 {
-            pattern.set_matrix(cairo::Matrix::new(ctx.scale, 0.0, 0.0, ctx.scale, 0.0, 0.0));
-        }
-
-        context.mask(&pattern)?;
-
-        Ok(())
+        mask::mask_with(ctx, context, &mask)
     }
 }

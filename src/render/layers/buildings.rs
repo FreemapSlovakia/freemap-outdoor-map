@@ -40,60 +40,11 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
         let typ = row.get_string("type")?;
 
         if typ.starts_with("disused:") || typ == "disused" {
-            context.push_group();
-
-            context.set_source_color(colors::BUILDING); // any
-            context.fill_preserve()?;
-
-            context.push_group();
-            context.set_source_color_a(colors::BUILDING, 0.66);
-            context.fill_preserve()?;
-            context.set_dash(&[3.0, 3.0], 0.0);
-            context.set_line_width(2.0);
-            context.set_source_color(colors::BUILDING);
-            context.stroke()?;
-            context.pop_group_to_source()?;
-            context.set_operator(cairo::Operator::DestIn);
-            context.paint()?;
-
-            context.pop_group_to_source()?;
-            context.paint()?;
+            draw_dashed(context, Some(0.66))?;
         } else if typ.starts_with("abandoned:") || typ == "abandoned" {
-            context.push_group();
-
-            context.set_source_color(colors::BUILDING); // any
-            context.fill_preserve()?;
-
-            context.push_group();
-            context.set_source_color_a(colors::BUILDING, 0.33);
-            context.fill_preserve()?;
-            context.set_dash(&[3.0, 3.0], 0.0);
-            context.set_line_width(2.0);
-            context.set_source_color(colors::BUILDING);
-            context.stroke()?;
-            context.pop_group_to_source()?;
-            context.set_operator(cairo::Operator::DestIn);
-            context.paint()?;
-
-            context.pop_group_to_source()?;
-            context.paint()?;
+            draw_dashed(context, Some(0.33))?;
         } else if typ.starts_with("ruins:") || typ == "ruins" {
-            context.push_group();
-
-            context.set_source_color(colors::BUILDING); // any
-            context.fill_preserve()?;
-
-            context.push_group();
-            context.set_dash(&[3.0, 3.0], 0.0);
-            context.set_line_width(2.0);
-            context.set_source_color(colors::BUILDING);
-            context.stroke()?;
-            context.pop_group_to_source()?;
-            context.set_operator(cairo::Operator::DestIn);
-            context.paint()?;
-
-            context.pop_group_to_source()?;
-            context.paint()?;
+            draw_dashed(context, None)?;
         } else {
             context.set_source_color(colors::BUILDING);
             context.fill()?;
@@ -103,4 +54,24 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
     context.restore()?;
 
     Ok(())
+}
+
+/// A translucent fill and dashed outline, kept inside the outline by a clip. A
+/// `DestIn` group would do the same, but the PDF backend rasterizes the whole
+/// page for it.
+fn draw_dashed(context: &Context, fill_alpha: Option<f64>) -> Result<(), cairo::Error> {
+    context.save()?;
+    context.clip_preserve();
+
+    if let Some(alpha) = fill_alpha {
+        context.set_source_color_a(colors::BUILDING, alpha);
+        context.fill_preserve()?;
+    }
+
+    context.set_dash(&[3.0, 3.0], 0.0);
+    context.set_line_width(2.0);
+    context.set_source_color(colors::BUILDING);
+    context.stroke()?;
+
+    context.restore()
 }
