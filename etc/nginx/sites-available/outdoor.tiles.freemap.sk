@@ -47,6 +47,14 @@ map $http_origin $cors_origin {
 	"~*^https?://localhost(:\d+)?$"           $http_origin;
 }
 
+# Origins allowed the tiles only, not /export or /legend.
+map $http_origin $cors_tile_origin {
+        default $cors_origin;
+        # Regexes, as an exact key this long overflows map_hash_bucket_size.
+        "~^https://(www\.)?mountainski\.cz$"                         $http_origin;
+        "~^https://mountainski-web-production\.up\.railway\.app$"    $http_origin;
+}
+
 map $url_scale $scale {
         default $url_scale;
         "" 1;
@@ -193,7 +201,7 @@ server {
         # Access-Control-Expose-Headers all come from upstream. Nothing here hides them,
         # and re-adding one here would send it twice.
         location ~ ^/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[1234])x)?(?:\.(?:jpe?g|png))?$ {
-                add_header Access-Control-Allow-Origin $cors_origin always;
+                add_header Access-Control-Allow-Origin $cors_tile_origin always;
                 add_header Vary Origin always;
                 add_header Alt-Svc 'h3=":$server_port"; ma=86400';
 
@@ -202,7 +210,7 @@ server {
         }
 
         location ~ ^/kst/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[123])x)?(?:\.(?:jpe?g|png))?$ {
-                add_header Access-Control-Allow-Origin $cors_origin always;
+                add_header Access-Control-Allow-Origin $cors_tile_origin always;
                 add_header Vary Origin always;
                 add_header Alt-Svc 'h3=":$server_port"; ma=86400';
 
@@ -214,7 +222,7 @@ server {
         # Any variant name, rather than a list that goes stale each time one is
         # added; a path with no variant behind it 404s at the renderer.
         location ~ ^/o/(?<variant>[a-z][a-z0-9_-]*)/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[123])x)?(?:\.webp)?$ {
-                add_header Access-Control-Allow-Origin $cors_origin always;
+                add_header Access-Control-Allow-Origin $cors_tile_origin always;
                 add_header Vary Origin always;
                 add_header Alt-Svc 'h3=":$server_port"; ma=86400';
 
@@ -244,8 +252,8 @@ server {
         http2 on;
         http3 on;
 
-        listen 443 quic reuseport;
-        listen [::]:443 quic reuseport;
+        listen 443 quic reuseport rcvbuf=4m sndbuf=4m;
+        listen [::]:443 quic reuseport rcvbuf=4m sndbuf=4m;
 
         listen 443 ssl;
         listen [::]:443 ssl;
