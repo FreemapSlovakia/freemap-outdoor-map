@@ -1326,6 +1326,13 @@
     },
     {
       "key": "landuse",
+      "value": "flowerbed",
+      "object_types": ["area"],
+      "description": "Rendered from zoom 0. Label (name) from zoom 12.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/landcover_flowerbed?mode=taginfo"
+    },
+    {
+      "key": "landuse",
       "value": "military",
       "object_types": ["area"],
       "description": "Rendered from zoom 10.",

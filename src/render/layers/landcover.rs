@@ -26,6 +26,7 @@ pub enum Paint {
 pub const PAINT_DEFS: &[(&[&str], &[Paint])] = &[
     (&["forest", "wood", "tree_group"], &[Paint::Fill(FOREST)]),
     (&["meadow", "village_green", "fell", "grass", "grassland"], &[Paint::Fill(GRASSY)]),
+    (&["flowerbed"], &[Paint::Fill(GRASSY), Paint::Pattern("flowerbed")]),
     (&["scrub"], &[Paint::Fill(SCRUB), Paint::Pattern("scrub")]),
     (&["heath"], &[Paint::Fill(HEATH)]),
     (&["bare_rock"], &[Paint::Pattern("bare_rock")]),
