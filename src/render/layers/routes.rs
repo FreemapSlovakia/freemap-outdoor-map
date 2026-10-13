@@ -5,16 +5,17 @@ use crate::render::{
     draw::{
         font_options::FontAndLayoutOptions,
         line_pattern::draw_line_pattern_scaled,
-        offset_line::offset_line_string,
+        offset_line::offset_line_string_parts,
         path_geom::{path_line_string_with_offset, walk_geometry_line_strings},
         text_on_line::{Align, Distribution, Repeat, TextOnLineOptions, draw_text_on_line},
     },
-    layer_render_error::{LayerRenderError, LayerRenderResult},
+    layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
     svg_repo::{Options, SvgRepo},
 };
-use cairo::Context;
+use cairo::{Context, RecordingSurface};
 use colorsys::{Rgb, RgbRatio};
+use geo::Geometry;
 
 const COLOR_SQL: &str = r#"
   CASE
@@ -305,6 +306,23 @@ pub async fn query_marking(
         .await
 }
 
+fn draw_offset_pattern(
+    ctx: &Ctx,
+    context: &Context,
+    geom: &Geometry,
+    offset: f64,
+    wf: f64,
+    sample: &RecordingSurface,
+) -> cairo::Result<()> {
+    walk_geometry_line_strings(geom, &mut |line| {
+        for offset_part in offset_line_string_parts(line, offset) {
+            draw_line_pattern_scaled(context, ctx.size, &offset_part, 0.5, wf / 2.0, sample)?;
+        }
+
+        Ok(())
+    })
+}
+
 pub fn render_marking(
     ctx: &Ctx,
     context: &Context,
@@ -340,16 +358,7 @@ pub fn render_marking(
                         ..Default::default()
                     })?;
 
-                    walk_geometry_line_strings(&geom, &mut |part| {
-                        draw_line_pattern_scaled(
-                            context,
-                            ctx.size,
-                            &offset_line_string(part, offset),
-                            0.5,
-                            wf / 2.0,
-                            sample,
-                        )
-                    })?;
+                    draw_offset_pattern(ctx, context, &geom, offset, wf, sample)?;
                 }
             }
 
@@ -365,18 +374,7 @@ pub fn render_marking(
                         ..Default::default()
                     })?;
 
-                    walk_geometry_line_strings::<_, LayerRenderError>(&geom, &mut |part| {
-                        draw_line_pattern_scaled(
-                            context,
-                            ctx.size,
-                            &offset_line_string(part, offset),
-                            0.5,
-                            wf / 2.0,
-                            pattern,
-                        )?;
-
-                        Ok(())
-                    })?;
+                    draw_offset_pattern(ctx, context, &geom, offset, wf, pattern)?;
                 }
             }
 
