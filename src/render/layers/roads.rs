@@ -2,7 +2,7 @@ use crate::render::{
     Feature, FeatureError,
     colors::{self, Color, ContextExt},
     ctx::Ctx,
-    draw::path_geom::path_line_string,
+    draw::path_geom::{path_line_string, path_line_string_with_offset},
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
@@ -244,28 +244,22 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
         let bridge = row.get_i16("bridge")?;
         let tunnel = row.get_i16("tunnel")?;
 
+        // Two offset lines rather than a wide stroke with its middle cleared: Cairo's PDF
+        // backend rasterizes the `Clear` operator.
+        let draw_casing = |offset: f64, width: f64| -> cairo::Result<()> {
+            context.set_line_cap(cairo::LineCap::Butt);
+            context.set_line_width(width);
+            path_line_string_with_offset(context, geom, offset);
+            path_line_string_with_offset(context, geom, -offset);
+            context.stroke()
+        };
+
         let draw_bridges_tunnels = |width: f64| -> cairo::Result<()> {
             if bridge > 0 {
                 context.save()?;
                 context.set_dash(&[], 0.0);
                 context.set_source_rgb(0.0, 0.0, 0.0);
-
-                context.push_group();
-
-                context.set_line_cap(cairo::LineCap::Butt);
-                context.set_line_width(width + 2.0);
-                draw()?;
-                context.stroke()?;
-
-                context.set_line_cap(cairo::LineCap::Square);
-                context.set_operator(cairo::Operator::Clear);
-                context.set_line_width(width);
-                draw()?;
-                context.stroke()?;
-
-                context.pop_group_to_source()?;
-                context.paint()?;
-
+                draw_casing(width / 2.0 + 0.5, 1.0)?;
                 context.restore()?;
             }
 
@@ -275,28 +269,11 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
 
                 context.set_source_rgba(0.8, 0.8, 0.8, 0.8);
                 draw()?;
-                context.stroke()?;
 
                 context.save()?;
                 context.set_dash(&[3.0, 3.0], 0.0);
                 context.set_source_rgba(0.0, 0.0, 0.0, 0.5);
-
-                context.push_group();
-
-                context.set_line_cap(cairo::LineCap::Butt);
-                context.set_line_width(width + 2.0);
-                draw()?;
-                context.stroke()?;
-
-                context.set_line_cap(cairo::LineCap::Square);
-                context.set_operator(cairo::Operator::Clear);
-                context.set_line_width(width + 0.8);
-                draw()?;
-                context.stroke()?;
-
-                context.pop_group_to_source()?;
-                context.paint()?;
-
+                draw_casing(width / 2.0 + 0.7, 0.6)?;
                 context.restore()?;
             }
 

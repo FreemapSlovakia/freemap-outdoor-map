@@ -63,16 +63,15 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
 
         context.stroke()?;
 
-        context.restore()?;
-
-        context.new_path();
+        // The border is clipped to the outline instead of using `Atop`, which Cairo's PDF
+        // backend rasterizes; over the opaque fill the two are equivalent.
         context.append_path(&path);
-
         context.set_source_color(colors::SOLAR_PLANT_BORDER);
         context.set_dash(&[], 0.0);
         context.set_line_width(2.0);
-        context.set_operator(cairo::Operator::Atop);
         context.stroke()?;
+
+        context.restore()?;
 
         context.pop_group_to_source()?;
         context.paint()?;

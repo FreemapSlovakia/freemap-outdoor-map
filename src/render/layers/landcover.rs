@@ -201,11 +201,15 @@ pub fn render(
                         }
 
                         context.set_line_width(*width);
-                        path_geometry(context, &geom);
-
                         context.set_line_cap(cairo::LineCap::Square);
-                        context.set_operator(cairo::Operator::Atop);
+
+                        // Clip rather than `Atop`, which Cairo's PDF backend rasterizes;
+                        // the same result, as every fill under a stroke is opaque.
+                        context.save()?;
+                        path_geometry(context, &geom);
+                        context.clip_preserve();
                         context.stroke()?;
+                        context.restore()?;
                     }
                 }
             }
