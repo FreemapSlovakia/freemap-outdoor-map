@@ -1,4 +1,3 @@
-use super::landcover_z_order::build_landcover_z_order_case;
 use crate::render::{
     Feature,
     colors::{
@@ -82,6 +81,11 @@ pub static PAINTS: LazyLock<HashMap<&'static str, &'static [Paint]>> = LazyLock:
     paint_map
 });
 
+/// Drawn above all other landcovers: they are mapped on top of the ground they
+/// lie in, and the pattern-only ones would vanish under a smaller fill.
+/// Everything else nests by area: smaller on top, as OSM Carto does.
+const OVERLAY_TYPES: &str = "'wetland', 'bare_rock', 'clearcut'";
+
 pub async fn query(
     ctx: &Ctx,
     client: &tokio_postgres::Client,
@@ -100,8 +104,6 @@ pub async fn query(
         12.. => "",
     };
 
-    let z_order_case = build_landcover_z_order_case("type");
-
     let query = &format!("
         SELECT
             CASE
@@ -112,16 +114,18 @@ pub async fn query(
                 ELSE type
             END AS type,
             geometry,
-            osm_id,
-            {z_order_case} AS z_order
+            osm_id
         FROM
             osm_landcovers{table_suffix}
         WHERE
             {excl_types}
             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
         ORDER BY
-            z_order DESC NULLS LAST,
-            osm_id
+            type IN ({OVERLAY_TYPES}),
+            area DESC,
+            osm_id,
+            -- a way tagged with several landcovers comes once per type, with equal area
+            type
     ");
 
     client

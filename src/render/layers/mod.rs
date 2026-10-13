@@ -33,7 +33,6 @@ mod hillshading_footprint;
 mod housenumbers;
 mod landcover;
 mod landcover_names;
-mod landcover_z_order;
 mod locality_names;
 mod military_areas;
 mod national_park_names;

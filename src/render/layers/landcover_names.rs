@@ -1,4 +1,3 @@
-use super::landcover_z_order::build_landcover_z_order_case;
 use crate::render::{
     Feature,
     collision::Collision,
@@ -37,8 +36,6 @@ pub async fn query(
     ctx: &Ctx,
     client: &tokio_postgres::Client,
 ) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
-    let z_order_case = build_landcover_z_order_case("type");
-
     // TODO include types (`type IN`), don't exclude (`type NOT IN`)
     // TODO ... or maybe merge with bordered_area_names
     // nested sql is to remove duplicate entries imported by imposm because we use `mappings` in yaml
@@ -49,6 +46,7 @@ pub async fn query(
                 geometry,
                 {},
                 type,
+                area,
                 osm_id AS osm_id
             FROM
                 osm_landcovers
@@ -68,7 +66,7 @@ pub async fn query(
         WHERE
             name <> ''
         ORDER BY
-            {z_order_case} DESC,
+            area DESC,
             osm_id
     ",
         if ctx.zoom < 15 {
