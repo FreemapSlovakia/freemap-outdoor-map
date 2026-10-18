@@ -54,7 +54,7 @@ const fn hue_to_rgb(p: i64, q: i64, mut t: i64) -> i64 {
     }
 }
 
-const fn parse_color(color: &str) -> Color {
+pub const fn parse_color(color: &str) -> Color {
     let bytes = color.as_bytes();
 
     assert!(!bytes.is_empty(), "empty color");

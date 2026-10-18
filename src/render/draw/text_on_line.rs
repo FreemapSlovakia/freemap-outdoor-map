@@ -16,6 +16,7 @@ use cosmic_text::{Buffer, Metrics, Shaping, Wrap};
 use geo::{Coord, Euclidean, InterpolatePoint, LineString, Rect, Vector2DOps};
 use rustc_hash::FxHashMap;
 use std::{
+    borrow::Cow,
     cell::{OnceCell, RefCell},
     f64::consts::{FRAC_PI_2, PI, TAU},
     rc::Rc,
@@ -309,36 +310,54 @@ fn bbox_intersects_clip(pts: &[Coord], clip: (f64, f64, f64, f64), padding: f64)
     maxx >= min_cx && max_cx >= minx && maxy >= min_cy && max_cy >= miny
 }
 
+/// Graphic laid along a line like a glyph.
+pub struct InlineImage {
+    pub width: f64,
+    pub height: f64,
+    /// Drawn with its origin at the image's top left.
+    pub surface: cairo::RecordingSurface,
+}
+
+/// A piece of a label: text, or an image centered on the text's logical height.
+pub enum LabelPart<'a> {
+    Text(Cow<'a, str>),
+    Image(Rc<InlineImage>),
+}
+
 /// One glyph within a cluster, with its offset from the cluster origin
 /// (at the baseline, advance-aligned).
-struct GlyphSpec {
+#[derive(Clone)]
+pub(super) struct GlyphSpec {
     /// Scaled outline, `None` for glyphs without one (e.g. spaces).
-    outline: Option<Rc<Outline>>,
+    pub(super) outline: Option<Rc<Outline>>,
     /// Offset of this glyph's pen position from the cluster origin.
-    dx: f32,
+    pub(super) dx: f32,
     /// Same for vertical (usually 0 except for stacking diacritics).
-    dy: f32,
+    pub(super) dy: f32,
 }
 
 /// A pango-style "cluster" = a run of glyphs that render together (e.g. a
 /// base letter plus combining marks). Positioned as a unit.
-struct ClusterInfo {
+#[derive(Clone)]
+pub(super) struct ClusterInfo {
     /// Total horizontal advance (width the next cluster's origin sits at).
-    advance: f64,
+    pub(super) advance: f64,
     /// Ink extents relative to the cluster origin; `y` axis is layout Y-down,
     /// so `ink_top` is negative (above baseline) and `ink_bottom` may be
     /// positive (below baseline).
-    ink_left: f64,
-    ink_right: f64,
-    ink_top: f64,
-    ink_bottom: f64,
+    pub(super) ink_left: f64,
+    pub(super) ink_right: f64,
+    pub(super) ink_top: f64,
+    pub(super) ink_bottom: f64,
     /// Logical (metric-ascent+descent) extents, used to size the collision
     /// bbox after rotation. Origin-relative, same Y convention as ink.
     logical_left: f64,
     logical_right: f64,
     logical_top: f64,
     logical_bottom: f64,
-    glyphs: Vec<GlyphSpec>,
+    pub(super) glyphs: Vec<GlyphSpec>,
+    /// Painted at the ink box's origin.
+    image: Option<Rc<InlineImage>>,
 }
 
 impl ClusterInfo {
@@ -445,6 +464,7 @@ fn collect_clusters(text: &str, flo: &FontAndLayoutOptions) -> Vec<ClusterInfo> 
                             logical_top: -g_asc,
                             logical_bottom: g_desc,
                             glyphs: vec![spec],
+                            image: None,
                         });
                     }
                 }
@@ -465,7 +485,7 @@ thread_local! {
 
 /// [`collect_clusters`], cached: the same names, refs and contour heights recur across a tile's
 /// lines and neighbouring tiles.
-fn shaped_clusters(text: &str, flo: &FontAndLayoutOptions) -> Rc<[ClusterInfo]> {
+pub(super) fn shaped_clusters(text: &str, flo: &FontAndLayoutOptions) -> Rc<[ClusterInfo]> {
     let key = ShapeKey::new(text, flo);
 
     if let Some(clusters) = SHAPED_CACHE.with(|cache| cache.borrow().get(&key).cloned()) {
@@ -485,6 +505,48 @@ fn shaped_clusters(text: &str, flo: &FontAndLayoutOptions) -> Rc<[ClusterInfo]> 
     });
 
     clusters
+}
+
+/// Clusters of `parts`; images take the logical height of the label's font.
+fn label_clusters(parts: &[LabelPart], flo: &FontAndLayoutOptions) -> Rc<[ClusterInfo]> {
+    if let [LabelPart::Text(text)] = parts {
+        return shaped_clusters(text, flo);
+    }
+
+    let mut out = Vec::new();
+
+    let (top, bottom) = shaped_clusters("x", flo)
+        .first()
+        .map_or((-flo.size, 0.0), |c| (c.logical_top, c.logical_bottom));
+
+    // Glyphs carry side bearings; images get their own.
+    let margin = flo.size * 0.1;
+
+    for part in parts {
+        match part {
+            LabelPart::Text(text) => out.extend(shaped_clusters(text, flo).iter().cloned()),
+            LabelPart::Image(image) => {
+                let advance = 2.0f64.mul_add(margin, image.width);
+                let ink_top = f64::midpoint(top, bottom) - image.height / 2.0;
+
+                out.push(ClusterInfo {
+                    advance,
+                    ink_left: margin,
+                    ink_right: margin + image.width,
+                    ink_top,
+                    ink_bottom: ink_top + image.height,
+                    logical_left: 0.0,
+                    logical_right: advance,
+                    logical_top: top,
+                    logical_bottom: bottom,
+                    glyphs: Vec::new(),
+                    image: Some(Rc::clone(image)),
+                });
+            }
+        }
+    }
+
+    out.into()
 }
 
 fn draw_label(
@@ -510,7 +572,27 @@ fn draw_label(
 
             cr.restore().ok();
         }
-    })
+    })?;
+
+    for (cluster, pos, angle) in &laid_out.glyphs {
+        let Some(image) = &cluster.image else {
+            continue;
+        };
+
+        let (cx, cy) = cluster.logical_center();
+
+        cr.save()?;
+        cr.translate(pos.x, pos.y);
+        cr.rotate(*angle);
+        cr.translate(cluster.ink_left - cx, cluster.ink_top - cy);
+
+        cr.set_source_surface(&image.surface, 0.0, 0.0)?;
+        cr.paint_with_alpha(opts.alpha)?;
+
+        cr.restore()?;
+    }
+
+    Ok(())
 }
 
 fn label_offsets(
@@ -939,6 +1021,23 @@ pub fn draw_text_on_line(
     collision: Option<&mut Collision>,
     options: &TextOnLineOptions,
 ) -> cairo::Result<bool> {
+    draw_parts_on_line(
+        context,
+        line_string,
+        &[LabelPart::Text(Cow::Borrowed(text))],
+        collision,
+        options,
+    )
+}
+
+/// [`draw_text_on_line`] for a label mixing text and images.
+pub fn draw_parts_on_line(
+    context: &Context,
+    line_string: &LineString,
+    parts: &[LabelPart],
+    collision: Option<&mut Collision>,
+    options: &TextOnLineOptions,
+) -> cairo::Result<bool> {
     let _span = tracy_client::span!("text_on_line::draw_text_on_line");
 
     let mut pts: Vec<Coord> = line_string.into_iter().copied().collect();
@@ -979,7 +1078,7 @@ pub fn draw_text_on_line(
         options.flo
     };
 
-    let clusters = shaped_clusters(text, &flo);
+    let clusters = label_clusters(parts, &flo);
     if clusters.is_empty() {
         return Ok(true);
     }

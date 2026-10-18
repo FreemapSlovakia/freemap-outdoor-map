@@ -6,8 +6,12 @@ use crate::render::{
         font_options::FontAndLayoutOptions,
         line_pattern::draw_line_pattern_scaled,
         offset_line::offset_line_string_parts,
+        osmc_symbol::osmc_symbol_image,
         path_geom::{path_line_string_with_offset, walk_geometry_line_strings},
-        text_on_line::{Align, Distribution, Repeat, TextOnLineOptions, draw_text_on_line},
+        text_on_line::{
+            Align, Distribution, InlineImage, LabelPart, Repeat, TextOnLineOptions,
+            draw_parts_on_line,
+        },
     },
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
@@ -16,6 +20,7 @@ use crate::render::{
 use cairo::{Context, RecordingSurface};
 use colorsys::{Rgb, RgbRatio};
 use geo::Geometry;
+use std::{borrow::Cow, rc::Rc};
 
 const COLOR_SQL: &str = r#"
   CASE
@@ -39,6 +44,23 @@ const COLOR_SQL: &str = r#"
     WHEN colour = 'purple' THEN 7
     ELSE 8
   END
+"#;
+
+/// A route's label item, name and `osmc:symbol`, tab separated; null when both are missing. Tabs and newlines in the values would split items, so they become
+/// spaces.
+const LABEL_SQL: &str = r#"
+  NULLIF(
+    translate(
+      CASE
+        WHEN name <> '' AND ref <> '' THEN name || ' (' || ref || ')'
+        ELSE COALESCE(NULLIF(name, ''), NULLIF(ref, ''), '')
+      END,
+      E'\t\n\r',
+      '   '
+    ) || E'\t' ||
+    translate(COALESCE("osmc:symbol", ''), E'\t\n\r', '   '),
+    E'\t'
+  )
 "#;
 
 const COLORS: [(&str, &str); 9] = [
@@ -184,44 +206,37 @@ fn get_routes_query(
             SELECT
                 array_to_string(
                     array(
-                        SELECT distinct itm
+                        SELECT itm
                         FROM unnest(
                             array_agg(
                                 CASE WHEN
                                     osm_routes.type IN ({lefts_in})
                                 THEN
-                                    CASE
-                                        WHEN name <> '' AND ref <> ''
-                                        THEN name || ' (' || ref || ')'
-                                        ELSE COALESCE(NULLIF(name, ''), NULLIF(ref, '')) END
+                                    {LABEL_SQL}
                                 ELSE
                                     null
                                 END
                             )
-                        ) AS itm ORDER BY itm
+                        ) AS itm GROUP BY itm ORDER BY split_part(itm, E'\\t', 1), itm
                     ),
-                    ', '
+                    E'\n'
                 ) AS refs1,
                 array_to_string(
                     array(
-                        SELECT distinct itm FROM unnest(
+                        SELECT itm FROM unnest(
                             array_agg(
                                 CASE
                                 WHEN
                                     osm_routes.type IN ({rights_in})
                                 THEN
-                                    CASE
-                                    WHEN name <> '' AND ref <> ''
-                                        THEN name || ' (' || ref || ')'
-                                        ELSE COALESCE(NULLIF(name, ''), NULLIF(ref, ''))
-                                    END
+                                    {LABEL_SQL}
                                 ELSE
                                     null
                                 END
                             )
-                        ) AS itm ORDER BY itm
+                        ) AS itm GROUP BY itm ORDER BY split_part(itm, E'\\t', 1), itm
                     ),
-                    ', '
+                    E'\n'
                 ) AS refs2,
                 first(geometry) AS geometry,
                 uniq(sort(array_agg(
@@ -481,6 +496,55 @@ pub async fn query_labels(
         .await
 }
 
+/// Label parts of `refs`, items of name and `osmc:symbol` separated by a tab; an item without a
+/// tab is a bare name. Symbols of routes sharing a name go before it together.
+fn label_parts(refs: &str) -> Vec<LabelPart<'_>> {
+    let mut groups: Vec<(&str, Vec<Rc<InlineImage>>)> = Vec::new();
+
+    for item in refs.split('\n').filter(|item| !item.is_empty()) {
+        let (name, symbol) = item.split_once('\t').unwrap_or((item, ""));
+        let image = osmc_symbol_image(symbol);
+
+        // Items come sorted by name.
+        match groups.last_mut() {
+            Some((last, images)) if !name.is_empty() && *last == name => images.extend(image),
+            _ if image.is_some() || !name.is_empty() => {
+                groups.push((name, image.into_iter().collect()));
+            }
+            _ => {}
+        }
+    }
+
+    let mut parts = Vec::new();
+    let mut text = String::new();
+
+    for (i, (name, images)) in groups.into_iter().enumerate() {
+        if i > 0 {
+            text.push_str(", ");
+        }
+
+        if !images.is_empty() {
+            if !text.is_empty() {
+                parts.push(LabelPart::Text(Cow::Owned(std::mem::take(&mut text))));
+            }
+
+            parts.extend(images.into_iter().map(LabelPart::Image));
+
+            if !name.is_empty() {
+                text.push(' ');
+            }
+        }
+
+        text.push_str(name);
+    }
+
+    if !text.is_empty() {
+        parts.push(LabelPart::Text(Cow::Owned(text)));
+    }
+
+    parts
+}
+
 pub fn render_labels(
     ctx: &Ctx,
     context: &Context,
@@ -492,10 +556,10 @@ pub fn render_labels(
     for row in rows {
         let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
 
-        let refs1 = row.get_string("refs1")?;
+        let parts1 = label_parts(row.get_string("refs1")?);
         let off1 = row.get_i32("off1")?;
 
-        let refs2 = row.get_string("refs2")?;
+        let parts2 = label_parts(row.get_string("refs2")?);
         let off2 = row.get_i32("off2")?;
 
         walk_geometry_line_strings(&geom, &mut |geom| {
@@ -513,13 +577,17 @@ pub fn render_labels(
                 ..Default::default()
             };
 
-            for (refs, offset) in [
-                (refs1, -f64::from(off1).mul_add(2.5, 9.0)),
-                (refs2, f64::from(off2).mul_add(2.5, 10.0)),
+            for (parts, offset) in [
+                (&parts1, -f64::from(off1).mul_add(2.5, 9.0)),
+                (&parts2, f64::from(off2).mul_add(2.5, 10.0)),
             ] {
+                if parts.is_empty() {
+                    continue;
+                }
+
                 options.offset = offset;
 
-                let _drawn = draw_text_on_line(context, geom, refs, Some(collision), &options)?;
+                let _drawn = draw_parts_on_line(context, geom, parts, Some(collision), &options)?;
             }
 
             cairo::Result::Ok(())

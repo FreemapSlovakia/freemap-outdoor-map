@@ -5,6 +5,7 @@ pub(super) mod line_pattern;
 pub(super) mod markers_on_path;
 pub(super) mod mask;
 pub(super) mod offset_line;
+pub(super) mod osmc_symbol;
 pub(super) mod path_geom;
 pub(super) mod smooth_line;
 pub(super) mod text;
