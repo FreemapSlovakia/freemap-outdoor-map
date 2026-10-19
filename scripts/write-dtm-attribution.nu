@@ -38,15 +38,20 @@ def sources [] {
       ]
     }
     {
-      key: "be"
+      key: "be_vlg"
+      sources: [
+        {
+          title: "DHMV II 1 m — Bron: Digitaal Vlaanderen (Modellicentie gratis hergebruik)"
+          url: "https://metadata.vlaanderen.be/srv/dut/catalog.search#/metadata/f52b1a13-86bc-4b64-8256-88cc0d1a8735"
+        }
+      ]
+    }
+    {
+      key: "be_wal"
       sources: [
         {
           title: "MNT 1 m 2021–2022: © Service public de Wallonie (SPW), CC BY 4.0 — modified"
           url: "https://geoportail.wallonie.be/catalogue/fe13bc84-e371-46ca-9632-8ad4139f1ee5.html"
-        }
-        {
-          title: "DHMV II 1 m — Bron: Digitaal Vlaanderen (Modellicentie gratis hergebruik)"
-          url: "https://metadata.vlaanderen.be/srv/dut/catalog.search#/metadata/f52b1a13-86bc-4b64-8256-88cc0d1a8735"
         }
       ]
     }
@@ -69,11 +74,65 @@ def sources [] {
       ]
     }
     {
+      key: "de_bb"
+      sources: [
+        {
+          title: "© GeoBasis-DE/LGB, dl-de/by-2-0 (Daten geändert)"
+          url: "https://geobasis-bb.de/lgb/de/startseite/geodaten/3d-produkte/gelaendemodell/"
+        }
+      ]
+    }
+    {
+      key: "de_bw"
+      sources: [
+        {
+          title: "Datenquelle: LGL, www.lgl-bw.de, dl-de/by-2-0"
+          url: "https://opengeodata.lgl-bw.de/"
+        }
+      ]
+    }
+    {
       key: "de_by"
       sources: [
         {
           title: "Bayerische Vermessungsverwaltung: DGM1 1 m, dl-de/by-2-0"
           url: "https://geodaten.bayern.de/opengeodata/OpenDataDetail.html?pn=dgm1"
+        }
+      ]
+    }
+    {
+      key: "de_hb"
+      sources: [
+        {
+          title: "Landesamt GeoInformation Bremen, CC BY 4.0 (Daten geändert)"
+          url: "https://www.geo.bremen.de/"
+        }
+      ]
+    }
+    {
+      key: "de_he"
+      sources: [
+        {
+          title: "Geobasisdaten © Hessische Verwaltung für Bodenmanagement und Geoinformation (HVBG): DGM1 1 m, dl-de/zero-2-0"
+          url: "https://gds.hessen.de"
+        }
+      ]
+    }
+    {
+      key: "de_hh"
+      sources: [
+        {
+          title: "Freie und Hansestadt Hamburg, Landesbetrieb Geoinformation und Vermessung (LGV), dl-de/by-2-0 (Daten geändert)"
+          url: "https://www.hamburg.de/politik-und-verwaltung/behoerden/behoerde-fuer-stadtentwicklung-und-wohnen/aemter-und-landesbetrieb/landesbetrieb-geoinformation-und-vermessung"
+        }
+      ]
+    }
+    {
+      key: "de_mv"
+      sources: [
+        {
+          title: "© GeoBasis-DE/M-V 2026, CC BY 4.0 (Daten geändert)"
+          url: "https://www.geodaten-mv.de/"
         }
       ]
     }
@@ -96,6 +155,33 @@ def sources [] {
       ]
     }
     {
+      key: "de_rp"
+      sources: [
+        {
+          title: "©GeoBasis-DE / LVermGeoRP 2026, dl-de/by-2-0, www.lvermgeo.rlp.de (Daten geändert)"
+          url: "https://lvermgeo.rlp.de"
+        }
+      ]
+    }
+    {
+      key: "de_sh"
+      sources: [
+        {
+          title: "© GeoBasis-DE/LVermGeo SH, CC BY 4.0 (Daten geändert)"
+          url: "https://geodaten.schleswig-holstein.de/"
+        }
+      ]
+    }
+    {
+      key: "de_sl"
+      sources: [
+        {
+          title: "© GeoBasis DE/LVGL-SL, dl-de/by-2-0 (Daten geändert)"
+          url: "https://www.saarland.de/lvgl/DE/home/home_node.html"
+        }
+      ]
+    }
+    {
       key: "de_sn"
       sources: [
         {
@@ -105,11 +191,29 @@ def sources [] {
       ]
     }
     {
+      key: "de_st"
+      sources: [
+        {
+          title: "LVermGeo Sachsen-Anhalt: DGM1 1 m, dl-de/by-2-0"
+          url: "https://www.lvermgeo.sachsen-anhalt.de/de/gdp-dgm1-landesweit.html"
+        }
+      ]
+    }
+    {
       key: "de_th"
       sources: [
         {
           title: "GDI-Th, Freistaat Thüringen: DGM1 1 m, dl-de/by-2-0"
           url: "https://www.geoportal-th.de/de-de/Downloadbereiche/Download-Offene-Geodaten-Th%C3%BCringen/Download-H%C3%B6hendaten"
+        }
+      ]
+    }
+    {
+      key: "dk"
+      sources: [
+        {
+          title: "Danmarks Højdemodel / Terræn: Klimadatastyrelsen"
+          url: "https://dataforsyningen.dk/data/930"
         }
       ]
     }
@@ -236,6 +340,15 @@ def sources [] {
         {
           title: "DMR 5.0: ÚGKK SR"
           url: "https://www.skgeodesy.sk/gku/produkty-sluzby/na-stiahnutie/zbgis.html#lls"
+        }
+      ]
+    }
+    {
+      key: "wls"
+      sources: [
+        {
+          title: "LiDAR DTM 1 m (Wales, OGL v3): © Welsh Government and Natural Resources Wales. All rights reserved."
+          url: "https://datamap.gov.wales/maps/lidar-data-download/"
         }
       ]
     }
