@@ -15,11 +15,10 @@
 
 # INTERVAL 5 m, as in the Netherlands, Denmark and Flanders. Estonia is the
 # flattest source in this repository: 59.9% of its land carries under 10 m of
-# relief in a square kilometre, against Flanders' 51.6% and Denmark's 36.3%,
-# and both of those moved to 5 m once 10 m was measured too sparse. Denmark
-# delivered 4.71 km of line per km² at 10 m and 10.14 at 5 m; Flanders 4.83 and
-# 10.14. Check the delivered density here too rather than assuming it landed in
-# the same place.
+# relief in a square kilometre, against Flanders' 51.6% and Denmark's 36.3%.
+# It delivers 6.59 km of line per km² at 5 m, the thinnest of the 5 m set and
+# under the Netherlands' 7.42, so 10 m here would land near 3.3 — sparser than
+# the 4.71 that moved Denmark off it.
 
 # THE RENDERER DRAWS THE 5 m LINES WHERE THEY MATTER. Its height filter is
 # `% 50` at z12, `% 20` at z13-14 and `% 5` from z15 up, so the extra lines
@@ -31,13 +30,13 @@
 # 100:1 in favour of the positive side, which is a shoreline clamp rather than
 # terrain. Do not mask it a second time.
 
-# THE FLOOR IS THE OIL SHALE, AND THE SAMPLE DID NOT SEE IT. The 25 m national
-# model holds 5099 cells below zero, to -13.58 m — the open-casts in the
-# north-east, around 3.2 km². A 571-window scan covering about 1% of the country
-# found nothing under -20 m, which says what is typical and nothing about the
-# extreme. Expect a handful of negative lines around Kohtla-Järve and Narva;
-# read this table, not the scan, for the real floor. Denmark and Wales both
-# taught the same lesson, and in Wales the thing the sample missed was a defect.
+# THE FLOOR IS THE OIL SHALE, AND THE SAMPLE DID NOT SEE IT. A 571-window scan
+# covering about 1% of the country found nothing under -20 m, which says what is
+# typical and nothing about the extreme. This table reads every pixel: it stops
+# at -10 m, 14 lines and 6.4 km of them, all inside 59.47-59.51 N 26.52-26.88 E
+# — the open-casts west of Kohtla-Järve, where the 25 m model independently
+# reaches -13.58 m. Read this table, not the scan, for the floor; in Wales what
+# the sample missed was a defect.
 
 # ── HANDOFF TO POSTGIS ────────────────────────────────────────────────────────
 #
