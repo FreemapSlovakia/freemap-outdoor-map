@@ -510,7 +510,7 @@ struct Item<'a> {
 
 /// Items of `refs`: name, ref and `osmc:symbol` separated by tabs, one per line. The legend's
 /// items are bare names.
-fn label_items(refs: &str) -> Vec<Item<'_>> {
+fn label_items<'a>(refs: &'a str, svg_repo: &SvgRepo) -> Vec<Item<'a>> {
     refs.split('\n')
         .filter(|item| !item.is_empty())
         .map(|item| {
@@ -518,7 +518,7 @@ fn label_items(refs: &str) -> Vec<Item<'_>> {
             let name = fields.next().unwrap_or_default();
             let r#ref = fields.next().unwrap_or_default();
             let symbol = fields.next().unwrap_or_default();
-            let image = osmc_symbol_image(symbol);
+            let image = osmc_symbol_image(symbol, svg_repo);
 
             // A ref the symbol already shows, as E8 in `:blue::E8:yellow`, would be said twice;
             // a longer one stays, as the symbol shrinks it past reading.
@@ -602,8 +602,8 @@ fn label_parts<'a>(items: &[Item<'a>], detail: Detail) -> Vec<LabelPart<'a>> {
 }
 
 /// The label of `refs` at each detail, longest first, without empty or repeated ones.
-fn label_variants(refs: &str) -> Vec<Vec<LabelPart<'_>>> {
-    let items = label_items(refs);
+fn label_variants<'a>(refs: &'a str, svg_repo: &SvgRepo) -> Vec<Vec<LabelPart<'a>>> {
+    let items = label_items(refs, svg_repo);
     let mut variants: Vec<Vec<LabelPart>> = Vec::new();
 
     for detail in [Detail::Full, Detail::Ref, Detail::Symbols] {
@@ -632,17 +632,18 @@ pub fn render_labels(
     context: &Context,
     rows: Vec<Feature>,
     collision: &mut Collision,
+    svg_repo: &SvgRepo,
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("routes::render_labels");
 
     for row in rows {
         let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
 
-        let variants1 = label_variants(row.get_string("refs1")?);
+        let variants1 = label_variants(row.get_string("refs1")?, svg_repo);
         let variants1: Vec<&[LabelPart]> = variants1.iter().map(Vec::as_slice).collect();
         let off1 = row.get_i32("off1")?;
 
-        let variants2 = label_variants(row.get_string("refs2")?);
+        let variants2 = label_variants(row.get_string("refs2")?, svg_repo);
         let variants2: Vec<&[LabelPart]> = variants2.iter().map(Vec::as_slice).collect();
         let off2 = row.get_i32("off2")?;
 

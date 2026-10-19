@@ -1,11 +1,12 @@
 use crate::render::{
-    colors::{self, Color, ContextExt},
+    colors::{self, Color, ContextExt, rgb_hex},
     draw::{
         font_options::{FontAndLayoutOptions, Weight},
         font_system::stamp_outline,
         path_geom::path_polygons,
         text_on_line::{InlineImage, shaped_clusters},
     },
+    svg_repo::SvgRepo,
 };
 use cairo::Context;
 use geo::{
@@ -328,6 +329,35 @@ fn path_drop(cr: &Context) {
 /// Paints a foreground shape in the unit square; unknown shapes get a `?`.
 fn paint_foreground(cr: &Context, c: Color, shape: &str, collect: Collect) -> cairo::Result<()> {
     const T: f64 = 1.0 / 3.0;
+
+    // Within the unit square: left to right, and a right-pointing shape turned to point up.
+    let mirror = cairo::Matrix::new(-1.0, 0.0, 0.0, 1.0, 1.0, 0.0);
+    let turn_up = cairo::Matrix::new(0.0, -1.0, 1.0, 0.0, 0.0, 1.0);
+
+    // Other names in use for the shapes below, some mirrored or turned.
+    let alias = match shape {
+        "square" => Some(("rectangle", None)),
+        "trapezium" => Some(("trapezoid", None)),
+        "right_pointer" => Some(("pointer", None)),
+        "right_arrow" => Some(("arrow", None)),
+        "left_pointer" => Some(("pointer", Some(mirror))),
+        "left_arrow" => Some(("arrow", Some(mirror))),
+        "up_arrow" => Some(("arrow", Some(turn_up))),
+        _ => None,
+    };
+
+    if let Some((shape, matrix)) = alias {
+        cr.save()?;
+
+        if let Some(matrix) = matrix {
+            cr.transform(matrix);
+        }
+
+        paint_foreground(cr, c, shape, collect)?;
+
+        return cr.restore();
+    }
+
     // Where a diagonal band `T` wide meets the square's edge.
     const DIAGONAL: f64 = T * std::f64::consts::FRAC_1_SQRT_2;
 
@@ -342,6 +372,14 @@ fn paint_foreground(cr: &Context, c: Color, shape: &str, collect: Collect) -> ca
         "corner" => path_points(cr, [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]),
         "corner_left" => path_points(cr, [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)]),
         "drop" => path_drop(cr),
+        "shield" | "crest" => {
+            cr.move_to(0.2, 0.15);
+            cr.line_to(0.8, 0.15);
+            cr.line_to(0.8, 0.45);
+            cr.curve_to(0.8, 0.7, 0.6, 0.82, 0.5, 0.88);
+            cr.curve_to(0.4, 0.82, 0.2, 0.7, 0.2, 0.45);
+            cr.close_path();
+        }
         "heart" => {
             cr.move_to(0.5, 0.86);
             cr.arc(0.35, 0.4, 0.2, 0.75 * PI, 2.0 * PI);
@@ -442,6 +480,26 @@ fn paint_foreground(cr: &Context, c: Color, shape: &str, collect: Collect) -> ca
             path_drop(cr);
             cr.set_line_width(0.1);
             return stroke(cr, c, collect);
+        }
+        "wheel" => {
+            cr.save()?;
+            cr.arc(0.5, 0.5, 0.35, 0.0, TAU);
+            cr.close_path();
+            cr.set_line_width(0.1);
+            stroke(cr, c, collect)?;
+
+            for i in 0..6 {
+                let a = f64::from(i) * PI / 3.0;
+                cr.move_to(0.5, 0.5);
+                cr.line_to(0.35f64.mul_add(a.cos(), 0.5), 0.35f64.mul_add(a.sin(), 0.5));
+            }
+
+            cr.set_line_width(0.06);
+            stroke(cr, c, collect)?;
+            cr.arc(0.5, 0.5, 0.08, 0.0, TAU);
+            fill(cr, c, collect)?;
+
+            return cr.restore();
         }
         "fork" => {
             cr.move_to(0.5, 0.9);
@@ -609,9 +667,35 @@ fn path_background(cr: &Context, kind: Background) {
     }
 }
 
-fn paint_content(cr: &Context, symbol: &Symbol, collect: Collect) -> cairo::Result<()> {
+/// `svg_repo` draws the pictograms; without it, they are left out.
+fn paint_content(
+    cr: &Context,
+    symbol: &Symbol,
+    collect: Collect,
+    svg_repo: Option<&SvgRepo>,
+) -> cairo::Result<()> {
     for (c, shape) in &symbol.foregrounds {
-        paint_foreground(cr, *c, shape, collect)?;
+        let Some(name) = icon_name(shape) else {
+            paint_foreground(cr, *c, shape, collect)?;
+            continue;
+        };
+
+        // An icon has no paths to collect, so it takes no part in the outline.
+        let Some(svg_repo) = svg_repo.filter(|_| collect.is_none()) else {
+            continue;
+        };
+
+        let stylesheet = format!(
+            "path, circle, ellipse, rect, polygon {{ fill: {} }}",
+            rgb_hex(*c)
+        );
+
+        let viewport = cairo::Rectangle::new(0.1, 0.1, 0.8, 0.8);
+
+        if let Err(err) = svg_repo.render_icon(name, &stylesheet, cr, &viewport) {
+            eprintln!("osmc:symbol icon: {err}");
+            paint_text(cr, "?", *c, 1.0, collect)?;
+        }
     }
 
     if let Some((text, c)) = &symbol.text {
@@ -626,6 +710,18 @@ fn paint_content(cr: &Context, symbol: &Symbol, collect: Collect) -> cairo::Resu
     Ok(())
 }
 
+/// The map icon for a pictogram shape.
+fn icon_name(shape: &str) -> Option<&'static str> {
+    Some(match shape {
+        "bicycle" | "bike" | "cyclist" => "bicycle",
+        "horse" => "horse_riding",
+        "mine" => "mine",
+        "runner" => "running",
+        "chapel" => "chapel",
+        _ => return None,
+    })
+}
+
 /// Union of the symbol's shapes in the unit square.
 fn union_outline(symbol: &Symbol) -> Option<MultiPolygon> {
     let surface = cairo::RecordingSurface::create(cairo::Content::ColorAlpha, None).ok()?;
@@ -633,18 +729,18 @@ fn union_outline(symbol: &Symbol) -> Option<MultiPolygon> {
     cr.scale(COLLECT_SCALE, COLLECT_SCALE);
 
     let shapes = RefCell::new(Vec::new());
-    paint_content(&cr, symbol, Some(&shapes)).ok()?;
+    paint_content(&cr, symbol, Some(&shapes), None).ok()?;
 
     shapes.into_inner().into_iter().reduce(|a, b| a.union(&b))
 }
 
-fn paint(cr: &Context, symbol: &Symbol) -> cairo::Result<()> {
+fn paint(cr: &Context, symbol: &Symbol, svg_repo: &SvgRepo) -> cairo::Result<()> {
     cr.scale(SYMBOL_SIZE, SYMBOL_SIZE);
 
     let hairline = 0.6 / SYMBOL_SIZE;
 
     let Some((background, kind)) = symbol.background else {
-        paint_content(cr, symbol, None)?;
+        paint_content(cr, symbol, None, Some(svg_repo))?;
 
         // Without a background, the shapes get the outline instead: of their union, so that
         // shapes touching or overlapping share one.
@@ -681,7 +777,7 @@ fn paint(cr: &Context, symbol: &Symbol) -> cairo::Result<()> {
     cr.translate(inset, inset);
     cr.scale(2.0f64.mul_add(-inset, 1.0), 2.0f64.mul_add(-inset, 1.0));
 
-    paint_content(cr, symbol, None)?;
+    paint_content(cr, symbol, None, Some(svg_repo))?;
 
     cr.restore()?;
 
@@ -714,7 +810,7 @@ fn paint(cr: &Context, symbol: &Symbol) -> cairo::Result<()> {
 }
 
 /// A symbol recorded once, so that a placement only replays it.
-fn record(symbol: &Symbol) -> Option<cairo::RecordingSurface> {
+fn record(symbol: &Symbol, svg_repo: &SvgRepo) -> Option<cairo::RecordingSurface> {
     // Outlines centred on the square's edge reach half their width past it.
     const MARGIN: f64 = 1.0;
 
@@ -729,7 +825,7 @@ fn record(symbol: &Symbol) -> Option<cairo::RecordingSurface> {
     )
     .ok()?;
 
-    paint(&Context::new(&surface).ok()?, symbol).ok()?;
+    paint(&Context::new(&surface).ok()?, symbol, svg_repo).ok()?;
 
     Some(surface)
 }
@@ -749,7 +845,7 @@ pub fn osmc_symbol_shows(value: &str, text: &str) -> bool {
 
 /// [`SYMBOL_SIZE`]-wide square image of an `osmc:symbol`, `None` when nothing in it is
 /// recognised.
-pub fn osmc_symbol_image(value: &str) -> Option<Rc<InlineImage>> {
+pub fn osmc_symbol_image(value: &str, svg_repo: &SvgRepo) -> Option<Rc<InlineImage>> {
     if value.is_empty() {
         return None;
     }
@@ -758,13 +854,15 @@ pub fn osmc_symbol_image(value: &str) -> Option<Rc<InlineImage>> {
         return image;
     }
 
-    let image = parse(value).as_ref().and_then(record).map(|surface| {
-        Rc::new(InlineImage {
-            width: SYMBOL_SIZE,
-            height: SYMBOL_SIZE,
-            surface,
-        })
-    });
+    let image = parse(value)
+        .and_then(|symbol| record(&symbol, svg_repo))
+        .map(|surface| {
+            Rc::new(InlineImage {
+                width: SYMBOL_SIZE,
+                height: SYMBOL_SIZE,
+                surface,
+            })
+        });
 
     CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();

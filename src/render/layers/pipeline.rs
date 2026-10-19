@@ -1353,7 +1353,15 @@ pub fn render(
                 async move { layers::routes::query_labels(&ctx, &conn, &render_clone).await }
                     .boxed()
             },
-            |rows, params| layers::routes::render_labels(&ctx, context, rows, params.collision),
+            |rows, params| {
+                layers::routes::render_labels(
+                    &ctx,
+                    context,
+                    rows,
+                    params.collision,
+                    params.svg_repo,
+                )
+            },
         );
     }
 

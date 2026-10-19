@@ -226,6 +226,34 @@ impl SvgRepo {
     ///
     /// The cache is keyed on the options themselves, so two callers asking for the same
     /// name with different halos or stylesheets get their own surfaces.
+    /// Renders the icon `name`, styled with `stylesheet`, fitted into `viewport` on `context`:
+    /// for a caller recording its own surface, where painting a cached recording would resample
+    /// it at a fractional offset.
+    pub fn render_icon(
+        &self,
+        name: &str,
+        stylesheet: &str,
+        context: &cairo::Context,
+        viewport: &Rectangle,
+    ) -> Result<(), SvgRepoError> {
+        let error = |msg: &str, err: Box<dyn std::error::Error + Sync + Send>| SvgRepoError {
+            msg: format!("{msg} ({name})"),
+            source: Some(err),
+        };
+
+        let mut handle = rsvg::Loader::new()
+            .read_path(self.base.join(format!("{name}.svg")))
+            .map_err(|err| error("Error loading SVG", err.into()))?;
+
+        handle
+            .set_stylesheet(stylesheet)
+            .map_err(|err| error("Error loading SVG", err.into()))?;
+
+        rsvg::CairoRenderer::new(&handle)
+            .render_document(context, viewport)
+            .map_err(|err| error("Rendering error", err.into()))
+    }
+
     pub fn get_with(&mut self, options: Options) -> Result<&RecordingSurface, SvgRepoError> {
         // Taken by value and moved into the key, so a lookup costs no allocation: the key
         // carries everything the render needs, so nothing is cloned on a cache hit.
