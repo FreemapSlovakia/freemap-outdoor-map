@@ -518,9 +518,16 @@ fn label_parts(refs: &str) -> Vec<LabelPart<'_>> {
     let mut parts = Vec::new();
     let mut text = String::new();
 
+    // Symbols alone need no dot between them.
+    let separator = if groups.iter().all(|(name, _)| name.is_empty()) {
+        " "
+    } else {
+        " · "
+    };
+
     for (i, (name, images)) in groups.into_iter().enumerate() {
         if i > 0 {
-            text.push_str(" · ");
+            text.push_str(separator);
         }
 
         if !images.is_empty() {
