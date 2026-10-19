@@ -137,12 +137,22 @@ fn parse(value: &str) -> Option<Symbol> {
 
     let (fgs, text) = text_at_end.map_or((rest, None), |(fgs, text)| (fgs, Some(text)));
 
+    let foregrounds: Vec<Shape> = background_shape
+        .into_iter()
+        .chain(fgs.iter().take(2).filter_map(|fg| foreground(fg)))
+        .collect();
+
+    // An empty ring, as in `red:red_circle`, stands for a dot of its colour.
+    let background = match background {
+        Some((c, Background::Circle)) if foregrounds.is_empty() && text.is_none() => {
+            Some((c, Background::Round))
+        }
+        other => other,
+    };
+
     let symbol = Symbol {
         background,
-        foregrounds: background_shape
-            .into_iter()
-            .chain(fgs.iter().take(2).filter_map(|fg| foreground(fg)))
-            .collect(),
+        foregrounds,
         text,
     };
 
@@ -686,6 +696,12 @@ fn paint(cr: &Context, symbol: &Symbol) -> cairo::Result<()> {
             cr.arc(0.5, 0.5, 0.44, 0.0, TAU);
             cr.set_source_color(background);
             cr.set_line_width(0.12);
+            cr.stroke()?;
+
+            // A white ring would not show on its white disc.
+            path_background(cr, kind);
+            cr.set_source_color_a(colors::BLACK, 0.5);
+            cr.set_line_width(hairline);
         }
         Background::Square | Background::Round => {
             path_background(cr, kind);
