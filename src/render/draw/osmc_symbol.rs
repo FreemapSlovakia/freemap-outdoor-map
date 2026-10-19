@@ -33,7 +33,7 @@ struct Symbol {
 }
 
 /// Width and height of a symbol, in pixels.
-pub const SYMBOL_SIZE: f64 = 10.0;
+pub const SYMBOL_SIZE: f64 = 8.0;
 
 /// Kinds of background, all drawn within the same square.
 #[derive(Clone, Copy)]
