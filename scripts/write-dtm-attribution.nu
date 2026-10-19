@@ -114,6 +114,15 @@ def sources [] {
       ]
     }
     {
+      key: "ee"
+      sources: [
+        {
+          title: "Estonian DTM 1 m (extracted 2026-10-18): Maa- ja Ruumiamet"
+          url: "https://geoportaal.maaamet.ee/est/ruumiandmed/korgusandmed-p508.html"
+        }
+      ]
+    }
+    {
       key: "en"
       sources: [
         {
