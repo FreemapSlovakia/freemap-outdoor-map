@@ -739,6 +739,14 @@ thread_local! {
         RefCell::new(FxHashMap::default());
 }
 
+/// Whether an `osmc:symbol` shows `text` itself, ignoring case.
+pub fn osmc_symbol_shows(value: &str, text: &str) -> bool {
+    !text.is_empty()
+        && parse(value)
+            .and_then(|symbol| symbol.text)
+            .is_some_and(|(shown, _)| shown.eq_ignore_ascii_case(text))
+}
+
 /// [`SYMBOL_SIZE`]-wide square image of an `osmc:symbol`, `None` when nothing in it is
 /// recognised.
 pub fn osmc_symbol_image(value: &str) -> Option<Rc<InlineImage>> {

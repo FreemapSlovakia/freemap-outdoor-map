@@ -769,9 +769,13 @@ struct RepeatPlacer<'a> {
 
 impl<'a> RepeatPlacer<'a> {
     /// Where the repeat finally starts and its glyphs, or `None` when it is dropped.
-    fn place(&self, first_start: f64, collision: &Collision) -> Option<(f64, LaidOut<'a>)> {
+    fn place(
+        &self,
+        first_start: f64,
+        collision: &Collision,
+        mut retries: usize,
+    ) -> Option<(f64, LaidOut<'a>)> {
         let mut label_start = first_start;
-        let mut retries = MAX_RETRIES;
 
         loop {
             let flip_needed = self.flip_needed(label_start);
@@ -1024,17 +1028,18 @@ pub fn draw_text_on_line(
     draw_parts_on_line(
         context,
         line_string,
-        &[LabelPart::Text(Cow::Borrowed(text))],
+        &[&[LabelPart::Text(Cow::Borrowed(text))]],
         collision,
         options,
     )
 }
 
-/// [`draw_text_on_line`] for a label mixing text and images.
+/// [`draw_text_on_line`] for a label mixing text and images, in `variants` from longest to
+/// shortest: each repeat takes the first that fits there.
 pub fn draw_parts_on_line(
     context: &Context,
     line_string: &LineString,
-    parts: &[LabelPart],
+    variants: &[&[LabelPart]],
     collision: Option<&mut Collision>,
     options: &TextOnLineOptions,
 ) -> cairo::Result<bool> {
@@ -1078,45 +1083,18 @@ pub fn draw_parts_on_line(
         options.flo
     };
 
-    let clusters = label_clusters(parts, &flo);
-    if clusters.is_empty() {
+    let shaped: Vec<_> = variants
+        .iter()
+        .map(|parts| {
+            let clusters = label_clusters(parts, &flo);
+            let (ink_lead, ink_span) = ink_extents(&clusters);
+            (clusters, ink_lead, ink_span)
+        })
+        .filter(|(_, _, ink_span)| *ink_span > 0.0)
+        .collect();
+
+    if shaped.is_empty() {
         return Ok(true);
-    }
-
-    let (ink_lead, ink_span) = ink_extents(&clusters);
-
-    if ink_span == 0.0 {
-        return Ok(true);
-    }
-
-    // If justify spacing falls below the configured minimum, abort drawing.
-    let extra_spacing_between_glyphs = match justify_min_spacing {
-        Some(ms) => {
-            let Some(spacing) = justify_spacing(ms, total_length, ink_span, &clusters) else {
-                return Ok(false);
-            };
-            spacing
-        }
-        None => 0.0,
-    };
-
-    let extra_width = extra_spacing_between_glyphs * clusters.len().saturating_sub(1) as f64;
-    let label_visual_span = ink_span + extra_width;
-
-    let repeat_span = if spacing.is_some() {
-        label_visual_span.max(options.halo_width.mul_add(2.0, ink_span))
-    } else {
-        label_visual_span
-    };
-
-    let offsets = if is_justify {
-        vec![0.0]
-    } else {
-        label_offsets(total_length, repeat_span, spacing, align)
-    };
-
-    if offsets.is_empty() {
-        return Ok(false);
     }
 
     let line = Line {
@@ -1126,22 +1104,62 @@ pub fn draw_parts_on_line(
         reversed: OnceCell::new(),
     };
 
-    let placer = RepeatPlacer {
-        line: &line,
-        options,
-        clusters: &clusters,
-        ink_lead,
-        extra_spacing_between_glyphs,
-        // Keep justification exact; extra curvature padding would shift glyphs off the span.
-        concave_spacing_factor: if is_justify {
-            0.0
+    let clip_extents = context.clip_extents().ok();
+
+    // A variant Justify cannot fit is left out.
+    let placers: Vec<RepeatPlacer> = shaped
+        .iter()
+        .filter_map(|(clusters, ink_lead, ink_span)| {
+            let (ink_lead, ink_span) = (*ink_lead, *ink_span);
+
+            let extra_spacing_between_glyphs = match justify_min_spacing {
+                Some(ms) => justify_spacing(ms, total_length, ink_span, clusters)?,
+                None => 0.0,
+            };
+
+            let extra_width =
+                extra_spacing_between_glyphs * clusters.len().saturating_sub(1) as f64;
+            let label_visual_span = ink_span + extra_width;
+
+            let repeat_span = if spacing.is_some() {
+                label_visual_span.max(options.halo_width.mul_add(2.0, ink_span))
+            } else {
+                label_visual_span
+            };
+
+            Some(RepeatPlacer {
+                line: &line,
+                options,
+                clusters,
+                ink_lead,
+                extra_spacing_between_glyphs,
+                // Keep justification exact; extra curvature padding would shift glyphs off the span.
+                concave_spacing_factor: if is_justify {
+                    0.0
+                } else {
+                    options.concave_spacing_factor
+                },
+                allow_overflow: is_justify,
+                repeat_span,
+                clip_extents,
+            })
+        })
+        .collect();
+
+    // Repeats are spaced for the longest variant that fits the line at all.
+    let Some((first, offsets)) = placers.iter().enumerate().find_map(|(i, placer)| {
+        let offsets = if is_justify {
+            vec![0.0]
         } else {
-            options.concave_spacing_factor
-        },
-        allow_overflow: is_justify,
-        repeat_span,
-        clip_extents: context.clip_extents().ok(),
+            label_offsets(total_length, placer.repeat_span, spacing, align)
+        };
+
+        (!offsets.is_empty()).then_some((i, offsets))
+    }) else {
+        return Ok(false);
     };
+
+    let slot_span = placers[first].repeat_span;
 
     // Repeats must avoid each other even when the caller keeps no collision set.
     let mut local_collision = Collision::new(None);
@@ -1152,13 +1170,38 @@ pub fn draw_parts_on_line(
     // Retries shift a repeat along the line; start the next one a full spacing after it.
     let mut min_label_start = 0.0;
 
-    for label_start in offsets {
-        let Some((start, laid_out)) = placer.place(label_start.max(min_label_start), collision)
-        else {
+    // The variants but the last are tried where the slot is before any slides along the line, so
+    // that a longer one does not drift past a shorter one fitting in place; the last, the barest,
+    // only once the others have failed.
+    let candidates = &placers[first..];
+    let (others, last) = candidates.split_at(candidates.len() - 1);
+
+    let passes: [(&[RepeatPlacer], usize); 3] =
+        [(others, 0), (others, MAX_RETRIES), (last, MAX_RETRIES)];
+
+    for slot_start in offsets {
+        let found = passes.iter().find_map(|&(placers, retries)| {
+            placers.iter().find_map(|placer| {
+                // A shorter variant keeps the alignment within the longer one's slot.
+                let shift = match align {
+                    Align::Left => 0.0,
+                    Align::Center => (slot_span - placer.repeat_span) / 2.0,
+                    Align::Right => slot_span - placer.repeat_span,
+                };
+
+                let label_start = (slot_start + shift).max(min_label_start);
+
+                placer
+                    .place(label_start, collision, retries)
+                    .map(|(start, laid_out)| (start + placer.repeat_span, laid_out))
+            })
+        });
+
+        let Some((end, laid_out)) = found else {
             continue;
         };
 
-        min_label_start = start + repeat_span + spacing.unwrap_or(0.0);
+        min_label_start = end + spacing.unwrap_or(0.0);
 
         // Added right away: a retry can slide a repeat onto the next one, and a line folding
         // back (switchbacks) brings distant repeats close on the map.

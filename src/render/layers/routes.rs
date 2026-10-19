@@ -6,7 +6,7 @@ use crate::render::{
         font_options::FontAndLayoutOptions,
         line_pattern::draw_line_pattern_scaled,
         offset_line::offset_line_string_parts,
-        osmc_symbol::osmc_symbol_image,
+        osmc_symbol::{osmc_symbol_image, osmc_symbol_shows},
         path_geom::{path_line_string_with_offset, walk_geometry_line_strings},
         text_on_line::{
             Align, Distribution, InlineImage, LabelPart, Repeat, TextOnLineOptions,
@@ -46,20 +46,14 @@ const COLOR_SQL: &str = r#"
   END
 "#;
 
-/// A route's label item, name and `osmc:symbol`, tab separated; null when both are missing. Tabs and newlines in the values would split items, so they become
-/// spaces.
+/// A route's label item: name, ref and `osmc:symbol`, tab separated; null when all are missing.
+/// Tabs and newlines in the values would split items, so they become spaces.
 const LABEL_SQL: &str = r#"
   NULLIF(
-    translate(
-      CASE
-        WHEN name <> '' AND ref <> '' THEN name || ' (' || ref || ')'
-        ELSE COALESCE(NULLIF(name, ''), NULLIF(ref, ''), '')
-      END,
-      E'\t\n\r',
-      '   '
-    ) || E'\t' ||
+    translate(COALESCE(name, ''), E'\t\n\r', '   ') || E'\t' ||
+    translate(COALESCE(ref, ''), E'\t\n\r', '   ') || E'\t' ||
     translate(COALESCE("osmc:symbol", ''), E'\t\n\r', '   '),
-    E'\t'
+    E'\t\t'
   )
 "#;
 
@@ -217,7 +211,7 @@ fn get_routes_query(
                                     null
                                 END
                             )
-                        ) AS itm GROUP BY itm ORDER BY split_part(itm, E'\\t', 1), itm
+                        ) AS itm GROUP BY itm ORDER BY COALESCE(NULLIF(split_part(itm, E'\\t', 1), ''), split_part(itm, E'\\t', 2)), itm
                     ),
                     E'\n'
                 ) AS refs1,
@@ -234,7 +228,7 @@ fn get_routes_query(
                                     null
                                 END
                             )
-                        ) AS itm GROUP BY itm ORDER BY split_part(itm, E'\\t', 1), itm
+                        ) AS itm GROUP BY itm ORDER BY COALESCE(NULLIF(split_part(itm, E'\\t', 1), ''), split_part(itm, E'\\t', 2)), itm
                     ),
                     E'\n'
                 ) AS refs2,
@@ -496,22 +490,77 @@ pub async fn query_labels(
         .await
 }
 
-/// Label parts of `refs`, items of name and `osmc:symbol` separated by a tab; an item without a
-/// tab is a bare name. Symbols of routes sharing a name go before it together.
-fn label_parts(refs: &str) -> Vec<LabelPart<'_>> {
-    let mut groups: Vec<(&str, Vec<Rc<InlineImage>>)> = Vec::new();
+/// How much of each route a label shows; shorter ones are tried where a longer one does not fit.
+#[derive(Clone, Copy, PartialEq)]
+enum Detail {
+    /// `Name (ref)`.
+    Full,
+    /// The ref only.
+    Ref,
+    /// No text.
+    Symbols,
+}
 
-    for item in refs.split('\n').filter(|item| !item.is_empty()) {
-        let (name, symbol) = item.split_once('\t').unwrap_or((item, ""));
-        let image = osmc_symbol_image(symbol);
+/// A route of a label: its name, its ref unless the symbol shows it, and its symbol.
+struct Item<'a> {
+    name: &'a str,
+    r#ref: &'a str,
+    image: Option<Rc<InlineImage>>,
+}
 
-        // Items come sorted by name.
-        match groups.last_mut() {
-            Some((last, images)) if !name.is_empty() && *last == name => images.extend(image),
-            _ if image.is_some() || !name.is_empty() => {
-                groups.push((name, image.into_iter().collect()));
+/// Items of `refs`: name, ref and `osmc:symbol` separated by tabs, one per line. The legend's
+/// items are bare names.
+fn label_items(refs: &str) -> Vec<Item<'_>> {
+    refs.split('\n')
+        .filter(|item| !item.is_empty())
+        .map(|item| {
+            let mut fields = item.split('\t');
+            let name = fields.next().unwrap_or_default();
+            let r#ref = fields.next().unwrap_or_default();
+            let symbol = fields.next().unwrap_or_default();
+            let image = osmc_symbol_image(symbol);
+
+            // A ref the symbol already shows, as E8 in `:blue::E8:yellow`, would be said twice;
+            // a longer one stays, as the symbol shrinks it past reading.
+            let shown =
+                image.is_some() && r#ref.chars().count() <= 3 && osmc_symbol_shows(symbol, r#ref);
+
+            Item {
+                name,
+                r#ref: if shown { "" } else { r#ref },
+                image,
             }
-            _ => {}
+        })
+        .collect()
+}
+
+/// Label parts of `items` at `detail`. Symbols of routes sharing a text go before it together.
+fn label_parts<'a>(items: &[Item<'a>], detail: Detail) -> Vec<LabelPart<'a>> {
+    let mut groups: Vec<(Cow<str>, Vec<Rc<InlineImage>>)> = Vec::new();
+
+    for item in items {
+        let (name, r#ref) = (item.name, item.r#ref);
+
+        let text = match detail {
+            Detail::Full if !name.is_empty() && !r#ref.is_empty() => {
+                Cow::Owned(format!("{name} ({ref})"))
+            }
+            Detail::Full if name.is_empty() => Cow::Borrowed(r#ref),
+            Detail::Full => Cow::Borrowed(name),
+            Detail::Ref => Cow::Borrowed(r#ref),
+            Detail::Symbols => Cow::Borrowed(""),
+        };
+
+        // Sorted by name, which a shorter text need not follow.
+        match groups
+            .iter_mut()
+            .find(|(other, _)| !text.is_empty() && *other == text)
+        {
+            Some((_, images)) => images.extend(item.image.clone()),
+            None if item.image.is_some() || !text.is_empty() => {
+                groups.push((text, item.image.clone().into_iter().collect()));
+            }
+            None => {}
         }
     }
 
@@ -519,7 +568,7 @@ fn label_parts(refs: &str) -> Vec<LabelPart<'_>> {
     let mut text = String::new();
 
     // Symbols alone need no dot between them.
-    let separator = if groups.iter().all(|(name, _)| name.is_empty()) {
+    let separator = if groups.iter().all(|(text, _)| text.is_empty()) {
         " "
     } else {
         " · "
@@ -542,7 +591,7 @@ fn label_parts(refs: &str) -> Vec<LabelPart<'_>> {
             }
         }
 
-        text.push_str(name);
+        text.push_str(&name);
     }
 
     if !text.is_empty() {
@@ -550,6 +599,32 @@ fn label_parts(refs: &str) -> Vec<LabelPart<'_>> {
     }
 
     parts
+}
+
+/// The label of `refs` at each detail, longest first, without empty or repeated ones.
+fn label_variants(refs: &str) -> Vec<Vec<LabelPart<'_>>> {
+    let items = label_items(refs);
+    let mut variants: Vec<Vec<LabelPart>> = Vec::new();
+
+    for detail in [Detail::Full, Detail::Ref, Detail::Symbols] {
+        let parts = label_parts(&items, detail);
+
+        if !parts.is_empty() && variants.last().is_none_or(|last| !same_parts(last, &parts)) {
+            variants.push(parts);
+        }
+    }
+
+    variants
+}
+
+/// Whether two labels read the same; the images of one row's variants are the same `Rc`s.
+fn same_parts(a: &[LabelPart], b: &[LabelPart]) -> bool {
+    a.len() == b.len()
+        && a.iter().zip(b).all(|pair| match pair {
+            (LabelPart::Text(a), LabelPart::Text(b)) => a == b,
+            (LabelPart::Image(a), LabelPart::Image(b)) => Rc::ptr_eq(a, b),
+            _ => false,
+        })
 }
 
 pub fn render_labels(
@@ -563,10 +638,12 @@ pub fn render_labels(
     for row in rows {
         let geom = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
 
-        let parts1 = label_parts(row.get_string("refs1")?);
+        let variants1 = label_variants(row.get_string("refs1")?);
+        let variants1: Vec<&[LabelPart]> = variants1.iter().map(Vec::as_slice).collect();
         let off1 = row.get_i32("off1")?;
 
-        let parts2 = label_parts(row.get_string("refs2")?);
+        let variants2 = label_variants(row.get_string("refs2")?);
+        let variants2: Vec<&[LabelPart]> = variants2.iter().map(Vec::as_slice).collect();
         let off2 = row.get_i32("off2")?;
 
         walk_geometry_line_strings(&geom, &mut |geom| {
@@ -584,17 +661,18 @@ pub fn render_labels(
                 ..Default::default()
             };
 
-            for (parts, offset) in [
-                (&parts1, -f64::from(off1).mul_add(2.5, 9.0)),
-                (&parts2, f64::from(off2).mul_add(2.5, 10.0)),
+            for (variants, offset) in [
+                (&variants1, -f64::from(off1).mul_add(2.5, 9.0)),
+                (&variants2, f64::from(off2).mul_add(2.5, 10.0)),
             ] {
-                if parts.is_empty() {
+                if variants.is_empty() {
                     continue;
                 }
 
                 options.offset = offset;
 
-                let _drawn = draw_parts_on_line(context, geom, parts, Some(collision), &options)?;
+                let _drawn =
+                    draw_parts_on_line(context, geom, variants, Some(collision), &options)?;
             }
 
             cairo::Result::Ok(())
