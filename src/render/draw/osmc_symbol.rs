@@ -34,7 +34,7 @@ struct Symbol {
 }
 
 /// Width and height of a symbol, in pixels.
-pub const SYMBOL_SIZE: f64 = 8.0;
+pub const SYMBOL_SIZE: f64 = 9.0;
 
 /// Kinds of background, all drawn within the same square.
 #[derive(Clone, Copy)]
@@ -326,8 +326,66 @@ fn path_drop(cr: &Context) {
     cr.close_path();
 }
 
-/// Paints a foreground shape in the unit square; unknown shapes get a `?`.
+/// Largest share of the square a shape takes, unless it reaches the edges by design.
+const SHAPE_FIT: f64 = 0.7;
+
+/// Paints a foreground shape centred in the unit square and shrunk to [`SHAPE_FIT`] of it, so
+/// that all shapes keep alike margins; unknown shapes get a `?`.
 fn paint_foreground(cr: &Context, c: Color, shape: &str, collect: Collect) -> cairo::Result<()> {
+    const EDGE_TO_EDGE: [&str; 10] = [
+        "bar",
+        "stripe",
+        "upper",
+        "lower",
+        "left",
+        "right",
+        "corner",
+        "corner_left",
+        "backslash",
+        "slash",
+    ];
+
+    if EDGE_TO_EDGE.contains(&shape) {
+        return paint_shape(cr, c, shape, collect);
+    }
+
+    // Halves are placed by their whole, so that they meet it and each other.
+    let whole = match shape {
+        "diamond_left" | "diamond_right" => "diamond",
+        _ => shape,
+    };
+
+    let Some((x, y, w, h)) = shape_extents(whole) else {
+        return paint_shape(cr, c, shape, collect);
+    };
+
+    let scale = (SHAPE_FIT / w.max(h)).min(1.0);
+
+    cr.save()?;
+    cr.translate(0.5, 0.5);
+    cr.scale(scale, scale);
+    cr.translate(-w.mul_add(0.5, x), -h.mul_add(0.5, y));
+    paint_shape(cr, c, shape, collect)?;
+    cr.restore()
+}
+
+/// Ink box of a shape in the unit square, as `(x, y, width, height)`.
+fn shape_extents(shape: &str) -> Option<(f64, f64, f64, f64)> {
+    const SCALE: f64 = 100.0;
+
+    let surface = cairo::RecordingSurface::create(cairo::Content::ColorAlpha, None).ok()?;
+    let cr = Context::new(&surface).ok()?;
+    cr.scale(SCALE, SCALE);
+    paint_shape(&cr, colors::BLACK, shape, None).ok()?;
+    drop(cr);
+
+    let (x, y, w, h) = surface.ink_extents();
+
+    (w > 0.0 && h > 0.0).then_some((x / SCALE, y / SCALE, w / SCALE, h / SCALE))
+}
+
+/// [`paint_foreground`] at the shape's own size.
+fn paint_shape(cr: &Context, c: Color, shape: &str, collect: Collect) -> cairo::Result<()> {
     const T: f64 = 1.0 / 3.0;
 
     // Within the unit square: left to right, and a right-pointing shape turned to point up.
@@ -393,8 +451,8 @@ fn paint_foreground(cr: &Context, c: Color, shape: &str, collect: Collect) -> ca
         "diamond_right" => path_points(cr, [(0.5, 0.1), (0.9, 0.5), (0.5, 0.9)]),
         // `black_red_diamond`: a diamond half in the given colour, half red.
         "red_diamond" => {
-            paint_foreground(cr, c, "diamond_left", collect)?;
-            return paint_foreground(cr, RED, "diamond_right", collect);
+            paint_shape(cr, c, "diamond_left", collect)?;
+            return paint_shape(cr, RED, "diamond_right", collect);
         }
         "pointer" => path_points(cr, [(0.15, 0.15), (0.9, 0.5), (0.15, 0.85)]),
         "arrow" => path_points(
@@ -437,7 +495,7 @@ fn paint_foreground(cr: &Context, c: Color, shape: &str, collect: Collect) -> ca
             cr.close_path();
         }
         "turned_T" => {
-            cr.rectangle(0.15, 0.68, 0.7, 0.17);
+            cr.rectangle(0.2, 0.68, 0.6, 0.17);
             cr.rectangle(0.415, 0.15, 0.17, 0.6);
         }
         "L" => {
@@ -512,7 +570,7 @@ fn paint_foreground(cr: &Context, c: Color, shape: &str, collect: Collect) -> ca
         }
         "hiker" => {
             cr.save()?;
-            cr.arc(0.55, 0.15, 0.1, 0.0, TAU);
+            cr.arc(0.55, 0.14, 0.12, 0.0, TAU);
             fill(cr, c, collect)?;
             // Torso, legs, arms and stick.
             cr.move_to(0.52, 0.3);
@@ -525,7 +583,7 @@ fn paint_foreground(cr: &Context, c: Color, shape: &str, collect: Collect) -> ca
             cr.line_to(0.72, 0.5);
             cr.move_to(0.76, 0.35);
             cr.line_to(0.76, 0.92);
-            cr.set_line_width(0.1);
+            cr.set_line_width(0.14);
             cr.set_line_cap(cairo::LineCap::Round);
             cr.set_line_join(cairo::LineJoin::Round);
             stroke(cr, c, collect)?;
@@ -581,15 +639,27 @@ fn paint_foreground(cr: &Context, c: Color, shape: &str, collect: Collect) -> ca
 
             return stroke_lines(cr, c, collect, 0.07, rays);
         }
-        _ => return paint_text(cr, "?", c, 1.0, collect),
+        _ => return paint_unknown(cr, c, collect),
     }
 
     fill(cr, c, collect)
 }
 
-/// Paints `text` centred in the unit square, shrunk to fit its width.
-/// `fit` is the share of the square the text may take, as it goes inside shapes.
-fn paint_text(cr: &Context, text: &str, c: Color, fit: f64, collect: Collect) -> cairo::Result<()> {
+/// A `?` for a shape we do not draw, kept as clear of the edges as the shapes are.
+fn paint_unknown(cr: &Context, c: Color, collect: Collect) -> cairo::Result<()> {
+    paint_text(cr, "?", c, SHAPE_FIT, true, collect)
+}
+
+/// Paints `text` centred in the unit square, `fit` of it tall, or less to fit its width.
+/// `bold` thickens the glyphs, which a lone text needs at symbol size.
+fn paint_text(
+    cr: &Context,
+    text: &str,
+    c: Color,
+    fit: f64,
+    bold: bool,
+    collect: Collect,
+) -> cairo::Result<()> {
     let flo = FontAndLayoutOptions {
         size: 100.0,
         narrow: text.chars().count() > 1,
@@ -622,7 +692,7 @@ fn paint_text(cr: &Context, text: &str, c: Color, fit: f64, collect: Collect) ->
         return Ok(());
     }
 
-    let scale = (0.8 * fit / h).min(0.88 * fit / w);
+    let scale = (fit / h).min(1.1 * fit / w);
 
     cr.save()?;
     cr.new_path();
@@ -642,18 +712,26 @@ fn paint_text(cr: &Context, text: &str, c: Color, fit: f64, collect: Collect) ->
         pen += cluster.advance;
     }
 
-    // Emboldens; a bold face alone thins out at symbol size.
     cr.set_line_join(cairo::LineJoin::Round);
     cr.set_line_width(0.05 / scale);
 
     if let Some(shapes) = collect {
         collect_fill(cr, shapes)?;
-        collect_stroke(cr, shapes)?;
+
+        if bold {
+            collect_stroke(cr, shapes)?;
+        }
+
         cr.new_path();
     } else {
         cr.set_source_color(c);
-        cr.fill_preserve()?;
-        cr.stroke()?;
+
+        if bold {
+            cr.fill_preserve()?;
+            cr.stroke()?;
+        } else {
+            cr.fill()?;
+        }
     }
 
     cr.restore()
@@ -690,21 +768,24 @@ fn paint_content(
             rgb_hex(*c)
         );
 
-        let viewport = cairo::Rectangle::new(0.1, 0.1, 0.8, 0.8);
+        let margin = (1.0 - SHAPE_FIT) / 2.0;
+        let viewport = cairo::Rectangle::new(margin, margin, SHAPE_FIT, SHAPE_FIT);
 
         if let Err(err) = svg_repo.render_icon(name, &stylesheet, cr, &viewport) {
             eprintln!("osmc:symbol icon: {err}");
-            paint_text(cr, "?", *c, 1.0, collect)?;
+            paint_unknown(cr, *c, collect)?;
         }
     }
 
     if let Some((text, c)) = &symbol.text {
+        // Alone, as tall as the shapes are; on shapes, a little smaller.
         let fit = if symbol.foregrounds.is_empty() {
-            1.0
+            SHAPE_FIT
         } else {
-            0.55
+            0.5
         };
-        paint_text(cr, text, *c, fit, collect)?;
+
+        paint_text(cr, text, *c, fit, symbol.foregrounds.is_empty(), collect)?;
     }
 
     Ok(())
@@ -770,8 +851,8 @@ fn paint(cr: &Context, symbol: &Symbol, svg_repo: &SvgRepo) -> cairo::Result<()>
     // Keeps the content clear of a border or a disc's edge.
     let inset = match kind {
         Background::Square => 0.0,
-        Background::Frame | Background::Round => 0.15,
-        Background::Circle => 0.2,
+        Background::Round => 0.07,
+        Background::Frame | Background::Circle => 0.1,
     };
 
     cr.translate(inset, inset);

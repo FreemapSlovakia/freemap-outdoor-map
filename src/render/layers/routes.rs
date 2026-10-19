@@ -551,12 +551,29 @@ fn label_parts<'a>(items: &[Item<'a>], detail: Detail) -> Vec<LabelPart<'a>> {
             Detail::Symbols => Cow::Borrowed(""),
         };
 
+        // A bare symbol already shown bare is not repeated.
+        if text.is_empty()
+            && let Some(image) = &item.image
+            && groups.iter().any(|(other, images)| {
+                other.is_empty() && images.iter().any(|other| Rc::ptr_eq(other, image))
+            })
+        {
+            continue;
+        }
+
         // Sorted by name, which a shorter text need not follow.
         match groups
             .iter_mut()
             .find(|(other, _)| !text.is_empty() && *other == text)
         {
-            Some((_, images)) => images.extend(item.image.clone()),
+            Some((_, images)) => {
+                // Routes sharing a text and a symbol show it once; equal symbols share an image.
+                if let Some(image) = &item.image
+                    && !images.iter().any(|other| Rc::ptr_eq(other, image))
+                {
+                    images.push(Rc::clone(image));
+                }
+            }
             None if item.image.is_some() || !text.is_empty() => {
                 groups.push((text, item.image.clone().into_iter().collect()));
             }
