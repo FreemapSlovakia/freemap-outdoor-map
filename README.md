@@ -538,6 +538,30 @@ reader's locale, where this line folds an accent onto its base letter — so the
 by side. A code the dictionary cannot name is left out of the drawn line rather than shown raw;
 the `X-Attribution` header still reports it, and the startup warnings say what to fix.
 
+**The legend panel** is drawn beside the map, widening the image, in columns as tall as the
+map. It lists the legend items whose features the render fetched inside the image, so a POI
+that lost its place to a collision is still listed. The renderer holds no words of its own: the
+client sends a label for every item it may need, keyed as `/legend` names them, and an item
+without one is left out, as is a section without a heading. A sample is labelled with the
+shortest name of a feature of its kind in the image that fits on one line, with a POI's
+elevation; a route sample with the refs of its kind's routes in the sample's red. Where there
+is none, the sample is left unlabelled.
+
+```jsonc
+"decorations": {
+  "legend": {                   // omitted to skip the panel
+    "title": "Legenda",
+    "categories": { "water": "Voda", … },   // section headings by category
+    "items": { "poi_spring": "Prameň", … }  // labels by legend item id
+  }
+}
+```
+
+The panel is never wider or taller than the map; items that do not fit are left out, and a map
+too narrow for one column gets no panel. The export's pixel limit counts the image as twice the
+map's width when a legend is asked for, and for WebP also keeps a side within libwebp's 16383
+px. At most 4000 items and 64 categories, each at most 200 bytes, are accepted; more is a 400.
+
 ## Notes
 
 Buffer polygon for imposm:

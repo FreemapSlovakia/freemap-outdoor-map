@@ -14,7 +14,7 @@ pub use render_config::{
 };
 pub use render_request::{
     AttributionDecoration, CustomLayer, CustomLayerOrder, Decorations, Glow, LabelStyle, Layers,
-    RenderLayer, RenderRequest,
+    LegendDecoration, RenderLayer, RenderRequest,
 };
 pub use render_worker_pool::RenderWorkerPool;
 use std::path::PathBuf;

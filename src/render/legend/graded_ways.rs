@@ -29,6 +29,11 @@ fn graded(
             )
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add(key, value)))
             .min_zoom(GRADED_FROM_ZOOM)
+            // Registered in `layers::pipeline` under the layer's own name.
+            .present_when(layer, &[], move |row| {
+                row.get_i32("grade")
+                    .is_ok_and(|grade| grade == i as i32 + 1)
+            })
             .add_landcover("wood")
             .add_feature(layer, |b| {
                 b.with_line_string(false).with("grade", i as i32 + 1)

@@ -83,7 +83,8 @@ pub struct CustomLayer {
 }
 
 /// Cartographic decorations drawn on top of the finished map (scale bar, north
-/// arrow, attribution). All opt-in (a `None`/`false` field is omitted). The
+/// arrow, attribution), and the legend beside it. All opt-in (a `None`/`false`
+/// field is omitted). The
 /// north-arrow label is provided by the client for localization — "N" in
 /// English but "S" (sever) in Slovak; the scale bar uses the universal SI unit
 /// symbols (m/km) directly. `center_lat` is the bbox center latitude in degrees
@@ -93,7 +94,20 @@ pub struct Decorations {
     pub scale_bar: bool,
     pub north_arrow: Option<String>,
     pub attribution: Option<AttributionDecoration>,
+    pub legend: Option<LegendDecoration>,
     pub center_lat: f64,
+}
+
+/// A panel beside the map listing the legend items it draws. Every word on it is
+/// the caller's, so it is drawn in the reader's language: an item without a label
+/// is left out.
+#[derive(Debug, Clone)]
+pub struct LegendDecoration {
+    pub title: Option<String>,
+    /// Section headings by category key (`roads-and-paths`, …).
+    pub categories: HashMap<String, String>,
+    /// Item labels by legend item id.
+    pub items: HashMap<String, String>,
 }
 
 /// What to draw the attribution line from. The datasets are not in here: only

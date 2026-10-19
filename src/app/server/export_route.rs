@@ -2,8 +2,8 @@ use crate::{
     app::server::{app_state::AppState, routes::ServerOptions},
     render::{
         ATTRIBUTION_HEADER, Attribution, AttributionDecoration, CustomLayer, CustomLayerOrder,
-        Decorations, Glow, ImageFormat, LabelStyle, Layers, RenderLayer, RenderRequest,
-        RenderWorkerPool, bbox_size_in_pixels,
+        Decorations, Glow, ImageFormat, LabelStyle, Layers, LegendDecoration, RenderLayer,
+        RenderRequest, RenderWorkerPool, bbox_size_in_pixels,
     },
 };
 use axum::{
@@ -122,6 +122,43 @@ pub struct ExportDecorations {
     scale_bar: Option<bool>,
     north_arrow: Option<String>,
     attribution: Option<ExportAttribution>,
+    legend: Option<ExportLegend>,
+}
+
+/// Asks for a legend panel beside the map. Only the render knows which items it
+/// drew, so the client sends a label for every item it may need, and the panel
+/// lists the drawn ones it has a label for.
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportLegend {
+    title: Option<String>,
+    /// Section headings by category key, as `/legend` names them.
+    #[serde(default)]
+    categories: HashMap<String, String>,
+    /// Item labels by legend item id, as `/legend` names them.
+    #[serde(default)]
+    items: HashMap<String, String>,
+}
+
+impl ExportLegend {
+    /// Room for the whole catalogue, which is what a client sends.
+    fn within_limits(&self) -> bool {
+        const MAX_ITEMS: usize = 4000;
+        const MAX_CATEGORIES: usize = 64;
+        const MAX_LEN: usize = 200;
+
+        self.items.len() <= MAX_ITEMS
+            && self.categories.len() <= MAX_CATEGORIES
+            && self
+                .title
+                .as_ref()
+                .is_none_or(|title| title.len() <= MAX_LEN)
+            && self
+                .items
+                .iter()
+                .chain(&self.categories)
+                .all(|(key, label)| key.len() <= MAX_LEN && label.len() <= MAX_LEN)
+    }
 }
 
 /// Asks for the attribution line. Its text is not the client's to send: only the
@@ -289,6 +326,9 @@ pub struct ExportCustomLayer {
     label_size: Option<f64>,
 }
 
+/// The longest side libwebp encodes.
+const WEBP_MAX_SIDE: u32 = 16383;
+
 /// Default per-side glow halo width.
 const DEFAULT_GLOW_WIDTH: f64 = 2.0;
 
@@ -323,9 +363,29 @@ pub async fn post(
 
     let max_pixels = state.export_state.max_pixels;
 
-    let estimated = {
-        let size = bbox_size_in_pixels(rect, request.zoom as f64);
-        (size.width as u64) * (size.height as u64)
+    let wants_legend = request
+        .decorations
+        .as_ref()
+        .is_some_and(|decorations| decorations.legend.is_some());
+
+    // The legend panel is never wider than the map.
+    let width_factor: u32 = if wants_legend { 2 } else { 1 };
+
+    let size = bbox_size_in_pixels(rect, request.zoom as f64);
+
+    let estimated = u64::from(size.width) * u64::from(size.height) * u64::from(width_factor);
+
+    // libwebp caps a side, so for WebP the cap on pixels is lower where a side
+    // reaches it; the area at this aspect ratio keeps the client's zoom search valid.
+    let max_pixels = if matches!(format, ImageFormat::Webp(_)) {
+        let longest =
+            (f64::from(size.width) * f64::from(width_factor)).max(f64::from(size.height)) * scale;
+
+        let shrink = (f64::from(WEBP_MAX_SIDE) / longest).min(1.0);
+
+        max_pixels.min((estimated as f64 * shrink * shrink) as u64)
+    } else {
+        max_pixels
     };
 
     if estimated > max_pixels {
@@ -491,7 +551,13 @@ pub async fn post(
         .and_then(|d| d.attribution.as_ref())
         .is_some_and(|a| !a.within_limits());
 
-    if credits_over_limit {
+    let legend_over_limit = request
+        .decorations
+        .as_ref()
+        .and_then(|d| d.legend.as_ref())
+        .is_some_and(|l| !l.within_limits());
+
+    if credits_over_limit || legend_over_limit {
         return bad_request();
     }
 
@@ -522,7 +588,13 @@ pub async fn post(
                 .collect(),
         });
 
-        if !scale_bar && north_arrow.is_none() && attribution.is_none() {
+        let legend = d.legend.as_ref().map(|l| LegendDecoration {
+            title: trimmed(&l.title).map(|title| single_line(&title)),
+            categories: labels(&l.categories),
+            items: labels(&l.items),
+        });
+
+        if !scale_bar && north_arrow.is_none() && attribution.is_none() && legend.is_none() {
             return None;
         }
 
@@ -530,6 +602,7 @@ pub async fn post(
             scale_bar,
             north_arrow,
             attribution,
+            legend,
             // Center latitude of the original WGS84 bbox, used to correct the
             // Web-Mercator scale for the scale bar.
             center_lat: f64::midpoint(request.bbox[1], request.bbox[3]),
@@ -648,6 +721,15 @@ pub async fn delete(
         .status(StatusCode::NO_CONTENT)
         .body(Body::empty())
         .expect("delete body")
+}
+
+/// Labels by key, each on one line, the empty ones dropped.
+fn labels(labels: &HashMap<String, String>) -> HashMap<String, String> {
+    labels
+        .iter()
+        .map(|(key, label)| (key.trim().to_owned(), single_line(label)))
+        .filter(|(_, label)| !label.is_empty())
+        .collect()
 }
 
 /// A credit as one drawn line. `draw_text` honours an embedded newline while

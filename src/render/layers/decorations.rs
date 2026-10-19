@@ -4,13 +4,11 @@ use crate::render::{
     ctx::Ctx,
     draw::{
         font_options::FontAndLayoutOptions,
-        font_system::with_font_system,
-        text::{TextOptions, draw_text},
+        text::{TextOptions, draw_text, measure_line},
     },
     render_request::{AttributionDecoration, Decorations},
 };
 use cairo::{Context, LineCap, LineJoin};
-use cosmic_text::{Attrs, Buffer, Family, Metrics, Shaping};
 use geo::Point;
 
 /// Inset (in logical pixels) of every decoration from the image edges.
@@ -394,23 +392,15 @@ fn format_number(v: f64) -> String {
     }
 }
 
-/// Lay out `text` on a throwaway buffer to measure its rendered width in logical
-/// pixels (the widest line), so callers can right-align it.
+/// Width of `text` at `size` on one line, so callers can align it.
 fn measure_text_width(text: &str, size: f64) -> f64 {
-    with_font_system(|font_system| {
-        let metrics = Metrics::new(size as f32, size as f32);
-        let mut buffer = Buffer::new(font_system, metrics);
-        let attrs = Attrs::new().family(Family::Name("PT Sans"));
-
-        let mut buf = buffer.borrow_with(font_system);
-        buf.set_size(Some(f32::INFINITY), None);
-        buf.set_text(text, &attrs, Shaping::Advanced, None);
-        buf.shape_until_scroll(true);
-
-        buf.layout_runs()
-            .map(|run| run.line_w)
-            .fold(0.0f32, f32::max) as f64
-    })
+    measure_line(
+        text,
+        &FontAndLayoutOptions {
+            size,
+            ..Default::default()
+        },
+    )
 }
 
 #[cfg(test)]

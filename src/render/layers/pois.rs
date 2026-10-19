@@ -86,6 +86,20 @@ impl Def {
         color_of(self.category, &self.extra)
     }
 
+    /// The font the POI's label is drawn in.
+    pub(crate) fn label_flo(&self) -> FontAndLayoutOptions {
+        FontAndLayoutOptions {
+            style: if self.natural {
+                Style::Italic
+            } else {
+                Style::Normal
+            },
+            size: self.extra.font_size,
+            weight: self.extra.weight,
+            ..Default::default()
+        }
+    }
+
     /// Whether this POI is only worth drawing when you can reach or use it.
     const fn needs_access(&self) -> bool {
         match self.extra.needs_access {
@@ -1343,24 +1357,48 @@ pub(super) struct PendingLabel {
 
 pub(super) type ToLabel = Vec<PendingLabel>;
 
+/// What a `spring` POI's icon shows, from its `extra` tags.
+#[allow(clippy::struct_excessive_bools)] // independent marks on one glyph
+pub struct SpringLook {
+    /// The mineral-spring glyph instead of the plain one.
+    pub mineral: bool,
+    pub refitted: bool,
+    pub hot: bool,
+    pub intermittent: bool,
+    /// `drinking_water=*`, where tagged.
+    pub drinkable: Option<bool>,
+}
+
+fn spring_look(extra: &HashMap<String, Option<String>>) -> SpringLook {
+    let get = |key: &str| extra.get(key).and_then(Option::as_deref);
+
+    let mineral = get("water_characteristic").is_some_and(|v| {
+        !matches!(
+            v,
+            "" | "fresh" | "freshwater" | "intermittent" | "resurgence"
+        )
+    });
+
+    SpringLook {
+        mineral,
+        refitted: !mineral && get("refitted") == Some("yes"),
+        hot: get("hot") == Some("true"),
+        intermittent: get("intermittent") == Some("yes"),
+        drinkable: match get("drinkable") {
+            Some("yes" | "treated") => Some(true),
+            Some("no") => Some(false),
+            _ => None,
+        },
+    }
+}
+
 /// The icon files and stylesheet for a `spring` POI, whose icon varies with several
-/// `extra` tags (mineral/refitted/hot/intermittent/drinkable) rather than coming from a
-/// single static definition.
-fn spring_variant(extra: &HashMap<String, Option<String>>) -> (Vec<String>, Option<String>) {
+/// `extra` tags rather than coming from a single static definition.
+fn spring_variant(look: &SpringLook) -> (Vec<String>, Option<String>) {
     let mut stylesheet = String::new();
 
-    let is_mineral = extra
-        .get("water_characteristic")
-        .and_then(|v| v.as_deref())
-        .is_some_and(|v| {
-            !matches!(
-                v,
-                "" | "fresh" | "freshwater" | "intermittent" | "resurgence"
-            )
-        });
-
     let mut names = vec![
-        (if is_mineral {
+        (if look.mineral {
             "mineral-spring"
         } else {
             "spring"
@@ -1368,45 +1406,116 @@ fn spring_variant(extra: &HashMap<String, Option<String>>) -> (Vec<String>, Opti
         .to_string(),
     ];
 
-    if !is_mineral
-        && extra
-            .get("refitted")
-            .is_some_and(|r| r.as_deref() == Some("yes"))
-    {
+    if look.refitted {
         names.push("refitted_spring".into());
     }
 
-    let fill = if extra
-        .get("hot")
-        .is_some_and(|r| r.as_deref() == Some("true"))
-    {
+    let fill = if look.hot {
         "#e11919"
     } else {
         &colors::rgb_hex(colors::POI_WATER)
     };
 
-    if extra
-        .get("intermittent")
-        .is_some_and(|r| r.as_deref() == Some("yes"))
-    {
+    if look.intermittent {
         names.push("intermittent".into());
     }
 
     let _ = write!(stylesheet, "#spring {{ fill: {fill} }}");
 
-    match extra.get("drinkable").and_then(Option::as_deref) {
-        Some("yes" | "treated") => {
+    match look.drinkable {
+        Some(true) => {
             names.push("drinkable_spring".into());
             stylesheet.push_str(r"#drinkable { fill: #00ff00 } ");
         }
-        Some("no") => {
+        Some(false) => {
             names.push("drinkable_spring".into());
             stylesheet.push_str(r"#drinkable { fill: #ff0000 } ");
         }
-        _ => {}
+        None => {}
     }
 
     (names, Some(stylesheet))
+}
+
+/// How [`render_icons`] draws a POI.
+pub struct Look<'a> {
+    pub def: &'static Def,
+    /// The icon drawn.
+    pub key: &'a str,
+    /// `ruins=*` swapped the icon for the ruins one.
+    pub is_ruins: bool,
+    /// Tagged `access=private|no`.
+    pub restricted: bool,
+    fade: f64,
+    /// Zooms the icon's label is held back by.
+    delay: u8,
+    /// How the spring glyph is varied, where the icon is one.
+    pub spring: Option<SpringLook>,
+}
+
+impl Look<'_> {
+    /// Whether the icon wears the glow marking it out of bounds.
+    pub const fn restricted_glow(&self) -> bool {
+        self.restricted && self.def.extra.halo
+    }
+}
+
+/// How [`render_icons`] draws a POI of `typ` with `extra` at `zoom`, or `None` where
+/// it draws nothing. The legend reads it too, to tell which of its items a map shows.
+pub fn look<'a>(
+    typ: &'a str,
+    extra: &HashMap<String, Option<String>>,
+    zoom: u8,
+) -> Option<Look<'a>> {
+    let def = POIS.get(typ).and_then(|defs| {
+        defs.iter()
+            .find(|def| def.min_zoom <= zoom && def.extra.max_zoom >= zoom)
+    })?;
+
+    // `ruins=*` swaps the icon for the generic ruins one - the same one
+    // `historic=ruins` draws - the way `building=* + ruins=yes` becomes a ruined
+    // building in the buildings layer. Only the icon: the POI keeps its own
+    // definition, so it is still labelled at its own zoom, with its own name
+    // abbreviations and elevation, rather than being demoted to a bare `ruins`.
+    let is_ruins = extra
+        .get("ruins")
+        .and_then(Option::as_deref)
+        .is_some_and(|v| !matches!(v, "" | "no"));
+
+    let key = if is_ruins { "ruins" } else { def.icon_key(typ) };
+
+    let restricted = extra
+        .get("access")
+        .is_some_and(|access| matches!(access.as_deref(), Some("private" | "no")));
+
+    // A well you may not reach, or may not drink from, is not worth the walk - so it
+    // is held back two zooms as well as dimmed. `drinking_water=no` only delays: the
+    // spring icon already carries a red marker saying so, and the glow would claim
+    // something else, that you may not get in at all.
+    // Only where drinking is the point: `drinking_water=no` is the normal tag on an
+    // ornamental fountain or an animal trough, which are worth drawing regardless.
+    let undrinkable = matches!(
+        typ,
+        "spring" | "drinking_water" | "water_point" | "water_well"
+    ) && extra
+        .get("drinkable")
+        .is_some_and(|v| v.as_deref() == Some("no"));
+
+    let (fade, delay) = if def.needs_access() && (restricted || undrinkable) {
+        (if restricted { 0.66 } else { 1.0 }, INACCESSIBLE_ZOOM_DELAY)
+    } else {
+        (1.0, 0)
+    };
+
+    (zoom >= def.min_zoom + delay).then(|| Look {
+        def,
+        key,
+        is_ruins,
+        restricted,
+        fade,
+        delay,
+        spring: (key == "spring").then(|| spring_look(extra)),
+    })
 }
 
 pub fn render_icons(
@@ -1427,26 +1536,23 @@ pub fn render_icons(
 
         let extra = row.get_hstore("extra")?;
 
-        let Some(def) = POIS.get(typ).and_then(|defs| {
-            defs.iter()
-                .find(|def| def.min_zoom <= zoom && def.extra.max_zoom >= zoom)
-        }) else {
+        let Some(look) = look(typ, &extra, zoom) else {
             continue;
         };
 
+        let halo_color = look.restricted_glow().then_some(colors::ACCESS_RESTRICTED);
+
+        let Look {
+            def,
+            key,
+            is_ruins,
+            fade,
+            delay,
+            spring,
+            ..
+        } = look;
+
         let point = row.get_point()?.project_to_tile(&ctx.tile_projector);
-
-        // `ruins=*` swaps the icon for the generic ruins one - the same one
-        // `historic=ruins` draws - the way `building=* + ruins=yes` becomes a ruined
-        // building in the buildings layer. Only the icon: the POI keeps its own
-        // definition, so it is still labelled at its own zoom, with its own name
-        // abbreviations and elevation, rather than being demoted to a bare `ruins`.
-        let is_ruins = extra
-            .get("ruins")
-            .and_then(Option::as_deref)
-            .is_some_and(|v| !matches!(v, "" | "no"));
-
-        let key = if is_ruins { "ruins" } else { def.icon_key(typ) };
 
         // The colour follows the swapped icon: a ruined chalet drawn in the accommodation
         // violet would put the same glyph on one tile in two colours, and the legend only
@@ -1457,45 +1563,17 @@ pub fn render_icons(
             def.color()
         };
 
-        let restricted = extra
-            .get("access")
-            .is_some_and(|access| matches!(access.as_deref(), Some("private" | "no")));
+        let (names, stylesheet) = spring.as_ref().map_or_else(
+            || {
+                let fill = colors::rgb_hex(color);
 
-        let halo_color = (restricted && def.extra.halo).then_some(colors::ACCESS_RESTRICTED);
-
-        // A well you may not reach, or may not drink from, is not worth the walk - so it
-        // is held back two zooms as well as dimmed. `drinking_water=no` only delays: the
-        // spring icon already carries a red marker saying so, and the glow would claim
-        // something else, that you may not get in at all.
-        // Only where drinking is the point: `drinking_water=no` is the normal tag on an
-        // ornamental fountain or an animal trough, which are worth drawing regardless.
-        let undrinkable = matches!(
-            typ,
-            "spring" | "drinking_water" | "water_point" | "water_well"
-        ) && extra
-            .get("drinkable")
-            .is_some_and(|v| v.as_deref() == Some("no"));
-
-        let (fade, delay) = if def.needs_access() && (restricted || undrinkable) {
-            (if restricted { 0.66 } else { 1.0 }, INACCESSIBLE_ZOOM_DELAY)
-        } else {
-            (1.0, 0)
-        };
-
-        if zoom < def.min_zoom + delay {
-            continue;
-        }
-
-        let (names, stylesheet) = if key == "spring" {
-            spring_variant(&extra)
-        } else {
-            let fill = colors::rgb_hex(color);
-
-            (
-                vec![key.to_string()],
-                Some(format!("path {{ fill: {fill} }}")),
-            )
-        };
+                (
+                    vec![key.to_string()],
+                    Some(format!("path {{ fill: {fill} }}")),
+                )
+            },
+            spring_variant,
+        );
 
         let surface = svg_repo.get_with(Options {
             names,
@@ -1587,16 +1665,7 @@ pub fn render_labels(
     } in to_label
     {
         let text_options = TextOptions {
-            flo: FontAndLayoutOptions {
-                style: if def.natural {
-                    Style::Italic
-                } else {
-                    Style::Normal
-                },
-                size: def.extra.font_size,
-                weight: def.extra.weight,
-                ..Default::default()
-            },
+            flo: def.label_flo(),
             // Labels take the icon's colour, so a POI reads as one unit.
             color: def.extra.text_color.unwrap_or(color),
             alpha,

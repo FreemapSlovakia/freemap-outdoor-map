@@ -15,6 +15,7 @@ use crate::render::{
     layer_render_error::{LayerRenderError, LayerRenderResult},
     layers,
     layers::hillshading_datasets::HillshadingDatasets,
+    legend::LegendPresence,
     projectable::TileProjector,
     render_request::RenderRequest,
     size::Size,
@@ -408,6 +409,7 @@ impl<'a> Prefetcher<'a> {
         svg_repo: &mut SvgRepo,
         hsd: Option<&HillshadingDatasets>,
         collision: &mut Collision,
+        mut presence: Option<&mut LegendPresence>,
     ) -> Result<(), RenderError> {
         self.handle.block_on(async move {
             for layer in self.layers {
@@ -430,6 +432,10 @@ impl<'a> Prefetcher<'a> {
                             .map_err(|_| RenderError::TaskPanic)?
                             .with_layer(name)?;
 
+                        if let Some(presence) = presence.as_deref_mut() {
+                            presence.observe(name, &features);
+                        }
+
                         isolated(context, || render_fn(features, params)).with_layer(name)?;
                     }
                     PendingLayer::Shared {
@@ -450,6 +456,10 @@ impl<'a> Prefetcher<'a> {
                                 .await
                                 .map_err(|_| RenderError::TaskPanic)?
                                 .with_layer(name)?;
+
+                            if let Some(presence) = presence.as_deref_mut() {
+                                presence.observe(slot.name, &features);
+                            }
 
                             *slot.features.borrow_mut() = Some(features);
                         }
@@ -506,6 +516,7 @@ pub fn render(
     handle: Handle,
     size: Size<u32>,
     svg_repo: &mut SvgRepo,
+    presence: Option<&mut LegendPresence>,
 ) -> Result<Attribution, RenderError> {
     let _span = tracy_client::span!("render_tile::draw");
 
@@ -546,6 +557,7 @@ pub fn render(
         tile_projector: TileProjector::new(bbox, size),
         scale,
         legend,
+        refs_by_kind: presence.is_some(),
         place_type_overrides,
     });
 
@@ -1556,7 +1568,7 @@ pub fn render(
 
     let collision = &mut Collision::new(Some(context));
 
-    prefetcher.run(context, svg_repo, shading.datasets, collision)?;
+    prefetcher.run(context, svg_repo, shading.datasets, collision, presence)?;
 
     let mut attribution = Rc::try_unwrap(attribution)
         .expect("all layer render_fns already dropped")

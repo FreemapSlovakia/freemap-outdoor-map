@@ -56,6 +56,15 @@ pub async fn query(
         .await
 }
 
+/// The font park names are drawn in at `zoom`.
+pub fn label_flo(zoom: u8) -> FontAndLayoutOptions {
+    FontAndLayoutOptions {
+        style: Style::Italic,
+        size: 9.0 + (f64::from(zoom) - 7.0).exp2(),
+        ..FontAndLayoutOptions::default()
+    }
+}
+
 pub fn render(
     ctx: &Ctx,
     context: &Context,
@@ -65,11 +74,7 @@ pub fn render(
     let _span = tracy_client::span!("national_park_names::render");
 
     let text_options = TextOptions {
-        flo: FontAndLayoutOptions {
-            style: Style::Italic,
-            size: 9.0 + (ctx.zoom as f64 - 7.0).exp2(),
-            ..FontAndLayoutOptions::default()
-        },
+        flo: label_flo(ctx.zoom),
         color: colors::PROTECTED,
         ..TextOptions::default()
     };

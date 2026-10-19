@@ -4,13 +4,18 @@ mod graded_ways;
 mod landcovers;
 mod mapping;
 mod pois;
+mod presence;
 mod roads;
 
 #[cfg(test)]
 mod zoom_range_test;
 
+pub use presence::{Found, LegendPresence, Lend, Presence, Row, RowTest};
+
 use crate::render::layers::Category;
-use crate::render::{ImageFormat, Layers, LegendValue, RenderLayer, RenderRequest};
+use crate::render::{
+    ImageFormat, Layers, LegendValue, RenderLayer, RenderRequest, bbox_size_in_pixels, size::Size,
+};
 use geo::{Coord, LineString, Polygon, Rect};
 use indexmap::IndexMap;
 use serde::Deserialize;
@@ -65,6 +70,8 @@ pub struct LegendItem<'a> {
     /// Whether `zoom_range_test` can verify the lower end of `zooms` by rendering.
     #[cfg_attr(not(test), allow(dead_code))]
     pub probe_lower_edge: bool,
+    /// How a map render tells it drew this item.
+    pub presence: Vec<Presence>,
 }
 
 pub struct LegendItemBuilder<'a> {
@@ -77,6 +84,7 @@ pub struct LegendItemBuilder<'a> {
     pub data: LegendItemData,
     pub background: LegendItemData,
     pub requires: &'static [RenderLayer],
+    pub presence: Vec<Presence>,
     pub for_taginfo: bool,
 }
 
@@ -93,16 +101,9 @@ impl LegendItem<'_> {
     }
 
     /// The item's own features drawn on top of its background landcover.
+    #[cfg(test)]
     pub fn render_data(&self) -> LegendItemData {
-        let mut data = self.background.clone();
-
-        for (layer, features) in &self.data {
-            data.entry(layer.clone())
-                .or_default()
-                .extend(features.iter().cloned());
-        }
-
-        data
+        with_background(self, self.data.clone())
     }
 }
 
@@ -125,6 +126,7 @@ impl<'a> LegendItem<'a> {
             data: HashMap::new(),
             background: HashMap::new(),
             requires: &[],
+            presence: Vec::new(),
             for_taginfo: opts.for_taginfo,
         }
     }
@@ -144,7 +146,85 @@ impl<'a> LegendItemBuilder<'a> {
             zoom: self.zoom,
             zooms: self.zooms,
             probe_lower_edge: self.probe_lower_edge,
+            presence: self.presence,
         }
+    }
+
+    /// The item is drawn wherever `stage` fetches a row of one of `types` (of any
+    /// type, when empty).
+    fn present(self, stage: &'static str, types: &[&'static str]) -> Self {
+        self.rule(stage, types, None, true, None)
+    }
+
+    /// [`Self::present`], for the rows that also pass `when`.
+    fn present_when(
+        self,
+        stage: &'static str,
+        types: &[&'static str],
+        when: impl Fn(&Row) -> bool + Send + Sync + 'static,
+    ) -> Self {
+        self.rule(stage, types, Some(Box::new(when)), true, None)
+    }
+
+    /// The sample is labelled with the name of a feature from a row of `stage` of one
+    /// of `types` (of any type, when empty), drawn as `lend` says, and with none
+    /// without one.
+    fn named_by(self, stage: &'static str, types: &[&'static str], lend: Lend) -> Self {
+        self.rule(stage, types, None, false, Some(lend))
+    }
+
+    /// [`Self::named_by`], for the rows that also pass `when`.
+    fn named_when(
+        self,
+        stage: &'static str,
+        types: &[&'static str],
+        lend: Lend,
+        when: impl Fn(&Row) -> bool + Send + Sync + 'static,
+    ) -> Self {
+        self.rule(stage, types, Some(Box::new(when)), false, Some(lend))
+    }
+
+    /// The sample's `into` refs are taken from a row of `stage`'s `from` column, as
+    /// much of them as `pick` keeps.
+    fn refs_from(
+        self,
+        stage: &'static str,
+        from: &'static str,
+        into: &'static str,
+        pick: fn(&str) -> String,
+    ) -> Self {
+        let lend = Lend {
+            from,
+            into,
+            name_font: None,
+            pick: Some(pick),
+        };
+
+        self.rule(stage, &[], None, false, Some(lend))
+    }
+
+    fn rule(
+        mut self,
+        stage: &'static str,
+        types: &[&'static str],
+        when: Option<RowTest>,
+        marks: bool,
+        lends: Option<Lend>,
+    ) -> Self {
+        // Only an export's legend reads them.
+        if self.for_taginfo {
+            return self;
+        }
+
+        self.presence.push(Presence {
+            stage,
+            types: types.to_vec(),
+            when,
+            marks,
+            lends,
+        });
+
+        self
     }
 
     /// Lowest zoom at which the map draws this feature.
@@ -353,14 +433,74 @@ pub fn legend_render_request(
         return None;
     }
 
+    Some(item_render_request(
+        item,
+        item.data.clone(),
+        scale,
+        mode,
+        variant,
+    ))
+}
+
+/// The sample of `found` as a map drawn with `layers` shows it, labelled with
+/// the text a drawn feature lent it, or with none: its placeholder name or ref
+/// would claim a feature the map does not have.
+pub fn legend_sample_request(found: &Found, scale: f64, layers: &Layers) -> RenderRequest {
+    let item = found.item;
+
+    let mut data = item.data.clone();
+
+    let lent_columns = item
+        .presence
+        .iter()
+        .filter_map(|presence| presence.lends.map(|lend| lend.into));
+
+    for props in data.values_mut().flatten() {
+        for column in std::iter::once("name").chain(lent_columns.clone()) {
+            if let Some(value) = props.get_mut(column) {
+                *value = match &found.lent {
+                    Some(lent) if lent.column == column => LegendValue::Text(lent.text.clone()),
+                    _ => LegendValue::String(""),
+                };
+            }
+        }
+
+        if let Some(ele) = found.lent.as_ref().and_then(|lent| lent.ele.as_ref())
+            && let Some(LegendValue::Hstore(extra)) = props.get_mut("extra")
+        {
+            extra.insert("ele".to_owned(), Some(ele.clone()));
+        }
+    }
+
+    item_render_request(item, data, scale, LegendMode::Normal, Some(layers))
+}
+
+fn item_render_request(
+    item: &LegendItem,
+    data: LegendItemData,
+    scale: f64,
+    mode: LegendMode,
+    variant: Option<&Layers>,
+) -> RenderRequest {
     // An overlay carries no ground, so its samples are drawn on none either.
     let (data, layers) = match variant {
-        Some(layers) if !layers.is_whole_map() => (item.data.clone(), layers.clone()),
-        Some(layers) => (item.render_data(), layers.clone()),
-        None => (item.render_data(), whole_catalogue()),
+        Some(layers) if !layers.is_whole_map() => (data, layers.clone()),
+        Some(layers) => (with_background(item, data), layers.clone()),
+        None => (with_background(item, data), whole_catalogue()),
     };
 
-    Some(render_request(data, item.zoom, scale, mode, layers))
+    render_request(data, item.zoom, scale, mode, layers)
+}
+
+/// `data` drawn on top of the item's background landcover.
+fn with_background(item: &LegendItem, data: LegendItemData) -> LegendItemData {
+    let mut merged = item.background.clone();
+
+    for (layer, features) in data {
+        merged.entry(layer).or_default().extend(features);
+    }
+
+    merged
 }
 
 /// Every optional layer with a legend item of its own; one left out here draws
@@ -383,6 +523,29 @@ fn whole_catalogue() -> Layers {
     ]))
 }
 
+/// Logical size of an export's legend samples at `zoom`.
+pub fn legend_sample_size(zoom: u8) -> Size<u32> {
+    let zoom = clamp_zoom(zoom);
+
+    bbox_size_in_pixels(sample_bbox(zoom), f64::from(zoom))
+}
+
+/// The area a sample is drawn of at `zoom`, the same number of pixels at every zoom.
+fn sample_bbox(zoom: u8) -> Rect<f64> {
+    let zoom_factor = (20f64 - zoom as f64).exp2();
+
+    Rect::new(
+        Coord {
+            x: -8.0 * zoom_factor,
+            y: -3.5 * zoom_factor,
+        },
+        Coord {
+            x: 8.0 * zoom_factor,
+            y: 3.5 * zoom_factor,
+        },
+    )
+}
+
 fn render_request(
     legend_item_data: LegendItemData,
     zoom: u8,
@@ -391,20 +554,7 @@ fn render_request(
     layers: Layers,
 ) -> RenderRequest {
     let bbox = match mode {
-        LegendMode::Normal => {
-            let zoom_factor = (20f64 - zoom as f64).exp2();
-
-            Rect::new(
-                Coord {
-                    x: -8.0 * zoom_factor,
-                    y: -3.5 * zoom_factor,
-                },
-                Coord {
-                    x: 8.0 * zoom_factor,
-                    y: 3.5 * zoom_factor,
-                },
-            )
-        }
+        LegendMode::Normal => sample_bbox(zoom),
         LegendMode::Taginfo => {
             let px = 8.0 * to_px(zoom);
 
@@ -530,7 +680,25 @@ impl PropsBuilder {
 
 #[cfg(test)]
 mod tests {
-    use super::{legend_metadata, set_mapping_path_for_test};
+    use super::{MAX_LEGEND_ZOOM, legend_items, legend_metadata, set_mapping_path_for_test};
+
+    /// An export's legend lists the items its rows show, so an item without a way to
+    /// be recognised in them would never be listed.
+    #[test]
+    fn every_legend_item_can_be_found_in_a_map() {
+        set_mapping_path_for_test();
+
+        let blind: Vec<_> = (0..=MAX_LEGEND_ZOOM)
+            .flat_map(|zoom| legend_items(Some(zoom), false))
+            .filter(|item| !item.presence.iter().any(|presence| presence.marks))
+            .map(|item| format!("{} at zoom {}", item.meta.id, item.zoom))
+            .collect();
+
+        assert!(
+            blind.is_empty(),
+            "legend items no map render can list: {blind:?}"
+        );
+    }
 
     /// Every tag set on a legend item has to say something. The frontend turns each set into
     /// a name for the reader, so an empty one renders as a nameless row beside the icon -

@@ -1,7 +1,7 @@
 use crate::render::{
-    LegendValue, RenderLayer,
-    layers::Category,
-    legend::{BuildOpts, LegendItem, PropsBuilder},
+    Feature, LegendValue, RenderLayer,
+    layers::{Category, ROUTE_COLORS, road_access_restrictions::forbids, roads::RoadStyle},
+    legend::{BuildOpts, LegendItem, Lend, PropsBuilder, Row, TagsBuilder},
 };
 use indexmap::IndexMap;
 use std::fmt::Write as _;
@@ -39,8 +39,8 @@ fn road_from_zoom(class: &str, typ: &str) -> u8 {
 
 pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
     [
-        &["motorway", "trunk"] as &[&str],
-        &["primary", "motorway_link", "trunk_link"],
+        &["motorway", "trunk", "motorway_link", "trunk_link"] as &[&str],
+        &["primary"],
         &["secondary", "primary_link"],
         &["tertiary", "tertiary_link", "secondary_link"],
         &["residential", "unclassified", "living_street", "road"],
@@ -78,6 +78,8 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
             ts
         })
         .min_zoom(road_from_zoom("highway", types[0]))
+        .present_when("roads", &[], move |row| row.drawn_as(road_styles(types[0])))
+        .named_by("highway_names", types, Lend::NAME)
         .add_landcover(if i < 10 { "residential" } else { "wood" })
         .add_feature("roads", |b| b.with_road(types[0]).with("class", "highway"))
         .build()
@@ -93,6 +95,8 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
         ])
         .into_iter()
         .map(|tags| {
+            let access = access_presence(tags);
+
             let road_type = match tags[0].0 {
                 "highway" => "path",
                 "tunnel" | "bridge" => "secondary",
@@ -132,6 +136,7 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                 })
             })
             .min_zoom_unprobeable(from_zoom)
+            .present_when(access.0, &[], access.1)
             .add_landcover("wood")
             .add_feature("roads", |b| {
                 let mut b = b.with_road(road_type).with("class", "highway");
@@ -177,6 +182,9 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                 })
             })
             .min_zoom(road_from_zoom("highway", "path"))
+            .present_when("roads", &["path"], |row| {
+                row.drawn_as(&[RoadStyle::PathBikeFoot])
+            })
             .add_landcover("residential")
             .add_feature("roads", |b| {
                 b.with_road("path")
@@ -188,130 +196,16 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
         LegendItem::builder("road_construction", Category::RoadsAndPaths, 17, opts)
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add("highway", "construction")))
             .min_zoom(road_from_zoom("highway", "construction"))
+            .present_when("roads", &["construction"], |row| {
+                row.drawn_as(&[RoadStyle::Construction])
+            })
             .add_landcover("residential")
             .add_feature("roads", |b| {
                 b.with_road("construction").with("class", "highway")
             })
             .build(),
-        LegendItem::builder("route_hiking", Category::RoadsAndPaths, 17, opts)
-            .requires(&[RenderLayer::RoutesHiking, RenderLayer::RoutesHikingKst])
-            .add_tag_set(|ts| {
-                ts.add_tags(|tags| {
-                    tags.add("type", "route")
-                        .add("route", "hiking")
-                        .add("network", "rwn")
-                })
-                .add_tags(|tags| {
-                    tags.add("type", "route")
-                        .add("route", "hiking")
-                        .add("network", "nwn")
-                })
-                .add_tags(|tags| {
-                    tags.add("type", "route")
-                        .add("route", "hiking")
-                        .add("network", "iwn")
-                })
-            })
-            .min_zoom(ROUTE_MARKING_FROM_ZOOM)
-            .add_landcover("wood")
-            .add_feature("roads", |b| {
-                b.with_road("track")
-                    .with("name", "")
-                    .with("class", "highway")
-                    .with("tracktype", "grade3")
-            })
-            .add_feature("routes", |b| {
-                b.with_route(false)
-                    .with("refs1", "0901")
-                    .with("off1", 1i32)
-                    .with("h_red", 1i32)
-            })
-            .build(),
-        LegendItem::builder("route_hiking_local", Category::RoadsAndPaths, 17, opts)
-            .requires(&[RenderLayer::RoutesHiking, RenderLayer::RoutesHikingKst])
-            .add_tag_set(|ts| {
-                ts.add_tags(|tags| {
-                    tags.add("type", "route")
-                        .add("route", "hiking")
-                        .add("network", "lwn")
-                })
-            })
-            .min_zoom(ROUTE_MARKING_FROM_ZOOM)
-            .add_landcover("wood")
-            .add_feature("roads", |b| {
-                b.with_road("track")
-                    .with("name", "")
-                    .with("class", "highway")
-                    .with("tracktype", "grade3")
-            })
-            .add_feature("routes", |b| {
-                b.with_route(false)
-                    .with("refs1", "M0123")
-                    .with("off1", 1i32)
-                    .with("h_red_loc", 1i32)
-            })
-            .build(),
-        LegendItem::builder("route_bicycle", Category::RoadsAndPaths, 17, opts)
-            .requires(&[RenderLayer::RoutesBicycle])
-            .add_tag_set(|ts| {
-                ts.add_tags(|tags| {
-                    tags.add("type", "route")
-                        .add("route", "bicycle")
-                        .add("network", "lwn")
-                })
-            })
-            .min_zoom(ROUTE_MARKING_FROM_ZOOM)
-            .add_landcover("wood")
-            .add_feature("roads", |b| {
-                b.with_road("track")
-                    .with("name", "")
-                    .with("class", "highway")
-                    .with("tracktype", "grade3")
-            })
-            .add_feature("routes", |b| {
-                b.with_route(true)
-                    .with("refs2", "C12")
-                    .with("off2", 1i32)
-                    .with("b_red", 1i32)
-            })
-            .build(),
-        LegendItem::builder("route_ski", Category::RoadsAndPaths, 17, opts)
-            .requires(&[RenderLayer::RoutesSki])
-            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("type", "route").add("route", "ski")))
-            .min_zoom(ROUTE_MARKING_FROM_ZOOM)
-            .add_landcover("wood")
-            .add_feature("roads", |b| {
-                b.with_road("track")
-                    .with("name", "")
-                    .with("class", "highway")
-                    .with("tracktype", "grade3")
-            })
-            .add_feature("routes", |b| {
-                b.with_route(true)
-                    .with("refs2", "S12")
-                    .with("off2", 1i32)
-                    .with("s_red", 1i32)
-            })
-            .build(),
-        LegendItem::builder("route_horse", Category::RoadsAndPaths, 17, opts)
-            .requires(&[RenderLayer::RoutesHorse])
-            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("type", "route").add("route", "horse")))
-            .min_zoom(ROUTE_MARKING_FROM_ZOOM)
-            .add_landcover("wood")
-            .add_feature("roads", |b| {
-                b.with_road("track")
-                    .with("name", "")
-                    .with("class", "highway")
-                    .with("tracktype", "grade3")
-            })
-            .add_feature("routes", |b| {
-                b.with_route(false)
-                    .with("refs1", "H12")
-                    .with("off1", 1i32)
-                    .with("r_red", 1i32)
-            })
-            .build(),
     ])
+    .chain(ROUTE_KINDS.iter().map(|kind| route_item(kind, opts)))
     .chain((1..=5).map(|grade| {
         let grade: &str = format!("grade{grade}").leak();
 
@@ -339,6 +233,15 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
         } else {
             road_from_zoom("highway", "track")
         })
+        // A service road is drawn as a grade1 track, a raceway as a grade2 one.
+        .present_when("roads", &[], move |row| {
+            row.drawn_as(&[RoadStyle::Track])
+                && row
+                    .get_string("tracktype")
+                    .is_ok_and(|tracktype| tracktype == grade)
+                || grade == "grade1" && row.drawn_as(&[RoadStyle::Service])
+                || grade == "grade2" && row.drawn_as(&[RoadStyle::Raceway])
+        })
         .add_landcover("wood")
         .add_feature("roads", |b| {
             b.with_road("track")
@@ -360,6 +263,11 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                 )
                 .add_tag_set(|ts| ts.add_tags(|tags| tags.add("trail_visibility", visibility)))
                 .min_zoom(road_from_zoom("highway", "path"))
+                // The column is imposm's 1-based enumeration, 0 where the tag is absent.
+                .present_when("roads", &[], move |row| {
+                    row.get_i32("trail_visibility")
+                        .is_ok_and(|value| value == i as i32 + 1)
+                })
                 .add_landcover("wood")
                 .add_feature("roads", |b| {
                     b.with_road("path")
@@ -413,6 +321,9 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                 }
                 ts
             })
+            .present_when("roads", &[], move |row| {
+                row.drawn_as(railway_styles(types[0]))
+            })
             .add_landcover("residential")
             .add_feature("roads", |b| b.with_road(types[0]).with("class", "railway"))
             .build()
@@ -422,6 +333,9 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
         LegendItem::builder("railway_bridge", Category::Railway, 17, opts)
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add("railway", "rail").add("bridge", "yes")))
             .min_zoom(road_from_zoom("railway", "rail"))
+            .present_when("roads", &[], |row| {
+                row.drawn_as(RAIL) && row.get_i16("bridge").is_ok_and(|bridge| bridge != 0)
+            })
             .add_landcover("residential")
             .add_feature("roads", |b| {
                 b.with_road("rail")
@@ -432,6 +346,9 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
         LegendItem::builder("railway_tunnel", Category::Railway, 17, opts)
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add("railway", "rail").add("tunnel", "yes")))
             .min_zoom(road_from_zoom("railway", "rail"))
+            .present_when("roads", &[], |row| {
+                row.drawn_as(RAIL) && row.get_i16("tunnel").is_ok_and(|tunnel| tunnel != 0)
+            })
             .add_landcover("residential")
             .add_feature("roads", |b| {
                 b.with_road("rail")
@@ -442,12 +359,235 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
         LegendItem::builder("water_slide", Category::Sport, 17, opts)
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add("attraction", "water_slide")))
             .min_zoom(road_from_zoom("attraction", "water_slide"))
+            .present_when("roads", &["water_slide"], |row| {
+                row.drawn_as(&[RoadStyle::WaterSlide])
+            })
             .add_feature("roads", |b| {
                 b.with_road("water_slide").with("class", "attraction")
             })
             .build(),
     ])
     .collect()
+}
+
+/// The styles the road item named after `typ` stands for.
+fn road_styles(typ: &str) -> &'static [RoadStyle] {
+    match typ {
+        // Links are drawn in the motorway colour.
+        "motorway" => &[
+            RoadStyle::Motorway,
+            RoadStyle::MotorwayLink,
+            RoadStyle::MotorwayLow,
+        ],
+        "primary" => &[RoadStyle::Primary, RoadStyle::PrimaryLow],
+        "secondary" => &[RoadStyle::Secondary, RoadStyle::SecondaryLow],
+        "tertiary" => &[RoadStyle::Tertiary, RoadStyle::TertiaryLow],
+        "residential" => &[RoadStyle::Residential, RoadStyle::ResidentialLow],
+        "footway" => &[RoadStyle::Footway],
+        "platform" => &[RoadStyle::Platform],
+        "steps" => &[RoadStyle::Steps],
+        "cycleway" => &[RoadStyle::Cycleway],
+        "path" => &[RoadStyle::Path],
+        "piste" => &[RoadStyle::Piste],
+        "bridleway" => &[RoadStyle::Bridleway],
+        "via_ferrata" => &[RoadStyle::ViaFerrata],
+        "track" => &[RoadStyle::Track],
+        _ => &[],
+    }
+}
+
+const RAIL: &[RoadStyle] = &[RoadStyle::Rail, RoadStyle::RailLow];
+
+/// The styles the railway item named after `typ` stands for.
+fn railway_styles(typ: &str) -> &'static [RoadStyle] {
+    match typ {
+        "rail" => RAIL,
+        "light_rail" => &[RoadStyle::LightRail],
+        "miniature" => &[RoadStyle::MinorRail],
+        "disused" => &[RoadStyle::DisusedRail],
+        "construction" => &[RoadStyle::RailConstruction],
+        _ => &[],
+    }
+}
+
+fn is_class(row: &Feature, class: &str) -> bool {
+    row.get_string("class").is_ok_and(|value| value == class)
+}
+
+/// A route kind with an item of its own.
+struct RouteKind {
+    id: &'static str,
+    requires: &'static [RenderLayer],
+    route: &'static str,
+    /// The `network` values its tag sets list, if they are split by network.
+    networks: &'static [&'static str],
+    /// Its marking columns are `{prefix}{colour}{suffix}`, one per route colour.
+    prefix: &'static str,
+    suffix: &'static str,
+    /// The `routes_labels` column holding its refs alone.
+    refs: &'static str,
+    /// Drawn on the right of the way, with `refs2`/`off2`.
+    right: bool,
+    sample_ref: &'static str,
+}
+
+const ROUTE_KINDS: [RouteKind; 5] = [
+    RouteKind {
+        id: "route_hiking",
+        requires: &[RenderLayer::RoutesHiking, RenderLayer::RoutesHikingKst],
+        route: "hiking",
+        networks: &["rwn", "nwn", "iwn"],
+        prefix: "h_",
+        suffix: "",
+        refs: "refs_hiking",
+        right: false,
+        sample_ref: "0901",
+    },
+    RouteKind {
+        id: "route_hiking_local",
+        requires: &[RenderLayer::RoutesHiking, RenderLayer::RoutesHikingKst],
+        route: "hiking",
+        networks: &["lwn"],
+        prefix: "h_",
+        suffix: "_loc",
+        refs: "refs_hiking_loc",
+        right: false,
+        sample_ref: "M0123",
+    },
+    RouteKind {
+        id: "route_bicycle",
+        requires: &[RenderLayer::RoutesBicycle],
+        route: "bicycle",
+        networks: &["lwn"],
+        prefix: "b_",
+        suffix: "",
+        refs: "refs_bicycle",
+        right: true,
+        sample_ref: "C12",
+    },
+    RouteKind {
+        id: "route_ski",
+        requires: &[RenderLayer::RoutesSki],
+        route: "ski",
+        networks: &[],
+        prefix: "s_",
+        suffix: "",
+        refs: "refs_ski",
+        right: true,
+        sample_ref: "S12",
+    },
+    RouteKind {
+        id: "route_horse",
+        requires: &[RenderLayer::RoutesHorse],
+        route: "horse",
+        networks: &[],
+        prefix: "r_",
+        suffix: "",
+        refs: "refs_horse",
+        right: false,
+        sample_ref: "H12",
+    },
+];
+
+/// The colour route samples are marked in.
+const SAMPLE_COLOR: &str = "red";
+
+/// The items of route `refs` whose `osmc:symbol` is of [`SAMPLE_COLOR`], so the
+/// symbol drawn matches the sample's marking.
+fn sample_colored(refs: &str) -> String {
+    refs.split('\n')
+        .filter(|item| {
+            item.split('\t')
+                .nth(2)
+                .and_then(|symbol| symbol.split(':').next())
+                == Some(SAMPLE_COLOR)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn route_tags<'a>(tags: TagsBuilder<'a>, route: &'static str) -> TagsBuilder<'a> {
+    tags.add("type", "route").add("route", route)
+}
+
+fn route_item(kind: &RouteKind, opts: BuildOpts) -> LegendItem<'static> {
+    let column = |color: &str| format!("{}{color}{}", kind.prefix, kind.suffix);
+
+    let marking: Vec<String> = ROUTE_COLORS
+        .iter()
+        .map(|(color, _)| column(color))
+        .collect();
+
+    let (refs, off) = if kind.right {
+        ("refs2", "off2")
+    } else {
+        ("refs1", "off1")
+    };
+
+    LegendItem::builder(kind.id, Category::RoadsAndPaths, 17, opts)
+        .requires(kind.requires)
+        .add_tag_set(|mut ts| {
+            if kind.networks.is_empty() {
+                ts = ts.add_tags(|tags| route_tags(tags, kind.route));
+            }
+
+            for network in kind.networks {
+                ts = ts.add_tags(|tags| route_tags(tags, kind.route).add("network", network));
+            }
+
+            ts
+        })
+        .min_zoom(ROUTE_MARKING_FROM_ZOOM)
+        .present_when("routes_marking", &[], move |row| {
+            marking
+                .iter()
+                .any(|column| row.get_i32(column).is_ok_and(|off| off > 0))
+        })
+        .refs_from("routes_labels", kind.refs, refs, sample_colored)
+        .add_landcover("wood")
+        .add_feature("roads", |b| {
+            b.with_road("track")
+                .with("name", "")
+                .with("class", "highway")
+                .with("tracktype", "grade3")
+        })
+        .add_feature("routes", |b| {
+            b.with_route(kind.right)
+                .with(refs, kind.sample_ref)
+                .with(off, 1i32)
+                .with(column(SAMPLE_COLOR), 1i32)
+        })
+        .build()
+}
+
+/// The stage and rows showing the way detail `tags` are about: a bridge or tunnel
+/// casing on any road, the rest marked by `road_access_restrictions`.
+fn access_presence(
+    tags: &'static [(&'static str, &'static str)],
+) -> (&'static str, impl Fn(&Row) -> bool + Send + Sync + 'static) {
+    let key = tags[0].0;
+
+    // Each combination has a mark of its own.
+    let forbidden = (
+        tags.iter().any(|tag| tag.0 == "bicycle"),
+        tags.iter().any(|tag| tag.0 == "foot"),
+    );
+
+    let stage = if matches!(key, "bridge" | "tunnel") {
+        "roads"
+    } else {
+        "road_access_restrictions"
+    };
+
+    (stage, move |row: &Row| match key {
+        "bridge" | "tunnel" => {
+            is_class(row, "highway")
+                && row.road_style().is_some_and(RoadStyle::has_casings)
+                && row.get_i16(key).is_ok_and(|value| value != 0)
+        }
+        "oneway" => row.get_i16("oneway").is_ok_and(|oneway| oneway != 0),
+        _ => forbids(row) == Some(forbidden),
+    })
 }
 
 /// A part of the legend line for `road_access_restrictions`, restricted by `tags`.

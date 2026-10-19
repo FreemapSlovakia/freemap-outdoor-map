@@ -90,6 +90,139 @@ pub async fn query(
         .await
 }
 
+/// A `rail` of this `service` is drawn as a main line; any other as light rail.
+fn is_main_line(service: &str) -> bool {
+    matches!(service, "" | "main")
+}
+
+/// How [`render`] draws a road, one per arm; the legend lists by it too.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum RoadStyle {
+    Pier,
+    Rail,
+    LightRail,
+    MinorRail,
+    RailConstruction,
+    DisusedRail,
+    RailLow,
+    MotorwayLow,
+    PrimaryLow,
+    SecondaryLow,
+    TertiaryLow,
+    Motorway,
+    MotorwayLink,
+    Primary,
+    Secondary,
+    Construction,
+    Tertiary,
+    ResidentialLow,
+    Residential,
+    WaterSlide,
+    ParkingAisle,
+    Raceway,
+    Piste,
+    Footway,
+    Platform,
+    Steps,
+    Service,
+    PathBikeFoot,
+    Cycleway,
+    Path,
+    Bridleway,
+    ViaFerrata,
+    Track,
+}
+
+impl RoadStyle {
+    /// Whether [`render`] draws bridge and tunnel casings on it.
+    pub const fn has_casings(self) -> bool {
+        !matches!(
+            self,
+            Self::MotorwayLow
+                | Self::PrimaryLow
+                | Self::SecondaryLow
+                | Self::TertiaryLow
+                | Self::Construction
+                | Self::Steps
+        )
+    }
+}
+
+/// What [`render`] draws `row` as at `zoom`, or `None` where it draws nothing.
+pub fn style(zoom: u8, row: &Feature) -> Result<Option<RoadStyle>, FeatureError> {
+    let typ = row.get_string("type")?;
+    let class = row.get_string("class")?;
+    let service = row.get_string("service")?;
+    let bicycle = row.get_string("bicycle")?;
+    let foot = row.get_string("foot")?;
+    let tracktype = row.get_string("tracktype")?;
+
+    // The query has the column at zoom 12 alone.
+    let routed = zoom > 12 || zoom == 12 && row.get_bool("is_in_route")?;
+
+    Ok(Some(match (zoom, class, typ) {
+        (14.., _, "pier") if !row.get_bool("is_pier_area")? => RoadStyle::Pier,
+        (12.., "railway", "rail") if is_main_line(service) => RoadStyle::Rail,
+        (13.., "railway", _)
+            if ["light_rail", "tram"].contains(&typ) || typ == "rail" && !is_main_line(service) =>
+        {
+            RoadStyle::LightRail
+        }
+        (13.., "railway", "miniature" | "monorail" | "funicular" | "narrow_gauge" | "subway") => {
+            RoadStyle::MinorRail
+        }
+        (13.., "railway", "construction") => RoadStyle::RailConstruction,
+        (14.., "railway", "disused" | "preserved") => RoadStyle::DisusedRail,
+        (8..=11, "railway", "rail") if is_main_line(service) => RoadStyle::RailLow,
+        (8..=11, "highway", "motorway" | "trunk" | "motorway_link" | "trunk_link") => {
+            RoadStyle::MotorwayLow
+        }
+        (8..=11, "highway", "primary" | "primary_link") => RoadStyle::PrimaryLow,
+        (8..=11, "highway", "secondary" | "secondary_link") => RoadStyle::SecondaryLow,
+        (8..=11, "highway", "tertiary" | "tertiary_link") => RoadStyle::TertiaryLow,
+        (12.., "highway", "motorway" | "trunk") => RoadStyle::Motorway,
+        (12.., "highway", "motorway_link" | "trunk_link") => RoadStyle::MotorwayLink,
+        (12.., "highway", "primary") => RoadStyle::Primary,
+        (12.., "highway", "primary_link" | "secondary") => RoadStyle::Secondary,
+        (12.., "highway", "construction") => RoadStyle::Construction,
+        (12.., "highway", "secondary_link" | "tertiary" | "tertiary_link") => RoadStyle::Tertiary,
+        (12..=13, "highway", "living_street" | "residential" | "unclassified" | "road") => {
+            RoadStyle::ResidentialLow
+        }
+        (14.., "highway", "living_street" | "residential" | "unclassified" | "road") => {
+            RoadStyle::Residential
+        }
+        (14.., "attraction", "water_slide") => RoadStyle::WaterSlide,
+        (14.., "highway", "service") if service == "parking_aisle" => RoadStyle::ParkingAisle,
+        (14.., _, "raceway") | (14.., "leisure", "track") => RoadStyle::Raceway,
+        (14.., "highway", "piste") => RoadStyle::Piste,
+        (14.., "highway", "footway" | "pedestrian") => RoadStyle::Footway,
+        (14.., "highway" | "railway" | "public_transport", "platform") => RoadStyle::Platform,
+        (14.., "highway", "steps") => RoadStyle::Steps,
+        (12.., "highway", _)
+            if typ == "service" && service != "parking_aisle"
+                || ["escape", "corridor", "bus_guideway"].contains(&typ) =>
+        {
+            RoadStyle::Service
+        }
+        (12.., "highway", "path") if bicycle == "designated" && foot == "designated" && routed => {
+            RoadStyle::PathBikeFoot
+        }
+        (12.., "highway", _)
+            if (typ == "cycleway"
+                || typ == "path" && bicycle == "designated" && foot != "designated")
+                && routed =>
+        {
+            RoadStyle::Cycleway
+        }
+        (12.., "highway", "path") if routed => RoadStyle::Path,
+        (12.., "highway", "bridleway") if routed => RoadStyle::Bridleway,
+        (12.., "highway", "via_ferrata") if routed => RoadStyle::ViaFerrata,
+        (12.., "highway", "track") if routed || tracktype == "grade1" => RoadStyle::Track,
+        _ => return Ok(None),
+    }))
+}
+
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
     let _span = tracy_client::span!("roads::render");
 
@@ -226,11 +359,6 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
     }
 
     for (row, geom) in &rows {
-        let typ = row.get_string("type")?;
-        let class = row.get_string("class")?;
-        let service = row.get_string("service")?;
-        let bicycle = row.get_string("bicycle")?;
-        let foot = row.get_string("foot")?;
         let tracktype = row.get_string("tracktype")?;
 
         let draw = || -> cairo::Result<()> {
@@ -327,37 +455,24 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
             Ok(())
         };
 
-        let is_in_route = if zoom == 12 {
-            row.get_bool("is_in_route")?
-        } else {
-            false
-        };
-
         let trail_visibility = 0.666f64.powf(row.get_i32("trail_visibility")? as f64);
 
-        match (zoom, class, typ) {
-            (14.., _, "pier") if !row.get_bool("is_pier_area")? => {
+        match style(zoom, row)? {
+            Some(RoadStyle::Pier) => {
                 apply_highway_defaults(2.0);
                 context.set_source_color(colors::PIER);
                 draw()?;
             }
-            (12.., "railway", "rail") if ["main", ""].contains(&service) => {
+            Some(RoadStyle::Rail) => {
                 draw_rail(colors::RAIL, 1.5, 5.0, 9.5, 1.0)?;
             }
-            (13.., "railway", _)
-                if ["light_rail", "tram"].contains(&typ)
-                    || typ == "rail" && service != "main" && !service.is_empty() =>
-            {
+            Some(RoadStyle::LightRail) => {
                 draw_rail(colors::TRAM, 1.0, 4.5, 9.5, 1.0)?;
             }
-            (
-                13..,
-                "railway",
-                "miniature" | "monorail" | "funicular" | "narrow_gauge" | "subway",
-            ) => {
+            Some(RoadStyle::MinorRail) => {
                 draw_rail(colors::TRAM, 1.0, 4.5, 7.5, 1.0)?;
             }
-            (13.., "railway", "construction") => {
+            Some(RoadStyle::RailConstruction) => {
                 draw_rail(colors::RAILWAY_DISUSED, 1.0, 4.5, 7.5, 1.0)?;
 
                 apply_highway_defaults(1.5 + 1.0 / 3.0);
@@ -369,10 +484,10 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
                 context.set_dash(&[5.0, 5.0], 5.0);
                 draw()?;
             }
-            (14.., "railway", "disused" | "preserved") => {
+            Some(RoadStyle::DisusedRail) => {
                 draw_rail(colors::RAILWAY_DISUSED, 1.0, 4.5, 7.5, 1.0)?;
             }
-            (8..=11, "railway", "rail") if ["main", ""].contains(&service) => {
+            Some(RoadStyle::RailLow) => {
                 let koef = 0.8 * 1.15f64.powf((zoom - 8) as f64);
 
                 draw_rail(
@@ -383,51 +498,51 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
                     0.5 * koef,
                 )?;
             }
-            (8..=11, "highway", "motorway" | "trunk" | "motorway_link" | "trunk_link") => {
+            Some(RoadStyle::MotorwayLow) => {
                 apply_highway_defaults(0.8 * highway_width_coef());
                 draw()?;
             }
-            (8..=11, "highway", "primary" | "primary_link") => {
+            Some(RoadStyle::PrimaryLow) => {
                 apply_highway_defaults(0.7 * highway_width_coef());
                 draw()?;
             }
-            (8..=11, "highway", "secondary" | "secondary_link") => {
+            Some(RoadStyle::SecondaryLow) => {
                 apply_highway_defaults(0.6 * highway_width_coef());
                 draw()?;
             }
-            (8..=11, "highway", "tertiary" | "tertiary_link") => {
+            Some(RoadStyle::TertiaryLow) => {
                 apply_highway_defaults(0.5 * highway_width_coef());
                 draw()?;
             }
-            (12.., "highway", "motorway" | "trunk") => {
+            Some(RoadStyle::Motorway) => {
                 apply_highway_defaults(2.5);
                 context.set_source_color(colors::SUPERROAD);
                 draw()?;
 
                 draw_bridges_tunnels(2.5 + 1.0)?;
             }
-            (12.., "highway", "motorway_link" | "trunk_link") => {
+            Some(RoadStyle::MotorwayLink) => {
                 apply_highway_defaults(1.5 + 2.0 / 3.0);
                 context.set_source_color(colors::SUPERROAD);
                 draw()?;
 
                 draw_bridges_tunnels(1.5 + 2.0 / 3.0 + 1.0)?;
             }
-            (12.., "highway", "primary") => {
+            Some(RoadStyle::Primary) => {
                 apply_highway_defaults(1.5 + 2.0 / 3.0);
                 context.set_source_color(colors::ROAD);
                 draw()?;
 
                 draw_bridges_tunnels(1.5 + 2.0 / 3.0 + 1.0)?;
             }
-            (12.., "highway", "primary_link" | "secondary") => {
+            Some(RoadStyle::Secondary) => {
                 apply_highway_defaults(1.5 + 1.0 / 3.0);
                 context.set_source_color(colors::ROAD);
                 draw()?;
 
                 draw_bridges_tunnels(1.5 + 1.0 / 3.0 + 1.0)?;
             }
-            (12.., "highway", "construction") => {
+            Some(RoadStyle::Construction) => {
                 apply_highway_defaults(1.5 + 1.0 / 3.0);
                 context.set_source_color(colors::CONSTRUCTION_ROAD_1);
                 context.set_dash(&[5.0, 5.0], 0.0);
@@ -437,70 +552,60 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
                 context.set_dash(&[5.0, 5.0], 5.0);
                 draw()?;
             }
-            (12.., "highway", "secondary_link" | "tertiary" | "tertiary_link") => {
+            Some(RoadStyle::Tertiary) => {
                 apply_highway_defaults(1.5);
                 context.set_source_color(colors::ROAD);
                 draw()?;
 
                 draw_bridges_tunnels(1.5 + 1.0 / 3.0 + 1.0)?;
             }
-            (12..=13, "highway", "living_street" | "residential" | "unclassified" | "road") => {
+            Some(RoadStyle::ResidentialLow | RoadStyle::ParkingAisle) => {
                 apply_highway_defaults(1.0);
                 draw()?;
 
                 draw_bridges_tunnels(1.0 + 1.0)?;
             }
-            (14.., "highway", "living_street" | "residential" | "unclassified" | "road") => {
+            Some(RoadStyle::Residential) => {
                 apply_highway_defaults(1.0);
                 context.set_source_color(colors::ROAD);
                 draw()?;
 
                 draw_bridges_tunnels(1.0 + 1.0)?;
             }
-            (14.., "attraction", "water_slide") => {
+            Some(RoadStyle::WaterSlide) => {
                 apply_highway_defaults(1.5);
                 context.set_source_color(colors::WATER_SLIDE);
                 draw()?;
 
                 draw_bridges_tunnels(1.5 + 1.0)?;
             }
-            (14.., "highway", "service") if service == "parking_aisle" => {
-                apply_highway_defaults(1.0);
-                draw()?;
-
-                draw_bridges_tunnels(1.0 + 1.0)?;
-            }
-            (14.., _, "raceway") | (14.., "leisure", "track") => {
+            Some(RoadStyle::Raceway) => {
                 apply_highway_defaults(1.2);
                 context.set_dash(&[9.5, 1.5], 0.0);
                 draw()?;
 
                 draw_bridges_tunnels(1.2 + 1.0)?;
             }
-            (14.., "highway", "piste") => {
+            Some(RoadStyle::Piste) => {
                 apply_highway_defaults(1.2);
                 context.set_source_color(colors::PISTE);
                 draw()?;
 
                 draw_bridges_tunnels(1.2 + 1.0)?;
             }
-            (14.., "highway", "footway" | "pedestrian")
-            | (14.., "highway" | "railway" | "public_transport", "platform") => {
+            Some(RoadStyle::Footway | RoadStyle::Platform) => {
                 apply_highway_defaults(1.0);
                 context.set_dash(&[4.0, 2.0], 0.0);
                 draw()?;
 
                 draw_bridges_tunnels(1.0 + 1.0)?;
             }
-            (14.., "highway", "steps") => {
+            Some(RoadStyle::Steps) => {
                 apply_highway_defaults(2.5);
                 context.set_dash(&[1.0, 2.0], 2.0);
                 draw()?;
             }
-            (12.., "highway", _)
-                if typ == "service" && service != "parking_aisle"
-                    || ["escape", "corridor", "bus_guideway"].contains(&typ) =>
-            {
+            Some(RoadStyle::Service) => {
                 let width = ke() * 1.2;
 
                 apply_highway_defaults(width);
@@ -508,11 +613,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
 
                 draw_bridges_tunnels(width + 1.0)?;
             }
-            (12.., "highway", "path")
-                if bicycle == "designated"
-                    && foot == "designated"
-                    && (zoom > 12 || is_in_route) =>
-            {
+            Some(RoadStyle::PathBikeFoot) => {
                 let width = ke();
 
                 apply_highway_defaults(width);
@@ -522,11 +623,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
 
                 draw_bridges_tunnels(width + 1.0)?;
             }
-            (12.., "highway", _)
-                if (typ == "cycleway"
-                    || typ == "path" && bicycle == "designated" && foot != "designated")
-                    && (zoom > 12 || is_in_route) =>
-            {
+            Some(RoadStyle::Cycleway) => {
                 let width = ke();
 
                 apply_highway_defaults(width);
@@ -536,10 +633,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
 
                 draw_bridges_tunnels(width + 1.0)?;
             }
-            (12.., "highway", "path")
-                if (bicycle != "designated" || foot == "designated")
-                    && (zoom > 12 || is_in_route) =>
-            {
+            Some(RoadStyle::Path) => {
                 let width = ke();
 
                 apply_highway_defaults(width);
@@ -549,7 +643,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
 
                 draw_bridges_tunnels(width + 1.0)?;
             }
-            (12.., "highway", "bridleway") if zoom > 12 || is_in_route => {
+            Some(RoadStyle::Bridleway) => {
                 let width = ke();
 
                 apply_highway_defaults(width);
@@ -559,7 +653,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
 
                 draw_bridges_tunnels(width + 1.0)?;
             }
-            (12.., "highway", "via_ferrata") if zoom > 12 || is_in_route => {
+            Some(RoadStyle::ViaFerrata) => {
                 let width = ke();
 
                 apply_highway_defaults(width);
@@ -568,7 +662,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
 
                 draw_bridges_tunnels(width + 1.0)?;
             }
-            (12.., "highway", "track") if (zoom > 12 || is_in_route || tracktype == "grade1") => {
+            Some(RoadStyle::Track) => {
                 let width = ke() * 1.2;
 
                 apply_highway_defaults(width);
@@ -592,7 +686,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
                 draw_bridges_tunnels(width + 1.0)?;
             }
 
-            _ => (),
+            None => (),
         }
     }
 

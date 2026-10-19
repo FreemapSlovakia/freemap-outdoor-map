@@ -1,6 +1,10 @@
 use super::mapping;
-use super::{BuildOpts, LegendItem, mapping_path};
-use crate::render::layers::Category;
+use super::{BuildOpts, LegendItem, Lend, Row, mapping_path};
+use crate::render::layers::{
+    Category,
+    buildings::{self, Lifecycle},
+    national_park_label_flo,
+};
 use crate::render::legend::feature_lines::feature_lines;
 use crate::render::legend::graded_ways::graded_ways;
 use crate::render::legend::{landcovers::landcovers, pois::pois, roads::roads};
@@ -82,6 +86,11 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
         } else {
             MINOR_WATERWAY_FROM_ZOOM
         })
+        .present_when("water_lines", types, |row| {
+            row.get_bool("tmp").is_ok_and(|tmp| !tmp)
+                && row.get_bool("tunnel").is_ok_and(|tunnel| !tunnel)
+        })
+        .named_by("water_line_names", types, Lend::ITALIC_NAME)
         .add_feature("water_lines", |b| {
             b.with_line_string(false)
                 .with_name()
@@ -98,6 +107,9 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                     .add_tags(|tags| tags.add("waterway", "*").add("seasonal", "yes"))
             })
             .min_zoom(MINOR_WATERWAY_FROM_ZOOM)
+            .present_when("water_lines", &[], |row| {
+                row.get_bool("tmp").is_ok_and(|tmp| tmp)
+            })
             .add_feature("water_lines", |b| {
                 b.with_line_string(false)
                     .with_name()
@@ -109,6 +121,9 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
         LegendItem::builder("waterway_culvert", Category::Water, 17, opts)
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add("tunnel", "culvert")))
             .min_zoom(MINOR_WATERWAY_FROM_ZOOM)
+            .present_when("water_lines", &[], |row| {
+                row.get_bool("tunnel").is_ok_and(|tunnel| tunnel)
+            })
             .add_feature("water_lines", |b| {
                 b.with_line_string(false)
                     .with_name()
@@ -128,6 +143,10 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                     .add_tags(|tags| tags.add("natural", "water"))
                     .add_tags(|tags| tags.add("waterway", "waterway"))
             })
+            .present_when("water_areas", &[], |row| {
+                row.get_bool("tmp").is_ok_and(|tmp| !tmp)
+            })
+            .named_by("water_area_names", &[], Lend::ITALIC_NAME)
             .add_feature("water_areas", |b| {
                 b.with_polygon(true).with_name().with("tmp", false)
             })
@@ -136,6 +155,9 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
             .add_tag_set(|ts| {
                 ts.add_tags(|tags| tags.add("natural", "water").add("intermittent", "yes"))
                     .add_tags(|tags| tags.add("natural", "water").add("seasonal", "yes"))
+            })
+            .present_when("water_areas", &[], |row| {
+                row.get_bool("tmp").is_ok_and(|tmp| tmp)
             })
             .add_feature("water_areas", |b| {
                 b.with_polygon(true).with_name().with("tmp", true)
@@ -150,6 +172,7 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                     })
             })
             .min_zoom(12)
+            .present("solar_power_plants", &[])
             .add_feature("solar_power_plants", |b| b.with_polygon(false))
             .build(),
         LegendItem::builder("zoo", Category::Tourism, 17, opts)
@@ -158,6 +181,7 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                     .add_tags(|tags| tags.add("tourism", "theme_park"))
             })
             .min_zoom(13)
+            .present("special_parks", &[])
             .add_feature("special_parks", |b| b.with_polygon(true))
             .build(),
         LegendItem::builder("country_borders", Category::Borders, 17, opts)
@@ -171,11 +195,14 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
             // The low zoom stage that also draws borders is behind `RenderLayer::CountryNames`,
             // which legend renders do not ask for.
             .min_zoom(8)
+            .present("borders", &[])
+            .present("country_borders", &[])
             .add_feature("country_borders", |b| b.with_polygon(true))
             .build(),
         LegendItem::builder("military_areas", Category::Borders, 17, opts)
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add("landuse", "military")))
             .min_zoom(10)
+            .present("military_areas", &[])
             .add_feature("military_areas", |b| b.with_polygon(true))
             .build(),
         LegendItem::builder("nature_reserve", Category::Borders, 15, opts)
@@ -187,6 +214,12 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                     })
             })
             .min_zoom(PROTECTED_AREA_FROM_ZOOM)
+            .present("protected_areas_areas", &["nature_reserve"])
+            // The `_borders` stage names parks and ski resorts instead.
+            .named_by("bordered_area_names_centroids", &[], Lend::ITALIC_NAME)
+            .present_when("protected_areas_areas", &["protected_area"], |row| {
+                !is_national_park_class(row)
+            })
             .add_feature("protected_areas", |b| {
                 b.with("type", "nature_reserve")
                     .with_name()
@@ -203,6 +236,19 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                     })
             })
             .min_zoom(PROTECTED_AREA_FROM_ZOOM)
+            .present("protected_areas_areas", &["national_park"])
+            .named_by("national_park_names", &["national_park"], PARK_NAME)
+            .named_when(
+                "national_park_names",
+                &["protected_area"],
+                PARK_NAME,
+                is_national_park_class,
+            )
+            .present_when(
+                "protected_areas_areas",
+                &["protected_area"],
+                is_national_park_class,
+            )
             .add_feature("protected_areas", |b| {
                 b.with("type", "national_park")
                     .with_name()
@@ -213,6 +259,7 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
         LegendItem::builder("building", Category::Other, 17, opts)
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add("building", "*")))
             .min_zoom(BUILDING_FROM_ZOOM)
+            .present_when("buildings", &[], building_in(None))
             .add_feature("buildings", |b| b.with("type", "yes").with_polygon(false))
             .build(),
         LegendItem::builder("building_disused", Category::Other, 17, opts)
@@ -222,6 +269,7 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                     .add_tags(|tags| tags.add("disused:building", "*"))
             })
             .min_zoom(BUILDING_FROM_ZOOM)
+            .present_when("buildings", &[], building_in(Some(Lifecycle::Disused)))
             .add_feature("buildings", |b| {
                 b.with("type", "disused").with_polygon(false)
             })
@@ -233,6 +281,7 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                     .add_tags(|tags| tags.add("abandoned:building", "*"))
             })
             .min_zoom(BUILDING_FROM_ZOOM)
+            .present_when("buildings", &[], building_in(Some(Lifecycle::Abandoned)))
             .add_feature("buildings", |b| {
                 b.with("type", "abandoned").with_polygon(false)
             })
@@ -244,16 +293,20 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                     .add_tags(|tags| tags.add("ruins:building", "*"))
             })
             .min_zoom(BUILDING_FROM_ZOOM)
+            .present_when("buildings", &[], building_in(Some(Lifecycle::Ruins)))
             .add_feature("buildings", |b| b.with("type", "ruins").with_polygon(false))
             .build(),
         LegendItem::builder("fixme", Category::Other, 17, opts)
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add("fixme", "*")))
             .min_zoom(14)
+            .present("fixmes_points", &[])
+            .present("fixmes_line", &[])
             .add_feature("fixmes", |b| b.with("geometry", Point::new(0.0, 0.0)))
             .build(),
         LegendItem::builder("simple_tree", Category::NaturalPoi, 17, opts)
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add("natural", "tree")))
             .min_zoom(16)
+            .present("trees", &["tree"])
             .add_feature("trees", |b| {
                 b.with("type", "tree")
                     .with("geometry", Point::new(0.0, 0.0))
@@ -262,6 +315,7 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
         LegendItem::builder("simple_shrub", Category::NaturalPoi, 17, opts)
             .add_tag_set(|ts| ts.add_tags(|tags| tags.add("natural", "shrub")))
             .min_zoom(16)
+            .present("trees", &["shrub"])
             .add_feature("trees", |b| {
                 b.with("type", "shrub")
                     .with("geometry", Point::new(0.0, 0.0))
@@ -278,3 +332,19 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
         .chain(water)
         .collect()
 }
+
+/// A `protected_area` the map draws as a national park.
+fn is_national_park_class(row: &Row) -> bool {
+    row.get_string("protect_class")
+        .is_ok_and(|class| class == "2")
+}
+
+/// Buildings the map draws in `lifecycle`, or in use for `None`.
+fn building_in(lifecycle: Option<Lifecycle>) -> impl Fn(&Row) -> bool + Send + Sync + 'static {
+    move |row| {
+        row.get_string("type")
+            .is_ok_and(|typ| buildings::lifecycle(typ) == lifecycle)
+    }
+}
+
+const PARK_NAME: Lend = Lend::name(|row| national_park_label_flo(row.zoom()));

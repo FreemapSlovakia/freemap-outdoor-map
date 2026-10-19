@@ -18,7 +18,7 @@ use serde::Serialize;
 /// outdoor map: waymarking is listed with the paths it marks rather than as street
 /// furniture, and the things that decide whether a walk works at all - water, terrain,
 /// barriers, shelter - get sections of their own instead of sharing a catch-all.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Category {
     /// Roads, tracks and paths, the routes signed along them, and the waymarking itself
@@ -83,6 +83,14 @@ pub enum Category {
 }
 
 impl Category {
+    /// The key the client translates the group by: its serde name.
+    pub fn key(self) -> String {
+        match serde_json::to_value(self) {
+            Ok(serde_json::Value::String(key)) => key,
+            _ => unreachable!("a unit variant serializes to its name"),
+        }
+    }
+
     /// Whether this group is only worth drawing when you can actually reach or use it.
     ///
     /// A POI you cannot get into always shows the glow; this decides the two effects that

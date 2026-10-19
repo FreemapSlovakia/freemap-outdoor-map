@@ -27,6 +27,30 @@ pub async fn query(
         .await
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Lifecycle {
+    Disused,
+    Abandoned,
+    Ruins,
+}
+
+/// The lifecycle a building of `typ` is drawn in, or `None` for one in use.
+pub fn lifecycle(typ: &str) -> Option<Lifecycle> {
+    [
+        ("disused", Lifecycle::Disused),
+        ("abandoned", Lifecycle::Abandoned),
+        ("ruins", Lifecycle::Ruins),
+    ]
+    .into_iter()
+    .find(|(prefix, _)| {
+        typ == *prefix
+            || typ
+                .strip_prefix(prefix)
+                .is_some_and(|rest| rest.starts_with(':'))
+    })
+    .map(|(_, lifecycle)| lifecycle)
+}
+
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
     let _span = tracy_client::span!("buildings::render");
 
@@ -37,17 +61,14 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
 
         path_geometry(context, &geom);
 
-        let typ = row.get_string("type")?;
-
-        if typ.starts_with("disused:") || typ == "disused" {
-            draw_dashed(context, Some(0.66))?;
-        } else if typ.starts_with("abandoned:") || typ == "abandoned" {
-            draw_dashed(context, Some(0.33))?;
-        } else if typ.starts_with("ruins:") || typ == "ruins" {
-            draw_dashed(context, None)?;
-        } else {
-            context.set_source_color(colors::BUILDING);
-            context.fill()?;
+        match lifecycle(row.get_string("type")?) {
+            Some(Lifecycle::Disused) => draw_dashed(context, Some(0.66))?,
+            Some(Lifecycle::Abandoned) => draw_dashed(context, Some(0.33))?,
+            Some(Lifecycle::Ruins) => draw_dashed(context, None)?,
+            None => {
+                context.set_source_color(colors::BUILDING);
+                context.fill()?;
+            }
         }
     }
 

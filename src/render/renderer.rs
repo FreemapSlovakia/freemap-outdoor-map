@@ -2,15 +2,24 @@ use crate::render::{
     PlaceTypeOverrides,
     attribution::Attribution,
     image_format::{ImageFormat, WebpQuality},
-    layers,
-    render_request::RenderRequest,
+    layers::{
+        self,
+        legend_panel::{Entry, Panel},
+    },
+    legend::{LegendPresence, legend_sample_request, legend_sample_size},
+    render_request::{LegendDecoration, RenderRequest},
+    size::Size,
     svg_repo::SvgRepo,
     xyz::bbox_size_in_pixels,
 };
-use cairo::{Format, ImageSurface, PdfSurface, Surface, SvgSurface, SvgUnit};
+use cairo::{
+    Content, Context, Format, ImageSurface, PdfSurface, RecordingSurface, Rectangle, Surface,
+    SvgSurface, SvgUnit,
+};
 use deadpool_postgres::Pool;
 use image::codecs::jpeg::{JpegEncoder, PixelDensity};
 use image::{ExtendedColorType, ImageEncoder};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::runtime::Handle;
 
@@ -68,19 +77,83 @@ pub fn render(
 ) -> Result<RenderOutput, RenderError> {
     let _span = tracy_client::span!("render_tile");
 
-    let size = bbox_size_in_pixels(request.bbox, request.zoom as f64);
+    let map_size = bbox_size_in_pixels(request.bbox, request.zoom as f64);
 
-    let render = |surface: &Surface| {
-        layers::render(
-            surface,
+    let legend = request
+        .decorations
+        .as_ref()
+        .and_then(|decorations| decorations.legend.as_ref());
+
+    // What the panel lists is known only once the map is drawn, and the panel
+    // decides the image's width, so with a legend the map is recorded first.
+    let source = match legend {
+        Some(legend) => Source::Composed(compose(
             request,
+            legend,
             shading,
             place_type_overrides,
             pool,
             handle,
-            size,
+            map_size,
             svg_repo,
-        )
+        )?),
+        None => Source::Direct {
+            shading,
+            place_type_overrides,
+            pool,
+            handle,
+        },
+    };
+
+    let size = match &source {
+        Source::Composed(Composed {
+            panel: Some(panel), ..
+        }) => Size::new(map_size.width + panel.width as u32, map_size.height),
+        _ => map_size,
+    };
+
+    let render = |surface: &Surface| -> Result<Attribution, RenderError> {
+        match source {
+            Source::Direct {
+                shading,
+                place_type_overrides,
+                pool,
+                handle,
+            } => Ok(layers::render(
+                surface,
+                request,
+                shading,
+                place_type_overrides,
+                pool,
+                handle,
+                map_size,
+                svg_repo,
+                None,
+            )?),
+            Source::Composed(Composed {
+                map,
+                panel,
+                attribution,
+            }) => {
+                let context = Context::new(surface)?;
+
+                context.set_source_surface(&map, 0.0, 0.0)?;
+                context.paint()?;
+
+                if let Some(panel) = panel {
+                    context.scale(request.scale, request.scale);
+
+                    panel.draw(
+                        &context,
+                        map_size.width as f64,
+                        map_size.height as f64,
+                        request.scale,
+                    )?;
+                }
+
+                Ok(attribution)
+            }
+        }
     };
 
     match request.format {
@@ -254,6 +327,148 @@ pub fn render(
             })
         }
     }
+}
+
+/// What the image is drawn from.
+enum Source<'a> {
+    /// The map, drawn straight into the image.
+    Direct {
+        shading: layers::Shading<'a>,
+        place_type_overrides: Option<Arc<PlaceTypeOverrides>>,
+        pool: Pool,
+        handle: Handle,
+    },
+    Composed(Composed),
+}
+
+/// A map recorded ahead of the image it goes into, and the legend panel beside it.
+struct Composed {
+    map: RecordingSurface,
+    panel: Option<Panel>,
+    attribution: Attribution,
+}
+
+/// Records the map, then the samples of the legend items it drew. Recorded
+/// surfaces replay as vectors into a PDF or SVG.
+#[allow(clippy::too_many_arguments)]
+fn compose(
+    request: &RenderRequest,
+    legend: &LegendDecoration,
+    shading: layers::Shading<'_>,
+    place_type_overrides: Option<Arc<PlaceTypeOverrides>>,
+    pool: Pool,
+    handle: Handle,
+    size: Size<u32>,
+    svg_repo: &mut SvgRepo,
+) -> Result<Composed, RenderError> {
+    let recording = |size: Size<u32>| {
+        RecordingSurface::create(
+            Content::ColorAlpha,
+            Some(Rectangle::new(
+                0.0,
+                0.0,
+                size.width as f64 * request.scale,
+                size.height as f64 * request.scale,
+            )),
+        )
+    };
+
+    let map = recording(size)?;
+
+    let mut presence = LegendPresence::new(request.zoom, &request.layers, request.bbox);
+
+    let attribution = layers::render(
+        &map,
+        request,
+        shading,
+        place_type_overrides,
+        pool.clone(),
+        handle.clone(),
+        size,
+        svg_repo,
+        Some(&mut presence),
+    )?;
+
+    let found = presence.found();
+
+    let mut entries: Vec<Entry> = found
+        .iter()
+        .enumerate()
+        .filter_map(|(id, found)| {
+            Some(Entry {
+                category: found.item.meta.category,
+                label: legend.items.get(found.item.meta.id)?.clone(),
+                id,
+            })
+        })
+        .collect();
+
+    let sample_size = legend_sample_size(request.zoom);
+
+    let mut samples = HashMap::new();
+
+    // Samples only for the entries the panel has room for. One that fails costs
+    // its entry, not the export, and the rest are laid out again without it.
+    let panel = loop {
+        let Some(mut panel) = Panel::layout(legend, entries.clone(), sample_size, size) else {
+            break None;
+        };
+
+        let missing: Vec<usize> = panel
+            .placed()
+            .filter(|id| !samples.contains_key(id))
+            .collect();
+
+        let mut failed = Vec::new();
+
+        for id in missing {
+            let found = &found[id];
+
+            let sample_request = legend_sample_request(found, request.scale, &request.layers);
+
+            let sample = recording(sample_size)?;
+
+            match layers::render(
+                &sample,
+                &sample_request,
+                layers::Shading {
+                    hierarchy: None,
+                    contour_countries: None,
+                    feature_line_mask_countries: None,
+                    datasets: None,
+                },
+                None,
+                pool.clone(),
+                handle.clone(),
+                sample_size,
+                svg_repo,
+                None,
+            ) {
+                Ok(_) => {
+                    samples.insert(id, sample);
+                }
+                Err(err) => {
+                    eprintln!("legend sample {} failed: {err}", found.item.meta.id);
+
+                    failed.push(id);
+                }
+            }
+        }
+
+        if failed.is_empty() {
+            panel.add_samples(|id| samples.remove(&id));
+
+            break Some(panel);
+        }
+
+        entries.retain(|entry| !failed.contains(&entry.id));
+    };
+
+    Ok(Composed {
+        map,
+        panel,
+        attribution,
+    })
 }
 
 /// Cairo's `ARgb32` is premultiplied BGRA in native byte order; WebP wants

@@ -39,6 +39,8 @@ pub struct Ctx {
     pub tile_projector: TileProjector,
     pub scale: f64,
     pub legend: Option<LegendItemData>,
+    /// Route labels also fetch their refs by route kind, for an export's legend.
+    pub refs_by_kind: bool,
     pub place_type_overrides: Option<Arc<PlaceTypeOverrides>>,
 }
 

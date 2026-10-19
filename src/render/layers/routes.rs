@@ -20,7 +20,7 @@ use crate::render::{
 use cairo::{Context, RecordingSurface};
 use colorsys::{Rgb, RgbRatio};
 use geo::Geometry;
-use std::{borrow::Cow, rc::Rc};
+use std::{borrow::Cow, fmt::Write as _, rc::Rc};
 
 const COLOR_SQL: &str = r#"
   CASE
@@ -57,7 +57,8 @@ const LABEL_SQL: &str = r#"
   )
 "#;
 
-const COLORS: [(&str, &str); 9] = [
+/// Route colours by name, each with a marking column per route kind.
+pub const COLORS: [(&str, &str); 9] = [
     ("none", "a0a0a0"),
     ("purple", "c000c0"),
     ("orange", "ff8000"),
@@ -80,10 +81,55 @@ fn format_vec(vec: &[&str]) -> String {
     }
 }
 
+/// Refs columns of one route kind each, besides `refs1`/`refs2`, which hold every
+/// kind drawn on their side. Only the legend reads them.
+const KIND_REFS: [(&str, &str, &[RenderLayer]); 5] = [
+    (
+        "refs_hiking",
+        "osm_routes.type IN ('hiking', 'foot', 'running') AND network IN ('iwn', 'nwn', 'rwn')",
+        &[RenderLayer::RoutesHiking, RenderLayer::RoutesHikingKst],
+    ),
+    (
+        "refs_hiking_loc",
+        "osm_routes.type IN ('hiking', 'foot', 'running') AND COALESCE(network, '') NOT IN ('iwn', 'nwn', 'rwn')",
+        &[RenderLayer::RoutesHiking, RenderLayer::RoutesHikingKst],
+    ),
+    (
+        "refs_horse",
+        "osm_routes.type = 'horse'",
+        &[RenderLayer::RoutesHorse],
+    ),
+    (
+        "refs_bicycle",
+        "osm_routes.type IN ('bicycle', 'mtb')",
+        &[RenderLayer::RoutesBicycle],
+    ),
+    (
+        "refs_ski",
+        "osm_routes.type IN ('ski', 'piste')",
+        &[RenderLayer::RoutesSki],
+    ),
+];
+
+/// The refs of the routes `condition` selects, one label item per line.
+fn refs_sql(condition: &str) -> String {
+    format!("
+                array_to_string(
+                    array(
+                        SELECT itm
+                        FROM unnest(
+                            array_agg(CASE WHEN {condition} THEN {LABEL_SQL} ELSE null END)
+                        ) AS itm GROUP BY itm ORDER BY COALESCE(NULLIF(split_part(itm, E'\\t', 1), ''), split_part(itm, E'\\t', 2)), itm
+                    ),
+                    E'\\n'
+                )")
+}
+
 fn get_routes_query(
     render: &Layers,
     include_networks: Option<Vec<&str>>,
     gen_suffix: &str,
+    refs_by_kind: bool,
 ) -> String {
     let mut lefts = Vec::<&str>::new();
 
@@ -144,6 +190,25 @@ fn get_routes_query(
     let bool_bicycle = render.draws(RenderLayer::RoutesBicycle);
     let bool_ski = render.draws(RenderLayer::RoutesSki);
 
+    let refs1 = refs_sql(&format!("osm_routes.type IN ({lefts_in})"));
+    let refs2 = refs_sql(&format!("osm_routes.type IN ({rights_in})"));
+
+    let mut kind_refs = String::new();
+    let mut kind_refs_sql = String::new();
+
+    if refs_by_kind {
+        for (column, condition, layers) in KIND_REFS {
+            if !layers.iter().any(|layer| render.draws(*layer)) {
+                continue;
+            }
+
+            // Aggregated, not grouped by: a legend must not change how labels group.
+            // A member without the kind has '' there, which would sort first.
+            let _ = write!(kind_refs, ", min(NULLIF({column}, '')) AS {column}");
+            let _ = write!(kind_refs_sql, ",{} AS {column}", refs_sql(condition));
+        }
+    }
+
     format!("
         SELECT
             ST_Multi(ST_LineMerge(ST_Collect(geometry))) AS geometry,
@@ -193,45 +258,11 @@ fn get_routes_query(
             idx(arr1, 47) AS r_purple,
             idx(arr1, 48) AS r_none,
             refs1,
-            refs2,
+            refs2{kind_refs},
             icount(arr1 - array[1000, 1010, 1020, 1030, 1040]) AS off1,
             icount(arr2 - array[1000, 1010, 1020, 1030, 1040]) AS off2
         FROM (
-            SELECT
-                array_to_string(
-                    array(
-                        SELECT itm
-                        FROM unnest(
-                            array_agg(
-                                CASE WHEN
-                                    osm_routes.type IN ({lefts_in})
-                                THEN
-                                    {LABEL_SQL}
-                                ELSE
-                                    null
-                                END
-                            )
-                        ) AS itm GROUP BY itm ORDER BY COALESCE(NULLIF(split_part(itm, E'\\t', 1), ''), split_part(itm, E'\\t', 2)), itm
-                    ),
-                    E'\n'
-                ) AS refs1,
-                array_to_string(
-                    array(
-                        SELECT itm FROM unnest(
-                            array_agg(
-                                CASE
-                                WHEN
-                                    osm_routes.type IN ({rights_in})
-                                THEN
-                                    {LABEL_SQL}
-                                ELSE
-                                    null
-                                END
-                            )
-                        ) AS itm GROUP BY itm ORDER BY COALESCE(NULLIF(split_part(itm, E'\\t', 1), ''), split_part(itm, E'\\t', 2)), itm
-                    ),
-                    E'\n'
-                ) AS refs2,
+            SELECT{refs1} AS refs1,{refs2} AS refs2{kind_refs_sql},
                 first(geometry) AS geometry,
                 uniq(sort(array_agg(
                     CASE
@@ -299,14 +330,20 @@ pub async fn query_marking(
         };
 
     let sql = match z {
-        9 => get_routes_query(render, Some(vec!["iwn", "icn"]), "_gen0"),
-        10 => get_routes_query(render, Some(vec!["iwn", "nwn", "icn", "ncn"]), "_gen1"),
+        9 => get_routes_query(render, Some(vec!["iwn", "icn"]), "_gen0", false),
+        10 => get_routes_query(
+            render,
+            Some(vec!["iwn", "nwn", "icn", "ncn"]),
+            "_gen1",
+            false,
+        ),
         11 => get_routes_query(
             render,
             Some(vec!["iwn", "nwn", "rwn", "icn", "ncn", "rcn"]),
             "_gen1",
+            false,
         ),
-        12.. => get_routes_query(render, None, ""),
+        12.. => get_routes_query(render, None, "", false),
         _ => return Ok(Vec::new()),
     };
 
@@ -483,7 +520,7 @@ pub async fn query_labels(
     client: &tokio_postgres::Client,
     render: &Layers,
 ) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
-    let query = get_routes_query(render, None, "");
+    let query = get_routes_query(render, None, "", ctx.refs_by_kind);
 
     client
         .query(&query, &ctx.bbox_query_params(Some(2048.0)).as_params())

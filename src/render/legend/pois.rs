@@ -1,10 +1,12 @@
+use crate::render::draw::font_options::FontAndLayoutOptions;
 use crate::render::{
     layers::{
-        Category, Def, INACCESSIBLE_ZOOM_DELAY, POI_ORDER, POIS, SHOP_TYPES,
+        Category, Def, INACCESSIBLE_ZOOM_DELAY, Look, POI_ORDER, POIS, SHOP_TYPES, SpringLook,
         WAYMARKING_LEGEND_TYPES,
     },
     legend::{
-        BuildOpts, LegendItem, LegendItemBuilder, MAX_LEGEND_ZOOM, build_tags_map, leak_str,
+        BuildOpts, LegendItem, LegendItemBuilder, Lend, MAX_LEGEND_ZOOM, Row, build_tags_map,
+        leak_str,
         mapping::{self, MappingEntry},
     },
 };
@@ -12,6 +14,7 @@ use geo::Point;
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 use std::ops::RangeInclusive;
+use std::sync::Arc;
 
 /// Sample zoom when the legend is requested without one.
 const PREFERRED_POI_ZOOM: u8 = 19;
@@ -148,6 +151,8 @@ pub fn pois(
         (*group.zooms.start(), rank)
     });
 
+    let members = members_by_visual_key();
+
     poi_groups
         .into_iter()
         .map(|(visual_key, group)| {
@@ -188,6 +193,12 @@ pub fn pois(
                 ts
             })
             .add_poi(repr_typ, HashMap::new(), category)
+            .present_poi(members.get(visual_key), move |typ, look| {
+                // A mineral spring has a glyph and an item of its own.
+                !look.is_ruins
+                    && look.def.legend_key(typ) == visual_key
+                    && look.spring.as_ref().is_none_or(|spring| !spring.mineral)
+            })
             .build()
         })
         .chain(
@@ -242,6 +253,11 @@ pub fn pois(
                     )]),
                     Category::Water,
                 )
+                .present_poi(members.get("spring"), move |_, look| {
+                    look.spring
+                        .as_ref()
+                        .is_some_and(|spring| spring_shows(spring, prop_name, prop_value))
+                })
                 .build()
             }),
         )
@@ -260,6 +276,7 @@ pub fn pois(
                     )]),
                     Category::Other,
                 )
+                .present_poi(None, |_, look| look.restricted_glow())
                 .build()
         }])
         .chain([{
@@ -278,9 +295,44 @@ pub fn pois(
                     HashMap::<String, Option<String>>::from([("ruins".into(), Some("yes".into()))]),
                     Category::Other,
                 )
+                .present_poi(None, |_, look| look.is_ruins)
                 .build()
         }])
         .collect()
+}
+
+/// Every POI type by the legend item its icon is listed under, the `_noname`
+/// variants included.
+fn members_by_visual_key() -> HashMap<&'static str, Vec<&'static str>> {
+    let mut members: HashMap<&'static str, Vec<&'static str>> = HashMap::new();
+
+    for (typ, defs) in POIS.iter() {
+        for def in defs {
+            let key = def.legend_key(typ);
+
+            let types = members.entry(key).or_default();
+
+            if !types.contains(typ) {
+                types.push(typ);
+            }
+        }
+    }
+
+    members
+}
+
+/// Whether a spring drawn with `look` shows what the `poi_spring_*` item for
+/// `prop = value` is about.
+fn spring_shows(look: &SpringLook, prop: &str, value: &str) -> bool {
+    match (prop, value) {
+        ("water_characteristic", _) => look.mineral,
+        ("refitted", _) => look.refitted,
+        ("hot", _) => look.hot,
+        ("intermittent", _) => look.intermittent,
+        ("drinkable", "yes") => look.drinkable == Some(true),
+        ("drinkable", _) => look.drinkable == Some(false),
+        _ => false,
+    }
 }
 
 /// Zooms at which the POI layer draws any of these definitions, straight from the renderer's
@@ -422,6 +474,40 @@ fn build_poi_tags(
 }
 
 impl LegendItemBuilder<'_> {
+    /// The item is drawn wherever the POI layers fetch a row of one of `types` (of any
+    /// type, when `None`) that passes `when`.
+    fn present_poi(
+        self,
+        types: Option<&Vec<&'static str>>,
+        when: impl Fn(&str, &Look) -> bool + Send + Sync + 'static,
+    ) -> Self {
+        let types = types.map_or(&[] as &[&str], Vec::as_slice);
+
+        // Only rows the POI layer draws at the render's zoom.
+        let test = Arc::new(move |row: &Row| {
+            let (Ok(typ), Some(look)) = (row.get_string("type"), row.poi_look()) else {
+                return false;
+            };
+
+            when(typ, look)
+        });
+
+        // Waymarking is drawn by a stage of its own on an overlay.
+        ["poi_icons", "waymarking"]
+            .into_iter()
+            .fold(self, |builder, stage| {
+                let test = Arc::clone(&test);
+
+                builder.rule(
+                    stage,
+                    types,
+                    Some(Box::new(move |row| test(row))),
+                    true,
+                    Some(POI_NAME),
+                )
+            })
+    }
+
     fn add_poi(
         self,
         typ: &'static str,
@@ -487,3 +573,9 @@ impl LegendItemBuilder<'_> {
         }
     }
 }
+
+/// A POI's name, in the font its definition labels it in.
+const POI_NAME: Lend = Lend::name(|row| {
+    row.poi_look()
+        .map_or_else(FontAndLayoutOptions::default, |look| look.def.label_flo())
+});

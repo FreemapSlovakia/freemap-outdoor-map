@@ -1,7 +1,7 @@
 use crate::render::{
     layers::{Category, PAINT_DEFS},
     legend::{
-        BuildOpts, LegendItem, build_tags_map, leak_str,
+        BuildOpts, LegendItem, Lend, build_tags_map, leak_str,
         mapping::{MappingEntry, MappingKind},
     },
 };
@@ -66,6 +66,8 @@ pub fn landcovers(mapping_entries: &[MappingEntry], opts: BuildOpts) -> Vec<Lege
             };
 
             builder
+                .present("landcovers", types)
+                .named_by("landcover_names", types, Lend::ITALIC_NAME)
                 .add_feature("landcovers", |b| {
                     b.with("type", id_typ).with_name().with_polygon(skew)
                 })

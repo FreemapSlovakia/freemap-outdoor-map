@@ -64,6 +64,23 @@ fn access_denied(value: &str) -> bool {
     !matches!(value, "" | "yes" | "designated" | "official" | "permissive")
 }
 
+/// Whether a row's access tags forbid (bicycles, pedestrians), as its marks show;
+/// `None` for a road that carries no marks.
+pub fn forbids(row: &Feature) -> Option<(bool, bool)> {
+    if UNDRAWN_TYPES.contains(&row.get_string("type").ok()?) {
+        return None;
+    }
+
+    let bits = restriction(
+        row.get_string("access").ok()?,
+        row.get_string("vehicle").ok()?,
+        row.get_string("bicycle").ok()?,
+        row.get_string("foot").ok()?,
+    );
+
+    Some((bits & NO_BICYCLE != 0, bits & NO_FOOT != 0))
+}
+
 /// Restriction bits of a road; an unknown access value counts as forbidden.
 fn restriction(access: &str, vehicle: &str, bicycle: &str, foot: &str) -> u8 {
     let mut bits = 0;

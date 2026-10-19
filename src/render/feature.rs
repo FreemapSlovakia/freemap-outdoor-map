@@ -9,6 +9,8 @@ use tokio_postgres::Row;
 #[derive(Clone, Debug)]
 pub enum LegendValue {
     String(&'static str),
+    /// Text taken from the map being rendered.
+    Text(String),
     Bool(bool),
     #[allow(dead_code)]
     F32(f32),
@@ -103,7 +105,7 @@ impl WrongTypeError {
 
 const fn legend_value_type(value: &LegendValue) -> &'static str {
     match value {
-        LegendValue::String(_) => "String",
+        LegendValue::String(_) | LegendValue::Text(_) => "String",
         LegendValue::Bool(_) => "Bool",
         LegendValue::F64(_) => "F64",
         LegendValue::F32(_) => "F32",
@@ -227,6 +229,7 @@ impl Feature {
                 expected: "String",
             })? {
                 LegendValue::String(string) => Ok(string),
+                LegendValue::Text(string) => Ok(string),
                 other => Err(WrongTypeError::new(arg, "String", legend_value_type(other)).into()),
             },
         }

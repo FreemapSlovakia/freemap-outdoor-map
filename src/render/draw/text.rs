@@ -67,6 +67,25 @@ impl From<&TextOptions<'_>> for HaloPaint {
     }
 }
 
+/// Width of `text` laid out on one line, in logical pixels.
+pub fn measure_line(text: &str, flo: &FontAndLayoutOptions) -> f64 {
+    let text = label_text(text, flo);
+
+    with_font_system(|font_system| {
+        let metrics = Metrics::new(flo.size as f32, flo.size as f32);
+        let mut buffer = Buffer::new(font_system, metrics);
+
+        let mut buf = buffer.borrow_with(font_system);
+        buf.set_size(Some(f32::INFINITY), None);
+        buf.set_text(&text, &label_attrs(flo), Shaping::Advanced, None);
+        buf.shape_until_scroll(true);
+
+        buf.layout_runs()
+            .map(|run| run.line_w)
+            .fold(0.0f32, f32::max) as f64
+    })
+}
+
 pub fn draw_text(
     context: &Context,
     collision: Option<&mut Collision>,

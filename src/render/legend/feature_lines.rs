@@ -1,7 +1,7 @@
 use crate::render::{
     RenderLayer,
     layers::Category,
-    legend::{BuildOpts, LegendItem, leak_str, mapping::MappingEntry},
+    legend::{BuildOpts, LegendItem, Lend, leak_str, mapping::MappingEntry},
 };
 use geo::Point;
 use indexmap::IndexMap;
@@ -140,6 +140,22 @@ pub fn feature_lines(
                             .with("under", types[0] == "pipeline_under")
                             .with_line_string(false)
                     });
+
+            // `pipeline_under` is a `pipeline` row with `under` set, not a type of its own.
+            item = match types[0] {
+                "pipeline" => item.present_when("feature_lines", &["pipeline"], |row| {
+                    row.get_bool("under").is_ok_and(|under| !under)
+                }),
+                "pipeline_under" => item.present_when("feature_lines", &["pipeline"], |row| {
+                    row.get_bool("under").is_ok_and(|under| under)
+                }),
+                "cable_car" => item.present("feature_lines", types).named_by(
+                    "aerialway_names",
+                    &[],
+                    Lend::NAME,
+                ),
+                _ => item.present("feature_lines", types),
+            };
 
             if types[0] == "line" {
                 item = item.add_feature("power_towers_poles", |b| {
