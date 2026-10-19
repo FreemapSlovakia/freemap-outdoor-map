@@ -108,24 +108,27 @@ pub struct Presence {
 pub struct Lend {
     pub from: &'static str,
     pub into: &'static str,
-    /// For a feature's name, the font the stage draws a row's name in: a name has
-    /// to fit on one line, and brings a POI's elevation along. Refs carry symbols.
-    pub name_font: Option<fn(&Row) -> FontAndLayoutOptions>,
+    /// For a feature's name, the font the stage draws a row's name in, or `None`
+    /// where it draws none: a name has to fit on one line, and brings a POI's
+    /// elevation along. Refs carry symbols.
+    pub name_font: Option<fn(&Row) -> Option<FontAndLayoutOptions>>,
     /// The part of the text the sample can show.
     pub pick: Option<fn(&str) -> String>,
 }
 
 impl Lend {
     /// A name in the labels' usual font.
-    pub const NAME: Self = Self::name(|_| FontAndLayoutOptions::default());
+    pub const NAME: Self = Self::name(|_| Some(FontAndLayoutOptions::default()));
 
     /// A name in italics, as water and areas are named.
-    pub const ITALIC_NAME: Self = Self::name(|_| FontAndLayoutOptions {
-        style: Style::Italic,
-        ..FontAndLayoutOptions::default()
+    pub const ITALIC_NAME: Self = Self::name(|_| {
+        Some(FontAndLayoutOptions {
+            style: Style::Italic,
+            ..FontAndLayoutOptions::default()
+        })
     });
 
-    pub const fn name(font: fn(&Row) -> FontAndLayoutOptions) -> Self {
+    pub const fn name(font: fn(&Row) -> Option<FontAndLayoutOptions>) -> Self {
         Self {
             from: "name",
             into: "name",
@@ -203,7 +206,9 @@ impl Lending {
     fn offer(&mut self, idx: usize, lend: Lend, text: &str, row: &Row) {
         // A second line would be cut off by the sample's edge.
         if let Some(font) = lend.name_font {
-            let flo = font(row);
+            let Some(flo) = font(row) else {
+                return;
+            };
 
             let key = ShapeKey::new("", &flo);
 

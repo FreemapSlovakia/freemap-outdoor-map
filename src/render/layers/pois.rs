@@ -19,6 +19,7 @@ use cosmic_text::{Style, Weight};
 use geo::{Point, Rect};
 use std::fmt::Write as _;
 use std::{
+    borrow::Cow,
     collections::{HashMap, HashSet},
     sync::LazyLock,
 };
@@ -1437,6 +1438,21 @@ fn spring_variant(look: &SpringLook) -> (Vec<String>, Option<String>) {
     (names, Some(stylesheet))
 }
 
+/// The size of a label's elevation line, against its name's.
+const ELE_SCALE: f32 = 0.8;
+
+/// The gap between an icon and the label first tried above it.
+const LABEL_GAP: f64 = 3.0;
+
+/// The label [`render_labels`] draws for a POI of `def` named `name`: the elevation
+/// goes on a line of its own where the definition shows one.
+fn label_text<'a>(def: &Def, name: &'a str, ele: Option<&str>) -> Cow<'a, str> {
+    match ele {
+        Some(ele) if def.with_ele => Cow::Owned(format!("{name}\n{ele}").trim().to_owned()),
+        _ => Cow::Borrowed(name),
+    }
+}
+
 /// How [`render_icons`] draws a POI.
 pub struct Look<'a> {
     pub def: &'static Def,
@@ -1457,6 +1473,45 @@ impl Look<'_> {
     /// Whether the icon wears the glow marking it out of bounds.
     pub const fn restricted_glow(&self) -> bool {
         self.restricted && self.def.extra.halo
+    }
+
+    /// Whether the icon is labelled at `zoom`.
+    pub const fn labelled(&self, zoom: u8) -> bool {
+        self.def.min_text_zoom + self.delay <= zoom
+    }
+
+    /// Whether a POI labelled at its zoom gets a label, named `name` with elevation
+    /// `ele`.
+    fn has_label(&self, name: &str, ele: Option<&str>) -> bool {
+        // A spot height carries no name - its elevation is the whole label, so an
+        // empty name is not on its own a reason to skip labelling.
+        !name.is_empty() || self.def.extra.ele_only_label && ele.is_some_and(|ele| !ele.is_empty())
+    }
+
+    /// How far above the icon's top the label [`render_labels`] draws for a POI
+    /// named `name` with `extra` reaches, or `None` where it draws none.
+    pub fn label_height(
+        &self,
+        zoom: u8,
+        name: &str,
+        extra: &HashMap<String, Option<String>>,
+    ) -> Option<f64> {
+        let ele = extra.get("ele").and_then(Option::as_deref);
+
+        if !self.labelled(zoom) || !self.has_label(name, ele) {
+            return None;
+        }
+
+        let name = replace(name, &self.def.extra.replacements);
+
+        let lines = label_text(self.def, &name, ele).lines().count();
+
+        // Lines after the first are drawn at `ELE_SCALE`.
+        (lines > 0).then(|| {
+            let lines = ((lines - 1) as f64).mul_add(f64::from(ELE_SCALE), 1.0);
+
+            self.def.label_flo().size.mul_add(lines, LABEL_GAP)
+        })
     }
 }
 
@@ -1547,8 +1602,7 @@ pub fn render_icons(
             key,
             is_ruins,
             fade,
-            delay,
-            spring,
+            ref spring,
             ..
         } = look;
 
@@ -1602,17 +1656,12 @@ pub fn render_icons(
 
             let bbox_idx = collision.add(bbox);
 
-            if def.min_text_zoom + delay <= zoom {
+            if look.labelled(zoom) {
                 let name = row.get_string("name")?;
 
                 let ele = extra.get("ele").and_then(Option::clone);
 
-                // A spot height carries no name - its elevation is the whole label, so
-                // an empty name is not on its own a reason to skip labelling.
-                let has_ele =
-                    def.extra.ele_only_label && ele.as_deref().is_some_and(|e| !e.is_empty());
-
-                if !name.is_empty() || has_ele {
+                if look.has_label(name, ele.as_deref()) {
                     let name = replace(name, &def.extra.replacements);
 
                     to_label.push(PendingLabel {
@@ -1678,7 +1727,7 @@ pub fn render_labels(
             }),
             valign_by_placement: true,
             placements: &[
-                (0.0, -d - 3.0),
+                (0.0, -d - LABEL_GAP),
                 (0.0, d - 3.0),
                 (0.0, -d - 5.0),
                 (0.0, d - 1.0),
@@ -1686,23 +1735,17 @@ pub fn render_labels(
                 (0.0, d + 1.0),
             ],
             omit_bbox: Some(bbox_idx),
-            sub_size_scale: Some(0.8),
+            sub_size_scale: Some(ELE_SCALE),
             ..Default::default()
         };
 
-        if def.with_ele
-            && let Some(ele) = ele
-        {
-            draw_text(
-                context,
-                Some(collision),
-                &point,
-                format!("{name}\n{ele}").trim(),
-                &text_options,
-            )?
-        } else {
-            draw_text(context, Some(collision), &point, &name, &text_options)?
-        };
+        draw_text(
+            context,
+            Some(collision),
+            &point,
+            &label_text(def, &name, ele.as_deref()),
+            &text_options,
+        )?;
     }
 
     Ok(())

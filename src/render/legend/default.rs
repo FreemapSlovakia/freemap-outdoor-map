@@ -347,4 +347,4 @@ fn building_in(lifecycle: Option<Lifecycle>) -> impl Fn(&Row) -> bool + Send + S
     }
 }
 
-const PARK_NAME: Lend = Lend::name(|row| national_park_label_flo(row.zoom()));
+const PARK_NAME: Lend = Lend::name(|row| Some(national_park_label_flo(row.zoom())));

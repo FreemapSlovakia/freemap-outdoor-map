@@ -25,6 +25,17 @@ pub enum LegendValue {
     Geometry(Geometry),
 }
 
+impl LegendValue {
+    /// The text a string value holds.
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Self::String(text) => Some(text),
+            Self::Text(text) => Some(text),
+            _ => None,
+        }
+    }
+}
+
 impl From<f64> for LegendValue {
     fn from(value: f64) -> Self {
         Self::F64(value)
@@ -224,14 +235,16 @@ impl Feature {
     pub(crate) fn get_string(&self, arg: &str) -> Result<&str, FeatureError> {
         match self {
             Self::Row(row) => Ok(row.try_get(arg)?),
-            Self::LegendData(data) => match data.get(arg).ok_or(FeatureError::MissingValue {
-                field: arg.to_string(),
-                expected: "String",
-            })? {
-                LegendValue::String(string) => Ok(string),
-                LegendValue::Text(string) => Ok(string),
-                other => Err(WrongTypeError::new(arg, "String", legend_value_type(other)).into()),
-            },
+            Self::LegendData(data) => {
+                let value = data.get(arg).ok_or(FeatureError::MissingValue {
+                    field: arg.to_string(),
+                    expected: "String",
+                })?;
+
+                value.as_str().ok_or_else(|| {
+                    WrongTypeError::new(arg, "String", legend_value_type(value)).into()
+                })
+            }
         }
     }
 

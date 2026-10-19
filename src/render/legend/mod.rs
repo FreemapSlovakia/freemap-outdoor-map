@@ -12,11 +12,11 @@ mod zoom_range_test;
 
 pub use presence::{Found, LegendPresence, Lend, Presence, Row, RowTest};
 
-use crate::render::layers::Category;
+use crate::render::layers::{Category, poi_look};
 use crate::render::{
     ImageFormat, Layers, LegendValue, RenderLayer, RenderRequest, bbox_size_in_pixels, size::Size,
 };
-use geo::{Coord, LineString, Polygon, Rect};
+use geo::{Coord, LineString, Point, Polygon, Rect};
 use indexmap::IndexMap;
 use serde::Deserialize;
 use serde::Serialize;
@@ -442,6 +442,32 @@ pub fn legend_render_request(
     ))
 }
 
+/// Lowers each POI sample's icon by half the label the POI layer draws above it,
+/// so the two are centred together.
+fn place_pois(data: &mut LegendItemData, zoom: u8) {
+    for (layer, features) in data.iter_mut() {
+        if !matches!(layer.as_str(), "pois" | "waymarking") {
+            continue;
+        }
+
+        for props in features.iter_mut() {
+            let text = |key: &str| props.get(key).and_then(LegendValue::as_str).unwrap_or("");
+
+            let Some(LegendValue::Hstore(extra)) = props.get("extra") else {
+                continue;
+            };
+
+            let drop_px = poi_look(text("type"), extra, zoom)
+                .and_then(|look| look.label_height(zoom, text("name"), extra))
+                .map_or(0.0, |height| height / 2.0);
+
+            if let Some(LegendValue::Point(point)) = props.get_mut("geometry") {
+                *point = Point::new(point.x(), drop_px.mul_add(-to_px(zoom), point.y()));
+            }
+        }
+    }
+}
+
 /// The sample of `found` as a map drawn with `layers` shows it, labelled with
 /// the text a drawn feature lent it, or with none: its placeholder name or ref
 /// would claim a feature the map does not have.
@@ -477,11 +503,16 @@ pub fn legend_sample_request(found: &Found, scale: f64, layers: &Layers) -> Rend
 
 fn item_render_request(
     item: &LegendItem,
-    data: LegendItemData,
+    mut data: LegendItemData,
     scale: f64,
     mode: LegendMode,
     variant: Option<&Layers>,
 ) -> RenderRequest {
+    // A taginfo sample is unlabelled.
+    if mode == LegendMode::Normal {
+        place_pois(&mut data, item.zoom);
+    }
+
     // An overlay carries no ground, so its samples are drawn on none either.
     let (data, layers) = match variant {
         Some(layers) if !layers.is_whole_map() => (data, layers.clone()),

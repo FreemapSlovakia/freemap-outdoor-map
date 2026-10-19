@@ -1,4 +1,3 @@
-use crate::render::draw::font_options::FontAndLayoutOptions;
 use crate::render::{
     layers::{
         Category, Def, INACCESSIBLE_ZOOM_DELAY, Look, POI_ORDER, POIS, SHOP_TYPES, SpringLook,
@@ -514,8 +513,6 @@ impl LegendItemBuilder<'_> {
         extra: HashMap<String, Option<String>>,
         category: Category,
     ) -> Self {
-        let factor = (19.0 - self.zoom as f64).exp2();
-
         // Explicit per-category lookup table; clearer than merged arms.
         #[allow(clippy::match_same_arms)]
         let bg = match category {
@@ -544,7 +541,8 @@ impl LegendItemBuilder<'_> {
             Category::Other => "residential",
         };
 
-        let offset = if self.for_taginfo { 0.0 } else { factor * -2.0 };
+        // Lowered for its label when it is drawn, see `place_pois`.
+        let point = Point::new(0.0, 0.0);
 
         let waymarking = WAYMARKING_LEGEND_TYPES.contains(&typ);
 
@@ -556,7 +554,7 @@ impl LegendItemBuilder<'_> {
             b.with("type", typ)
                 .with_name()
                 .with("extra", extra)
-                .with("geometry", Point::new(0.0, offset))
+                .with("geometry", point)
         });
 
         // Waymarking is drawn by the POI layer on the map and by a layer of its
@@ -567,7 +565,7 @@ impl LegendItemBuilder<'_> {
                 b.with("type", typ)
                     .with_name()
                     .with("extra", extra)
-                    .with("geometry", Point::new(0.0, offset))
+                    .with("geometry", point)
             }),
             None => item,
         }
@@ -577,5 +575,6 @@ impl LegendItemBuilder<'_> {
 /// A POI's name, in the font its definition labels it in.
 const POI_NAME: Lend = Lend::name(|row| {
     row.poi_look()
-        .map_or_else(FontAndLayoutOptions::default, |look| look.def.label_flo())
+        .filter(|look| look.labelled(row.zoom()))
+        .map(|look| look.def.label_flo())
 });
