@@ -520,7 +520,7 @@ fn label_parts(refs: &str) -> Vec<LabelPart<'_>> {
 
     for (i, (name, images)) in groups.into_iter().enumerate() {
         if i > 0 {
-            text.push_str(", ");
+            text.push_str(" · ");
         }
 
         if !images.is_empty() {
