@@ -43,6 +43,8 @@
 #   code       country code, for scratch paths
 #   src_dir    directory of source tiles (a VRT is built over ALL of them, so a
 #              window near a tile edge still gets its collar)
+#   src_vrt    a prepared VRT to read instead; src_dir is then unused
+#   unscale    true for a source storing scaled integers, e.g. Int32 in 2 mm steps
 #   out_dir    where z*.tif, z*.png and report.json are written
 #   epsg       source CRS, e.g. "EPSG:25832"
 #   nodata     source nodata, e.g. "-9999"
@@ -185,8 +187,14 @@ def render-site [site: record, cfg: record, d: string, vrt: string]: nothing -> 
     print $"==> ($site.name): ($site.lat), ($site.lon)  ->  E ($xmin | math round) .. ($xmax | math round)  N ($ymin | math round) .. ($ymax | math round)"
 
     let win = $"($sd)/win.tif"
+    # `unscale` for a source that stores heights as scaled integers. gdaldem and
+    # the smoother both ignore the band's Scale tag, so the metres have to be
+    # real by this point. Nodata pixels are left at the stored sentinel by
+    # -unscale, so the declared nodata still matches them.
+    let unscale = (if ($cfg | get -o unscale | default false) { [-unscale -ot Float32] } else { [] })
     (gdal_translate -q -of GTiff
       -projwin ($xmin - $cfg.collar) ($ymax + $cfg.collar) ($xmax + $cfg.collar) ($ymin - $cfg.collar)
+      ...$unscale
       -co COMPRESS=DEFLATE -co PREDICTOR=1 -co TILED=YES
       $vrt $win o> /dev/null)
 
@@ -303,16 +311,10 @@ def render-site [site: record, cfg: record, d: string, vrt: string]: nothing -> 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
-export def run [cfg: record]: nothing -> nothing {
-    if ($cfg.sites | is-empty) {
-        error make {msg: "zoomsample needs at least one site"}
-    }
-    mkdir $cfg.out_dir
-    let d = $"/dev/shm/($cfg.code)_zoomsample"
-    rm -rf $d
-    mkdir $d
-    write-helpers $d
-
+# Build a VRT over only the source tiles the sites touch. Skipped entirely when
+# the caller already has one — Italy's mosaic is a prepared VRT over 18 rasters
+# on two drives, not a directory of same-sized tiles this could select from.
+def build-src-vrt [cfg: record, d: string]: nothing -> string {
     # A VRT over ONLY the tiles the sites actually touch. Building one over the
     # whole state costs a gdalbuildvrt open of every tile: Saxony's 5k made that
     # unnoticeable, Bayern's 72k took longer than the renders themselves. The
@@ -370,6 +372,25 @@ export def run [cfg: record]: nothing -> nothing {
     $picked | str join "\n" | save -f $idx
     let vrt = $"($d)/src.vrt"
     gdalbuildvrt -vrtnodata $cfg.nodata -input_file_list $idx $vrt o> /dev/null
+    $vrt
+}
+
+export def run [cfg: record]: nothing -> nothing {
+    if ($cfg.sites | is-empty) {
+        error make {msg: "zoomsample needs at least one site"}
+    }
+    mkdir $cfg.out_dir
+    let d = $"/dev/shm/($cfg.code)_zoomsample"
+    rm -rf $d
+    mkdir $d
+    write-helpers $d
+
+    let vrt = (if ($cfg | get -o src_vrt | default "" | is-not-empty) {
+        print $"==> Using the prepared source VRT: ($cfg.src_vrt)"
+        $cfg.src_vrt
+    } else {
+        build-src-vrt $cfg $d
+    })
 
     let results = ($cfg.sites | each {|s| render-site $s $cfg $d $vrt })
 

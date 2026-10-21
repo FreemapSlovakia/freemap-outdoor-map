@@ -9,6 +9,7 @@
 #   code       scratch prefix in $tmpdir; MUST be unique per country, or two
 #              countries running at once share /dev/shm directories
 #   src        raster the windows are cut from (a VRT or a single TIFF)
+#   unscale    true for a source storing scaled integers, e.g. Int32 in 2 mm steps
 #   data_root  scratch root; smooth2m/ and failed/ live here
 #   tiles_dir  per-window RGBA tiles (may sit outside data_root)
 #   out_tif    final mosaic
@@ -154,9 +155,15 @@ def render-window [w: record, cfg: record, tr: string]: nothing -> nothing {
     mkdir $d
 
     # 1. Cut window + collar. PREDICTOR=1 — see CO_DEM in lib/gdal.nu.
+    #    `unscale` for a source holding heights as scaled integers: gdaldem
+    #    ignores the band's Scale tag and the smoother reads raw bytes, so the
+    #    metres have to be real from here on. -unscale leaves nodata pixels at
+    #    the stored sentinel, so the declared nodata still matches them.
     let win = $"($d)/win.tif"
+    let unscale = (if ($cfg | get -o unscale | default false) { [-unscale -ot Float32] } else { [] })
     (gdal_translate -q -of GTiff
       -projwin $w.cxmin $w.cymax $w.cxmax $w.cymin
+      ...$unscale
       ...$CO_DEM
       $cfg.src $win o> /dev/null)
 
