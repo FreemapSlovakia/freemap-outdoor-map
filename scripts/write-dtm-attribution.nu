@@ -11,11 +11,27 @@
 # shading-de-sn.nu emitted, and so on. A region that ever takes its contours from
 # a different provider drops "contours" here and gets its own entry instead.
 #
-# The canonical table is the elevation API's, in
+# ITALY IS EIGHTEEN SOURCES FROM EIGHTEEN AUTHORITIES, each its own dataset so a
+# tile credits only what it drew from. Thirteen are CC BY 4.0, four IODL 2.0, and
+# Bolzano is CC0. Three were ambiguous in the survey and are recorded here as the
+# reading they were given, so a later check knows what to re-check:
+#
+#   it_sardegna  the 1 m lidar is listed as CC BY 4.0 in one place and CC BY-SA
+#                3.0 in another. Taken as CC BY 4.0. Share-alike would reach the
+#                derived hillshade, so this is the one worth confirming.
+#   it_toscana   region tiles are CC BY 4.0, ministry tiles CC BY-SA 3.0 IT; the
+#                ministry ones came from PST instead, so this is taken as CC BY 4.0.
+#   it_fvg05     the dataset's own licence field is empty and the region-wide rule
+#                is IODL 2.0, which is what is used; the catalogue says CC BY 4.0.
+#
+# The 2019-21 Toscana lidar (CC BY-NC-SA) and the alspergis mirror of Lombardia's
+# DTM are NOT the sources here; both are non-commercial and unusable.
+
+# The elevation API keeps its own table, in
 # /fm/storage1/backend.freemap.sk-data/elevation-sources/*/source.json on fm6 (a git
-# repo) — the same sources feed both, so re-sync from there rather than retyping, and
-# add a dataset there first. The webapp's OUTDOOR_NATIONAL_DTM_ATTRIBUTION is a third
-# copy of the same list, until it starts reading /licenses instead.
+# repo). Add a dataset there too, but do not copy its wording back here: these credits
+# are for a derived raster, so dl-de and CC BY want the modification marked — the rows
+# below carry "(Daten geändert)" and "— modified" where the API's do not.
 
 def sources [] {
   [
@@ -277,6 +293,167 @@ def sources [] {
         {
           title: "HR-DTM 5 m: IRPI-CNR"
           url: "https://doi.org/10.5281/zenodo.18335145"
+        }
+      ]
+    }
+    {
+      key: "it_basilicata5"
+      sources: [
+        {
+          title: "DTM 5 m RSDI: Regione Basilicata, IODL 2.0 — dati modificati"
+          url: "https://rsdi.regione.basilicata.it/"
+        }
+      ]
+    }
+    {
+      key: "it_bolzano"
+      sources: [
+        {
+          title: "DTM 2,5 m: Provincia Autonoma di Bolzano – Alto Adige, CC0"
+          url: "https://data.civis.bz.it/"
+        }
+      ]
+    }
+    {
+      key: "it_campania5"
+      sources: [
+        {
+          title: "DTM 5 m da CTR2020/DBT: Regione Campania, CC BY 4.0 — dati modificati"
+        }
+      ]
+    }
+    {
+      key: "it_emilia05"
+      sources: [
+        {
+          title: "DTM 0,5 m 2023–24 e 2025–26: Regione Emilia-Romagna, CC BY 4.0 — dati modificati"
+          url: "https://geoportale.regione.emilia-romagna.it/"
+        }
+      ]
+    }
+    {
+      key: "it_emilia5"
+      sources: [
+        {
+          title: "DTM 5 m: Regione Emilia-Romagna, CC BY 4.0 — dati modificati"
+          url: "https://geoportale.regione.emilia-romagna.it/"
+        }
+      ]
+    }
+    {
+      key: "it_fvg05"
+      sources: [
+        {
+          title: "LiDAR RAFVG 2017–20, 0,5 m: Regione Autonoma Friuli Venezia Giulia, IODL 2.0 — dati modificati"
+          url: "https://irdat.regione.fvg.it/"
+        }
+      ]
+    }
+    {
+      key: "it_hrdtm"
+      sources: [
+        {
+          title: "HR-DTM 5 m v1.2: CNR-IRPI, CC BY 4.0 — dati modificati"
+          url: "https://doi.org/10.5281/zenodo.18335145"
+        }
+      ]
+    }
+    {
+      key: "it_lazio5"
+      sources: [
+        {
+          title: "DTM 5 m 2002–03: Regione Lazio, CC BY 4.0 — dati modificati"
+          url: "https://geoportale.regione.lazio.it/"
+        }
+      ]
+    }
+    {
+      key: "it_lombardia5"
+      sources: [
+        {
+          title: "DTM 5×5 ed. 2015: Regione Lombardia, CC BY 4.0 — dati modificati"
+          url: "https://www.cartografia.servizirl.it/"
+        }
+      ]
+    }
+    {
+      key: "it_piemonte5"
+      sources: [
+        {
+          title: "DTM 5 m, Ripresa ICE 2009–11: Regione Piemonte – SITA, CC BY 4.0 — dati modificati"
+          url: "https://www.geoportale.piemonte.it/"
+        }
+      ]
+    }
+    {
+      key: "it_pst"
+      sources: [
+        {
+          title: "Piano Straordinario di Telerilevamento, DTM LiDAR: Ministero dell'Ambiente e della Sicurezza Energetica, CC BY 4.0 — dati modificati"
+          url: "https://sim.mase.gov.it/"
+        }
+      ]
+    }
+    {
+      key: "it_puglia8"
+      sources: [
+        {
+          title: "DTM 8 m da CTR 1:5000 (2006–07): Regione Puglia, IODL 2.0 — dati modificati"
+          url: "https://cartografia.sit.puglia.it/"
+        }
+      ]
+    }
+    {
+      key: "it_sardegna"
+      sources: [
+        {
+          title: "DTM 1 m da LiDAR: Regione Autonoma della Sardegna, CC BY 4.0 — dati modificati"
+          url: "https://www.sardegnageoportale.it/"
+        }
+      ]
+    }
+    {
+      key: "it_sicilia"
+      sources: [
+        {
+          title: "MDT 2 m, volo ATA 2012–13: Regione Siciliana, CC BY 4.0 — dati modificati"
+          url: "https://www.sitr.regione.sicilia.it/"
+        }
+      ]
+    }
+    {
+      key: "it_toscana"
+      sources: [
+        {
+          title: "LiDAR lidar2k 2004–17: Regione Toscana, CC BY 4.0 — dati modificati"
+          url: "https://dati.toscana.it/"
+        }
+      ]
+    }
+    {
+      key: "it_trento"
+      sources: [
+        {
+          title: "LiDAR PAT 2014 e 2018: Provincia Autonoma di Trento, CC BY 4.0 — dati modificati"
+          url: "https://dati.trentino.it/"
+        }
+      ]
+    }
+    {
+      key: "it_vda"
+      sources: [
+        {
+          title: "DTM 2005/2008, 2 m: Regione Autonoma Valle d'Aosta, CC BY 4.0 — dati modificati"
+          url: "https://geoportale.regione.vda.it/"
+        }
+      ]
+    }
+    {
+      key: "it_veneto5"
+      sources: [
+        {
+          title: "DTM da LiDAR 5 m (2024): Regione del Veneto, IODL 2.0 — dati modificati"
+          url: "https://idt2.regione.veneto.it/"
         }
       ]
     }
