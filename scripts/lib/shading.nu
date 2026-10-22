@@ -298,30 +298,36 @@ def process-window [w: record, cfg: record, tr: string]: nothing -> nothing {
 
 # ── Mosaic ────────────────────────────────────────────────────────────────────
 
-# Extent snapped outward so BOTH the origin and the dimensions are whole
-# multiples of 2^levels pixels.
+# Extent snapped outward to whole z8 TILES, which is what puts every overview
+# on the XYZ tile grid.
 #
 # The tiles are already on the global pixel grid (gdalwarp -tap, and the
 # Mercator origin sits an exact 2^(zoom+7) pixels from projected zero), but
 # their union is not. A pyramid built on a ragged extent lands off the tile
 # grid, so GDAL cannot hand back a stored overview verbatim: every tile is
-# resampled and low zooms sit up to half a pixel off. The padding is masked
-# out, and costs ~1% of area — the Netherlands needed +1317 x +3113 px.
+# resampled and low zooms sit up to half a pixel off.
 #
-# levels tracks gdaladdo, which stops once a level fits in 256 px; tying the
-# two together keeps the padding proportionate on small countries.
+# THE QUANTUM IS ONE z8 TILE, NOT 2^levels PIXELS. Snapping to 2048 px aligns
+# the top levels and nothing below: 2048 px is 8 tiles at full resolution but
+# 8/2^k tiles after k halvings, so the origin lands mid-tile from the fourth
+# overview down. Measured on Italy at z18 before this was fixed: exact to z15,
+# then off by 128, 192, 224, 240 px. A tile is 256 px at every level, so the
+# quantum has to be a whole tile at the COARSEST level, and 256 * 2^10 px at
+# z18 is exactly one z8 tile in metres — the same quantum terrain-tiles'
+# build-source.sh uses, for the same reason.
+#
+# The padding is masked out and SPARSE_OK keeps it off disk, so a quantum this
+# large costs extent rather than bytes.
 def aligned-extent [vrt: string, tr: float]: nothing -> list<string> {
     let info = (gdalinfo -json $vrt | from json)
     let ul = $info.cornerCoordinates.upperLeft
     let lr = $info.cornerCoordinates.lowerRight
-    let maxdim = ([$info.size.0 $info.size.1] | math max)
-    let levels = ([1 ((($maxdim / 256) | math log 2) | math ceil)] | math max)
-    let q = $tr * (2 ** $levels)
+    let q = 2 * 20037508.342789244 / 256        # one z8 tile, metres
     let xmin = ((($ul.0 / $q) | math floor) * $q)
     let ymax = ((($ul.1 / $q) | math ceil) * $q)
     let xmax = ((($lr.0 / $q) | math ceil) * $q)
     let ymin = ((($lr.1 / $q) | math floor) * $q)
-    print $"  aligning to 2^($levels) px: ($info.size.0)x($info.size.1) -> (($xmax - $xmin) / $tr | math round)x(($ymax - $ymin) / $tr | math round)"
+    print $"  aligning to whole z8 tiles: ($info.size.0)x($info.size.1) -> (($xmax - $xmin) / $tr | math round)x(($ymax - $ymin) / $tr | math round)"
     [-te ($xmin | into string) ($ymin | into string) ($xmax | into string) ($ymax | into string)]
 }
 
@@ -341,6 +347,7 @@ def merge-tiles [cfg: record]: nothing -> nothing {
     (gdal_translate --config GDAL_TIFF_INTERNAL_MASK YES --config GDAL_TIFF_INTERNAL_MASK_TO_8BIT YES
       -of GTiff -co COMPRESS=JXL -co JXL_LOSSLESS=NO -co JXL_DISTANCE=3.0
       -co TILED=YES -co BLOCKXSIZE=256 -co BLOCKYSIZE=256 -co BIGTIFF=YES -co NUM_THREADS=ALL_CPUS
+      -co SPARSE_OK=TRUE
       shading.vrt $"($cfg.out_tif).tmp")
     mv $"($cfg.out_tif).tmp" $cfg.out_tif
     rm shading.vrt
