@@ -26,8 +26,9 @@ map $args $log_args {
 
 # Premium zooms (19+) of the outdoor map, KST and the overlays are served only to
 # a premium account's token with the tiles:outdoor scope, asked of the API at
-# most once a minute per token.
-proxy_cache_path /var/cache/nginx/outdoor-tile-auth levels=1:2
+# most once a minute per token. A cache file holds its key, the token, in plain
+# text, so the cache lives on tmpfs.
+proxy_cache_path /run/nginx-outdoor-tile-auth levels=1:2
         keys_zone=outdoor_tile_auth:10m max_size=100m inactive=10m;
 
 map $request_uri $tile_premium_zoom {

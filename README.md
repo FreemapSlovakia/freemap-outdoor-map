@@ -265,7 +265,8 @@ Zooms 19+ of the base map, `/kst/` and the `/o/` overlays pass an `auth_request`
   the app shows non-premium users; the residue is matched on the last digits of x and y.
 - **A token** — `?token=` or `Authorization: Bearer`, an app token or the web app's session —
   goes to the API's `/auth/check?scope=tiles:outdoor&premium=1`; answers are cached for a
-  minute per token in `/var/cache/nginx/outdoor-tile-auth`.
+  minute per token in `/run/nginx-outdoor-tile-auth` — tmpfs, as a cache file holds the
+  token in plain text.
 - **Anything else** (a non-browser without a token) is refused.
 
 A refused tile is a 401 or 403 for the web app, which handles it. Anyone else gets an image
