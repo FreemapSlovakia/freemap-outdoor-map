@@ -69,6 +69,11 @@ map $tile_bearer_token $tile_token {
         default  $tile_bearer_token;
 }
 
+map $tile_client $premium_zoom_image {
+        foreign  outdoor-premium-zoom.png;
+        default  outdoor-premium-zoom-token.png;
+}
+
 # Get every zoom: the API's offline-map exporter on fm6, and the Freemap Android
 # app until it sends a token.
 map "$remote_addr $http_user_agent" $tile_trusted_app {
@@ -359,13 +364,14 @@ server {
                 proxy_ignore_headers Cache-Control Expires Set-Cookie;
         }
 
-        # What a refused premium zoom shows, keeping the 401 or 403.
+        # What a refused premium zoom shows, keeping the 401 or 403: another site is
+        # told to ask us, an app how to add a token.
         location = /premium-zoom.png {
                 internal;
                 add_header Access-Control-Allow-Origin $cors_tile_origin always;
                 add_header Vary Origin always;
                 add_header Cache-Control "no-store" always;
-                alias /var/www/outdoor-premium-zoom.png;
+                alias /var/www/$premium_zoom_image;
         }
 
         # Open to any origin, unlike the rest: it is public reference data, nothing
