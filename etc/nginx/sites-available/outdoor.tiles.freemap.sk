@@ -24,23 +24,23 @@ map $args $log_args {
         default                                         $args;
 }
 
-# Premium zooms (19+) of the outdoor map and its overlays are served only to a
-# premium account's token with the tiles:outdoor scope, asked of the API at most
-# once a minute per token. KST has no premium zooms.
+# Premium zooms (19+) of the outdoor map, KST and the overlays are served only to
+# a premium account's token with the tiles:outdoor scope, asked of the API at
+# most once a minute per token.
 proxy_cache_path /var/cache/nginx/outdoor-tile-auth levels=1:2
         keys_zone=outdoor_tile_auth:10m max_size=100m inactive=10m;
 
 map $request_uri $tile_premium_zoom {
-        "~^/(?:o/[a-z][a-z0-9_-]*/)?(?:19|2[0-9])/"  1;
-        default                                      0;
+        "~^/(?:o/[a-z][a-z0-9_-]*/|kst/)?(?:19|2[0-9])/"  1;
+        default                                           0;
 }
 
 # The quarter of premium tiles the web app shows anyone, (x + 2y) % 4 == 0 as in
 # its ScaledTileLayer: x ≡ 0 (mod 4) with an even y, or x ≡ 2 with an odd y. A
 # number's residue mod 4 is that of its last two digits.
 map $request_uri $tile_teaser {
-        "~^/(?:o/[a-z][a-z0-9_-]*/)?\d+/(?:(?:\d*[02468])?[048]|\d*[13579][26])/\d*[02468](?:[@.?]|$)"  1;
-        "~^/(?:o/[a-z][a-z0-9_-]*/)?\d+/(?:(?:\d*[02468])?[26]|\d*[13579][048])/\d*[13579](?:[@.?]|$)"  1;
+        "~^/(?:o/[a-z][a-z0-9_-]*/|kst/)?\d+/(?:(?:\d*[02468])?[048]|\d*[13579][26])/\d*[02468](?:[@.?]|$)"  1;
+        "~^/(?:o/[a-z][a-z0-9_-]*/|kst/)?\d+/(?:(?:\d*[02468])?[26]|\d*[13579][048])/\d*[13579](?:[@.?]|$)"  1;
         default  0;
 }
 
@@ -291,12 +291,23 @@ server {
         }
 
         location ~ ^/kst/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[123])x)?(?:\.(?:jpe?g|png))?$ {
+                if ($request_method = OPTIONS) {
+                        add_header Access-Control-Allow-Origin $cors_tile_origin;
+                        add_header Vary Origin always;
+                        add_header Access-Control-Allow-Headers "Authorization";
+                        add_header Access-Control-Max-Age 86400;
+                        return 204;
+                }
+
+                auth_request /_tile-auth;
+
                 add_header Access-Control-Allow-Origin $cors_tile_origin always;
                 add_header Vary Origin always;
                 add_header Alt-Svc 'h3=":$server_port"; ma=86400';
 
                 proxy_pass http://localhost:4000/kst/${base}@${scale}x.jpeg$is_args$args;
                 error_page 404 /40x.html;
+                error_page 401 403 /premium-zoom.png;
         }
 
         # Overlays: transparent WebP, so no grey 40x tile standing in for a miss.

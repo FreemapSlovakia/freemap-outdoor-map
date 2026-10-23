@@ -255,7 +255,7 @@ still visible from `curl -I` — and now from the browser too.
 
 ### Premium zooms
 
-Zooms 19+ of the base map and its `/o/` overlays (not `/kst/`) pass an `auth_request` to
+Zooms 19+ of the base map, `/kst/` and the `/o/` overlays pass an `auth_request` to
 `/_tile-auth`, which decides by `$tile_gate`:
 
 - **A browser on another site** is refused, whatever it carries. It is told by
