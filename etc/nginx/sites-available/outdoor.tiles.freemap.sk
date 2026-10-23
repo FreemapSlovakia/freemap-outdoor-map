@@ -69,12 +69,21 @@ map $tile_bearer_token $tile_token {
         default  $tile_bearer_token;
 }
 
+# Get every zoom: the API's offline-map exporter on fm6, and the Freemap Android
+# app until it sends a token.
+map "$remote_addr $http_user_agent" $tile_trusted_app {
+        "~^(?:116\.202\.225\.24|2a01:4f8:241:58aa::2) "    1;
+        "~^\S+ flutter_map \(sk\.bigware\.freemap\)"       1;
+        default                                            0;
+}
+
 # pass, deny, or ask the API. Without a token only the web app's teaser passes.
-map "$tile_premium_zoom:$tile_client:$tile_token:$tile_teaser" $tile_gate {
-        "~^0:"             pass;
-        "~^1:foreign:"     deny;
-        "~^1:web::1$"      pass;
-        "~^1:[a-z]+::"     deny;
+map "$tile_trusted_app$tile_premium_zoom:$tile_client:$tile_token:$tile_teaser" $tile_gate {
+        "~^1"              pass;
+        "~^00:"            pass;
+        "~^01:foreign:"    deny;
+        "~^01:web::1$"     pass;
+        "~^01:[a-z]+::"    deny;
         default            check;
 }
 
