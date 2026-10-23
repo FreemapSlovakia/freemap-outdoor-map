@@ -253,6 +253,24 @@ renderer's read instead of `sendfile`.
 `Server-Timing`'s `src` metric says which of the two a response was, so cache behaviour is
 still visible from `curl -I` — and now from the browser too.
 
+### Premium zooms
+
+Zooms 19+ of the base map and its `/o/` overlays (not `/kst/`) pass an `auth_request` to
+`/_tile-auth`, which decides by `$tile_gate`:
+
+- **A browser on another site** is refused, whatever it carries. It is told by
+  `Sec-Fetch-Site: cross-site`, which a page can neither drop nor forge, unless its `Referer`
+  is a Freemap page — `www.freemap.eu` is cross-site to these tiles.
+- **The Freemap web app without a token** gets the free quarter, `(x + 2y) % 4 == 0`, which
+  the app shows non-premium users; the residue is matched on the last digits of x and y.
+- **A token** — `?token=` or `Authorization: Bearer`, an app token or the web app's session —
+  goes to the API's `/auth/check?scope=tiles:outdoor&premium=1`; answers are cached for a
+  minute per token in `/var/cache/nginx/outdoor-tile-auth`.
+- **Anything else** (a non-browser without a token) is refused.
+
+A refused tile is 401 or 403 with [premium-zoom.png](./etc/nginx/premium-zoom.png), which has
+to be deployed as `/var/www/outdoor-premium-zoom.png`. `token=` is masked in the access log.
+
 ## Systemd service
 
 In production, freemap-outdoor-map should run as a system service.
