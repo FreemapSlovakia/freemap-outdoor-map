@@ -29,7 +29,7 @@ map $args $log_args {
 # most once a minute per token. A cache file holds its key, the token, in plain
 # text, so the cache lives on tmpfs.
 proxy_cache_path /run/nginx-outdoor-tile-auth levels=1:2
-        keys_zone=outdoor_tile_auth:10m max_size=100m inactive=10m;
+        keys_zone=outdoor_tile_auth_tmpfs:10m max_size=100m inactive=10m;
 
 map $request_uri $tile_premium_zoom {
         "~^/(?:o/[a-z][a-z0-9_-]*/|kst/)?(?:19|2[0-9])/"  1;
@@ -360,7 +360,7 @@ server {
                 proxy_set_header Host backend.freemap.sk;
                 proxy_ssl_server_name on;
 
-                proxy_cache outdoor_tile_auth;
+                proxy_cache outdoor_tile_auth_tmpfs;
                 proxy_cache_key $tile_token;
                 proxy_cache_valid 200 401 403 1m;
                 proxy_cache_use_stale error timeout http_500 http_502 http_503 http_504;
