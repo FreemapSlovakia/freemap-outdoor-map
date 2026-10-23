@@ -292,7 +292,7 @@ server {
 
                 proxy_pass http://localhost:4000/${base}@${scale}x.jpeg$is_args$args;
                 error_page 404 /40x.html;
-                error_page 401 403 /premium-zoom.png;
+                error_page 401 403 = @premium_zoom;
         }
 
         location ~ ^/kst/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[123])x)?(?:\.(?:jpe?g|png))?$ {
@@ -312,7 +312,7 @@ server {
 
                 proxy_pass http://localhost:4000/kst/${base}@${scale}x.jpeg$is_args$args;
                 error_page 404 /40x.html;
-                error_page 401 403 /premium-zoom.png;
+                error_page 401 403 = @premium_zoom;
         }
 
         # Overlays: transparent WebP, so no grey 40x tile standing in for a miss.
@@ -334,7 +334,7 @@ server {
                 add_header Alt-Svc 'h3=":$server_port"; ma=86400';
 
                 proxy_pass http://localhost:4000/o/${variant}/${base}@${scale}x.webp$is_args$args;
-                error_page 401 403 /premium-zoom.png;
+                error_page 401 403 = @premium_zoom;
         }
 
         # Decides by $tile_gate; only a token is asked of the API, and its answer
@@ -364,8 +364,21 @@ server {
                 proxy_ignore_headers Cache-Control Expires Set-Cookie;
         }
 
-        # What a refused premium zoom shows, keeping the 401 or 403: another site is
-        # told to ask us, an app how to add a token.
+        # A refused premium zoom. The web app keeps the 401 or 403 it handles; the
+        # rest get an image with 200, as apps like JOSM show no error tile: another
+        # site is told to ask us, an app how to add a token.
+        location @premium_zoom {
+                add_header Access-Control-Allow-Origin $cors_tile_origin always;
+                add_header Vary Origin always;
+                add_header Cache-Control "no-store" always;
+
+                if ($tile_client = web) {
+                        return 403;
+                }
+
+                rewrite ^ /premium-zoom.png last;
+        }
+
         location = /premium-zoom.png {
                 internal;
                 add_header Access-Control-Allow-Origin $cors_tile_origin always;

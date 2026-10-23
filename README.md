@@ -268,9 +268,10 @@ Zooms 19+ of the base map, `/kst/` and the `/o/` overlays pass an `auth_request`
   minute per token in `/var/cache/nginx/outdoor-tile-auth`.
 - **Anything else** (a non-browser without a token) is refused.
 
-A refused tile is 401 or 403 with an image: [premium-zoom.png](./etc/nginx/premium-zoom.png)
-(contact us) for another site, [premium-zoom-token.png](./etc/nginx/premium-zoom-token.png)
-(add an app token) for an app. They are deployed as `/var/www/outdoor-premium-zoom.png` and
+A refused tile is a 401 or 403 for the web app, which handles it. Anyone else gets an image
+with 200, since apps such as JOSM show nothing for an error:
+[premium-zoom.png](./etc/nginx/premium-zoom.png) (contact us) for another site,
+[premium-zoom-token.png](./etc/nginx/premium-zoom-token.png) (add an app token) for an app. They are deployed as `/var/www/outdoor-premium-zoom.png` and
 `/var/www/outdoor-premium-zoom-token.png`. `token=` is masked in the access log.
 
 ## Systemd service
