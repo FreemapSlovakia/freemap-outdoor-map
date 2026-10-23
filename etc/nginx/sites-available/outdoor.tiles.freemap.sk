@@ -47,10 +47,12 @@ map $request_uri $tile_teaser {
 # A browser on a Freemap page, a browser on any other page, or no browser (JOSM,
 # Locus). A page can neither drop nor forge Sec-Fetch-Site, nor forge a Freemap
 # Referer; www.freemap.eu is cross-site to these tiles, so its Referer tells it.
+# A tile opened from the address bar (`none`) counts as an app, so it explains
+# itself instead of a bare 403.
 map "$http_sec_fetch_site $http_referer" $tile_client {
         default                                                                  foreign;
-        "~^ "                                                                    native;
-        "~^(?:same-origin|same-site|none) "                                      web;
+        "~^(?:none)? "                                                           native;
+        "~^(?:same-origin|same-site) "                                           web;
         "~^cross-site https?://(?:[a-z0-9-]+\.)*freemap\.(?:sk|eu)(?::\d+)?/"    web;
 }
 
