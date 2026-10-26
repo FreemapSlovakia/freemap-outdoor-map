@@ -139,17 +139,22 @@ fn parse(value: &str) -> Option<Symbol> {
 
     let (fgs, text) = text_at_end.map_or((rest, None), |(fgs, text)| (fgs, Some(text)));
 
-    let foregrounds: Vec<Shape> = background_shape
+    let mut foregrounds: Vec<Shape> = background_shape
         .into_iter()
         .chain(fgs.iter().take(2).filter_map(|fg| foreground(fg)))
         .collect();
 
-    // An empty ring, as in `red:red_circle`, stands for a dot of its colour.
-    let background = match background {
-        Some((c, Background::Circle)) if foregrounds.is_empty() && text.is_none() => {
+    let background = match (background, foregrounds.as_slice()) {
+        // An empty ring, as in `red:red_circle`, stands for a dot of its colour.
+        (Some((c, Background::Circle)), []) if text.is_none() => Some((c, Background::Round)),
+        // A lone dot holding a text, as in `white::white_dot:3:black`, is its disc, so that the
+        // text is not shrunk to fit a dot.
+        (None, [(c, shape)]) if shape == "dot" && text.is_some() => {
+            let c = *c;
+            foregrounds.clear();
             Some((c, Background::Round))
         }
-        other => other,
+        (other, _) => other,
     };
 
     let symbol = Symbol {
