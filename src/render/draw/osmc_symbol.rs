@@ -329,22 +329,24 @@ fn path_drop(cr: &Context) {
 /// Largest share of the square a shape takes, unless it reaches the edges by design.
 const SHAPE_FIT: f64 = 0.7;
 
+/// Shapes that reach the edges of the square by design.
+const EDGE_TO_EDGE: [&str; 11] = [
+    "bar",
+    "stripe",
+    "upper",
+    "lower",
+    "left",
+    "right",
+    "corner",
+    "corner_left",
+    "backslash",
+    "slash",
+    "frame",
+];
+
 /// Paints a foreground shape centred in the unit square and shrunk to [`SHAPE_FIT`] of it, so
 /// that all shapes keep alike margins; unknown shapes get a `?`.
 fn paint_foreground(cr: &Context, c: Color, shape: &str, collect: Collect) -> cairo::Result<()> {
-    const EDGE_TO_EDGE: [&str; 10] = [
-        "bar",
-        "stripe",
-        "upper",
-        "lower",
-        "left",
-        "right",
-        "corner",
-        "corner_left",
-        "backslash",
-        "slash",
-    ];
-
     if EDGE_TO_EDGE.contains(&shape) {
         return paint_shape(cr, c, shape, collect);
     }
@@ -610,6 +612,12 @@ fn paint_shape(cr: &Context, c: Color, shape: &str, collect: Collect) -> cairo::
             cr.set_line_width(0.15);
             return stroke(cr, c, collect);
         }
+        // Not a foreground on the wiki, but used as one for a sign with a coloured border.
+        "frame" => {
+            cr.rectangle(0.075, 0.075, 0.85, 0.85);
+            cr.set_line_width(0.15);
+            return stroke(cr, c, collect);
+        }
         "rectangle_line" => {
             cr.rectangle(0.25, 0.25, 0.5, 0.5);
             cr.set_line_width(0.12);
@@ -647,17 +655,17 @@ fn paint_shape(cr: &Context, c: Color, shape: &str, collect: Collect) -> cairo::
 
 /// A `?` for a shape we do not draw, kept as clear of the edges as the shapes are.
 fn paint_unknown(cr: &Context, c: Color, collect: Collect) -> cairo::Result<()> {
-    paint_text(cr, "?", c, SHAPE_FIT, true, collect)
+    paint_text(cr, "?", c, true, collect)
 }
 
-/// Paints `text` centred in the unit square, `fit` of it tall, or less to fit its width.
-/// `bold` thickens the glyphs, which a lone text needs at symbol size.
+/// Paints `text` centred in the unit square. `large`, it is as tall as the shapes, or less to
+/// fit its width, which may exceed theirs so that a ref of a few characters stays readable;
+/// otherwise it is small enough to fit in a shape.
 fn paint_text(
     cr: &Context,
     text: &str,
     c: Color,
-    fit: f64,
-    bold: bool,
+    large: bool,
     collect: Collect,
 ) -> cairo::Result<()> {
     let flo = FontAndLayoutOptions {
@@ -692,7 +700,11 @@ fn paint_text(
         return Ok(());
     }
 
-    let scale = (fit / h).min(1.1 * fit / w);
+    let scale = if large {
+        (SHAPE_FIT / h).min(0.9 / w)
+    } else {
+        (0.5 / h).min(0.55 / w)
+    };
 
     cr.save()?;
     cr.new_path();
@@ -712,26 +724,12 @@ fn paint_text(
         pen += cluster.advance;
     }
 
-    cr.set_line_join(cairo::LineJoin::Round);
-    cr.set_line_width(0.05 / scale);
-
     if let Some(shapes) = collect {
         collect_fill(cr, shapes)?;
-
-        if bold {
-            collect_stroke(cr, shapes)?;
-        }
-
         cr.new_path();
     } else {
         cr.set_source_color(c);
-
-        if bold {
-            cr.fill_preserve()?;
-            cr.stroke()?;
-        } else {
-            cr.fill()?;
-        }
+        cr.fill()?;
     }
 
     cr.restore()
@@ -778,14 +776,14 @@ fn paint_content(
     }
 
     if let Some((text, c)) = &symbol.text {
-        // Alone, as tall as the shapes are; on shapes, a little smaller.
-        let fit = if symbol.foregrounds.is_empty() {
-            SHAPE_FIT
-        } else {
-            0.5
-        };
+        // A centred shape or a frame is meant to hold the text, which, larger, would spill
+        // out of it.
+        let within_shape = symbol
+            .foregrounds
+            .iter()
+            .any(|(_, shape)| shape == "frame" || !EDGE_TO_EDGE.contains(&shape.as_str()));
 
-        paint_text(cr, text, *c, fit, symbol.foregrounds.is_empty(), collect)?;
+        paint_text(cr, text, *c, !within_shape, collect)?;
     }
 
     Ok(())
