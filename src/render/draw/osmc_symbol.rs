@@ -101,7 +101,8 @@ fn background(bg: &str) -> (Option<(Color, Background)>, Option<Shape>) {
 
     let kind = match kind {
         "" => Background::Square,
-        "round" => Background::Round,
+        // `dot` is no background on the wiki, but a disc is clearly what it stands for.
+        "round" | "dot" => Background::Round,
         "circle" => Background::Circle,
         "frame" => Background::Frame,
         // A shape in place of the background, as in `orange:orange_arrow`, is a foreground.
@@ -655,17 +656,27 @@ fn paint_shape(cr: &Context, c: Color, shape: &str, collect: Collect) -> cairo::
 
 /// A `?` for a shape we do not draw, kept as clear of the edges as the shapes are.
 fn paint_unknown(cr: &Context, c: Color, collect: Collect) -> cairo::Result<()> {
-    paint_text(cr, "?", c, true, collect)
+    paint_text(cr, "?", c, TextFit::Large, collect)
 }
 
-/// Paints `text` centred in the unit square. `large`, it is as tall as the shapes, or less to
-/// fit its width, which may exceed theirs so that a ref of a few characters stays readable;
-/// otherwise it is small enough to fit in a shape.
+/// How large a text is drawn.
+#[derive(Clone, Copy)]
+enum TextFit {
+    /// As tall as the shapes, or less to fit its width, which may exceed theirs so that a ref
+    /// of a few characters stays readable.
+    Large,
+    /// Within a disc or ring around it, which leaves a narrow text room to be taller.
+    Round,
+    /// Small enough to fit in a shape.
+    Small,
+}
+
+/// Paints `text` centred in the unit square.
 fn paint_text(
     cr: &Context,
     text: &str,
     c: Color,
-    large: bool,
+    fit: TextFit,
     collect: Collect,
 ) -> cairo::Result<()> {
     let flo = FontAndLayoutOptions {
@@ -700,10 +711,11 @@ fn paint_text(
         return Ok(());
     }
 
-    let scale = if large {
-        (SHAPE_FIT / h).min(0.9 / w)
-    } else {
-        (0.5 / h).min(0.55 / w)
+    let scale = match fit {
+        TextFit::Large => (SHAPE_FIT / h).min(0.9 / w),
+        // The corners of its ink box at a ring's inside edge, less a margin.
+        TextFit::Round => (0.88 / w.hypot(h)).min(0.8 / h),
+        TextFit::Small => (0.5 / h).min(0.55 / w),
     };
 
     cr.save()?;
@@ -777,13 +789,28 @@ fn paint_content(
 
     if let Some((text, c)) = &symbol.text {
         // A centred shape or a frame is meant to hold the text, which, larger, would spill
-        // out of it.
-        let within_shape = symbol
-            .foregrounds
-            .iter()
-            .any(|(_, shape)| shape == "frame" || !EDGE_TO_EDGE.contains(&shape.as_str()));
+        // out of it; one in the colour around it does not show, and holds nothing.
+        let ground = symbol.background.map(|(c, kind)| match kind {
+            Background::Frame | Background::Circle => colors::WHITE,
+            Background::Square | Background::Round => c,
+        });
 
-        paint_text(cr, text, *c, !within_shape, collect)?;
+        let within_shape = symbol.foregrounds.iter().any(|(c, shape)| {
+            (shape == "frame" || !EDGE_TO_EDGE.contains(&shape.as_str())) && Some(*c) != ground
+        });
+
+        let fit = if within_shape {
+            TextFit::Small
+        } else if matches!(
+            symbol.background,
+            Some((_, Background::Round | Background::Circle))
+        ) {
+            TextFit::Round
+        } else {
+            TextFit::Large
+        };
+
+        paint_text(cr, text, *c, fit, collect)?;
     }
 
     Ok(())
