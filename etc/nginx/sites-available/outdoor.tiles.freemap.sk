@@ -298,7 +298,7 @@ server {
                 error_page 401 403 = @premium_zoom;
         }
 
-        location ~ ^/kst/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[123])x)?(?:\.(?:jpe?g|png))?$ {
+        location ~ ^/kst/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[1234])x)?(?:\.(?:jpe?g|png))?$ {
                 if ($request_method = OPTIONS) {
                         add_header Access-Control-Allow-Origin $cors_tile_origin;
                         add_header Vary Origin always;
@@ -321,7 +321,7 @@ server {
         # Overlays: transparent WebP, so no grey 40x tile standing in for a miss.
         # Any variant name, rather than a list that goes stale each time one is
         # added; a path with no variant behind it 404s at the renderer.
-        location ~ ^/o/(?<variant>[a-z][a-z0-9_-]*)/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[123])x)?(?:\.webp)?$ {
+        location ~ ^/o/(?<variant>[a-z][a-z0-9_-]*)/(?<base>\d+/\d+/\d+)(?:@(?<url_scale>[1234])x)?(?:\.webp)?$ {
                 if ($request_method = OPTIONS) {
                         add_header Access-Control-Allow-Origin $cors_tile_origin;
                         add_header Vary Origin always;
