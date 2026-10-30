@@ -267,6 +267,8 @@ Zooms 19+ of the base map, `/kst/` and the `/o/` overlays pass an `auth_request`
   goes to the API's `/auth/check?scope=tiles:outdoor&premium=1`; answers are cached for a
   minute per token in `/run/nginx-outdoor-tile-auth` — tmpfs, as a cache file holds the
   token in plain text.
+- **Trusted clients** pass without a token: the API's offline-map exporter on fm6, the
+  Freemap Android app (`flutter_map`) and JOSM, by its user agent.
 - **Anything else** (a non-browser without a token) is refused.
 
 A refused tile is a 401 or 403 for the web app, which handles it. Anyone else gets an image

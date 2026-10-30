@@ -77,11 +77,12 @@ map $tile_client $premium_zoom_image {
         default  outdoor-premium-zoom-token.png;
 }
 
-# Get every zoom: the API's offline-map exporter on fm6, and the Freemap Android
-# app until it sends a token.
+# Get every zoom: the API's offline-map exporter on fm6, the Freemap Android
+# app until it sends a token, and JOSM, which is open to mappers.
 map "$remote_addr $http_user_agent" $tile_trusted_app {
         "~^(?:116\.202\.225\.24|2a01:4f8:241:58aa::2) "    1;
         "~^\S+ flutter_map \(sk\.bigware\.freemap\)"       1;
+        "~^\S+ JOSM/"                                      1;
         default                                            0;
 }
 
@@ -130,6 +131,7 @@ map $http_origin $cors_tile_origin {
         # Regexes, as an exact key this long overflows map_hash_bucket_size.
         "~^https://(www\.)?mountainski\.cz$"                         $http_origin;
         "~^https://mountainski-web-production\.up\.railway\.app$"    $http_origin;
+        "~^https://(?:mapa|nahlad)\.muranskaplanina\.org$"           $http_origin;
 }
 
 map $url_scale $scale {
