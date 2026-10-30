@@ -4,7 +4,7 @@ use crate::render::{
     ctx::Ctx,
     draw::{
         font_options::FontAndLayoutOptions,
-        smooth_line::path_smooth_bezier_spline,
+        smooth_line::path_rounded_corners,
         text_on_line::{
             Align, Distribution, PlacementFilter, Repeat, TextOnLineOptions, Upright,
             draw_text_on_line,
@@ -121,7 +121,7 @@ pub fn render(
 
         context.set_source_color(colors::CONTOUR);
 
-        path_smooth_bezier_spline(context, &geom, 1.0);
+        path_rounded_corners(context, &geom, 0.5);
 
         context.stroke()?;
 

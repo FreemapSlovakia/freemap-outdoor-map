@@ -88,3 +88,60 @@ pub fn path_smooth_bezier_spline(context: &Context, line_string: &LineString, sm
         context.curve_to(ctrl1.x, ctrl1.y, ctrl2.x, ctrl2.y, x2, y2);
     }
 }
+
+/// Rounds each corner with a quadratic curve controlled by the vertex, starting and ending
+/// `cut` (0..=0.5) of the way along its two segments; 0.5 is a quadratic B-spline. Unlike the
+/// interpolating spline above the curve never bulges past the polyline, so neighbouring
+/// contours stay apart.
+pub fn path_rounded_corners(context: &Context, line_string: &LineString, cut: f64) {
+    let mut points: &[Coord] = &line_string.0;
+
+    let closed = points.len() > 3 && points[0] == points[points.len() - 1];
+
+    if closed {
+        points = &points[..points.len() - 1];
+    }
+
+    let len = points.len();
+
+    if len < 3 {
+        path_line_string(context, line_string);
+
+        return;
+    }
+
+    let lerp = |a: Coord, b: Coord, t: f64| Coord {
+        x: (b.x - a.x).mul_add(t, a.x),
+        y: (b.y - a.y).mul_add(t, a.y),
+    };
+
+    let range = if closed { 0..len } else { 1..len - 1 };
+
+    if !closed {
+        context.move_to(points[0].x, points[0].y);
+    }
+
+    for i in range {
+        let ctrl = points[i];
+        let from = lerp(ctrl, points[(i + len - 1) % len], cut);
+        let to = lerp(ctrl, points[(i + 1) % len], cut);
+
+        if closed && i == 0 {
+            context.move_to(from.x, from.y);
+        } else {
+            context.line_to(from.x, from.y);
+        }
+
+        // Cairo only draws cubics; this is the exact cubic form of the quadratic.
+        let c1 = lerp(from, ctrl, 2.0 / 3.0);
+        let c2 = lerp(to, ctrl, 2.0 / 3.0);
+
+        context.curve_to(c1.x, c1.y, c2.x, c2.y, to.x, to.y);
+    }
+
+    if closed {
+        context.close_path();
+    } else {
+        context.line_to(points[len - 1].x, points[len - 1].y);
+    }
+}
