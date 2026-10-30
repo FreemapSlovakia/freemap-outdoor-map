@@ -136,6 +136,15 @@ hr:village@100=z14/s,village@500=z12/m,hamlet=z16/xxs
 si:village@20=z14/s,village@500=z12/m,hamlet=z15/xs
 pl:village@300=z12/m,hamlet=z14/s
 at:village@100=z14/s,village@300=z13/m,hamlet@100=z14/s
+it:town@15000=z11/l,village@5000=z12/m,hamlet=z14/s
 ```
 
-After changing them, invalidate cached tiles from z11 up.
+Italy is the one where towns crowd too: in the Po plain around Milan a `town` is any *comune*
+of roughly 10 000 or more — 207 of them in 20 835 km² of land (8.4–10.6°E, 44.9–46.0°N), 3.4×
+Slovakia's density — and they fill z9–z10 on their own. Villages there are tagged with a
+population on 64 %, median 1 670, so the 1000 and 3000 thresholds hardly thinned z11; 5000 does,
+at the cost of an almost empty plain around Lodi at z11. The Brianza north of Milan stays dense
+at z11 with any threshold — its *comuni* really have 5 000–10 000 inhabitants.
+
+After changing them, invalidate cached tiles from the lowest zoom a rule touches — z9 when it
+postpones towns, z11 otherwise.
