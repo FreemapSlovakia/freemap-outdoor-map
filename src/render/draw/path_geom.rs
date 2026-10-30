@@ -259,7 +259,9 @@ pub fn path_line_string_with_offset(context: &Context, line_string: &LineString,
             prev_bulge = v.bulge;
         }
 
-        if polyline.is_closed {
+        // The offset of a closed ring can come back as open slices; closing one would
+        // draw a straight line across the area.
+        if pc.is_closed {
             context.close_path();
         }
     }
