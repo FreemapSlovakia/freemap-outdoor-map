@@ -1,0 +1,7 @@
+<svg
+   height="6"
+   width="11"
+   xmlns="http://www.w3.org/2000/svg">
+  <path
+     d="M 0,0 H 1 V 6 H 0 Z M 10,0 H 11 V 6 H 10 Z M 1,0.5 Q 5.5,6.5 10,0.5 Q 5.5,4.5 1,0.5 Z" />
+</svg>

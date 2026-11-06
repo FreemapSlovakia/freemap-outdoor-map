@@ -9,6 +9,7 @@ use crate::render::{
         text::{TextOptions, draw_text},
     },
     layer_render_error::{LayerRenderError, LayerRenderResult},
+    layers::roads,
     projectable::TileProjectable,
     regex_replacer::{Replacement, build_replacements, replace},
     svg_repo::{self, Options, SvgRepo},
@@ -538,6 +539,10 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (18, NN, N, N, Barrier, "gate", Extra::default()),
         (15, NN, Y, N, RoadsAndPaths, "guidepost_noname", Extra { icon: Some("guidepost_x"), ..Extra::default() }),
         (16, NN, Y, N, RoadsAndPaths, "route_marker", Extra { icon: Some("guidepost_x"), ..Extra::default() }),
+        // Ranked below the named features they are often tagged on or beside.
+        (14, NN, N, N, RoadsAndPaths, "ladder", Extra::default()),
+        (14, NN, N, N, RoadsAndPaths, "safety_rope", Extra::default()),
+        (14, NN, N, N, RoadsAndPaths, "rungs", Extra::default()),
         (14, 15, N, N, Sport, "skiing", Extra::default()),
         (14, 15, N, N, Health, "hospital", Extra {
             replacements: build_replacements(&[(r"^[Nn]emocnica\b", "Nem.")]),
@@ -1315,6 +1320,37 @@ pub async fn query(
                 type IN ('dam', 'weir', 'ford')
         ",
         );
+    }
+
+    let trail_details_sql;
+
+    // A run too short for its detail to show along the way is an icon instead.
+    if zoom >= 14 {
+        #[cfg_attr(any(), rustfmt::skip)]
+        {
+            trail_details_sql = format!("
+            SELECT
+                osm_id,
+                CASE
+                    WHEN ST_GeometryType(merged) = 'ST_LineString'
+                    THEN ST_LineInterpolatePoint(merged, 0.5)
+                    ELSE ST_ClosestPoint(merged, ST_Centroid(merged))
+                END AS geometry,
+                '' AS name,
+                hstore('') AS extra,
+                key AS type
+            FROM (
+                SELECT key, min(osm_id) AS osm_id, ST_LineMerge(ST_Collect(geometry)) AS merged
+                FROM ({runs}) AS runs
+                WHERE short
+                GROUP BY key, run
+            ) AS merged_runs
+            WHERE
+                merged && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            ", runs = roads::trail_detail_runs_sql(ctx, "$5"));
+        }
+
+        selects.push(&trail_details_sql);
     }
 
     let z_order_case = &*POI_Z_ORDER_CASE;

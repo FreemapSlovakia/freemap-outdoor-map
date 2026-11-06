@@ -59,6 +59,35 @@ pub async fn query(
         String::new()
     };
 
+    // A detail is drawn along a way only where its run is long enough to show it; a short
+    // run is an icon of the POI layer.
+    let (select_trail_details, join_trail_runs) = if zoom >= 14 {
+        let select = TRAIL_DETAILS
+            .map(|key| format!("COALESCE('{key}' = ANY(trail_runs.long_keys), false) AS {key}"))
+            .join(",\n");
+
+        #[cfg_attr(any(), rustfmt::skip)]
+        let join = format!("
+            LEFT JOIN (
+                SELECT osm_id, type, array_agg(key) FILTER (WHERE NOT short) AS long_keys
+                FROM ({runs}) AS runs
+                GROUP BY osm_id, type
+            ) AS trail_runs
+            ON
+                -- A way of several types, such as a platform, is a row of each.
+                trail_runs.osm_id = {table}.osm_id AND trail_runs.type = {table}.type
+        ", runs = trail_detail_runs_sql(ctx, "$5"));
+
+        (select, join)
+    } else {
+        (
+            TRAIL_DETAILS
+                .map(|key| format!("false AS {key}"))
+                .join(", "),
+            String::new(),
+        )
+    };
+
     #[cfg_attr(any(), rustfmt::skip)]
     let query = format!("
         SELECT
@@ -71,12 +100,14 @@ pub async fn query(
             tunnel,
             bicycle,
             foot,
-            trail_visibility
+            trail_visibility,
+            {select_trail_details}
             {select_member}
             {select_pier_area}
         FROM
             {table}
             {join_members}
+            {join_trail_runs}
         WHERE
             {table}.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
         ORDER BY
@@ -89,6 +120,10 @@ pub async fn query(
         .query(&query, &ctx.bbox_query_params(Some(BUFFER_PX)).as_params())
         .await
 }
+
+/// On the side the bicycle and ski route marking takes, as a path with a rope only ever
+/// carries hiking marking, which keeps the other side.
+const SAFETY_ROPE_OFFSET: f64 = -3.5;
 
 /// A `rail` of this `service` is drawn as a main line; any other as light rail.
 fn is_main_line(service: &str) -> bool {
@@ -131,6 +166,7 @@ pub enum RoadStyle {
     Bridleway,
     ViaFerrata,
     Track,
+    Ladder,
 }
 
 impl RoadStyle {
@@ -148,6 +184,82 @@ impl RoadStyle {
     }
 }
 
+/// The `highway` types a `ladder=*` way of which is drawn as a ladder.
+pub const LADDER_HIGHWAYS: [&str; 4] = ["path", "footway", "steps", "via_ferrata"];
+
+const TRAIL_DETAILS: [&str; 3] = ["rungs", "safety_rope", "ladder"];
+
+/// The `highway` types a trail detail is drawn on.
+const TRAIL_HIGHWAYS: [&str; 8] = [
+    "footway",
+    "pedestrian",
+    "steps",
+    "path",
+    "cycleway",
+    "bridleway",
+    "via_ferrata",
+    "ladder",
+];
+
+/// How many pixels a run of touching ways carrying a trail detail has to span for the
+/// detail to be drawn along it. A shorter run is drawn as an icon instead.
+const TRAIL_DETAIL_MIN_PX: f64 = 12.0;
+
+/// The SQL conditions on `osm_roads` for a way to carry each of [`TRAIL_DETAILS`].
+fn trail_detail_conds() -> [String; 3] {
+    let trail = format!(
+        "class = 'highway' AND type IN ({})",
+        TRAIL_HIGHWAYS.map(|typ| format!("'{typ}'")).join(", ")
+    );
+
+    let ladder = format!(
+        "(type = 'ladder' OR type IN ({}) AND COALESCE(tags->'ladder', 'no') <> 'no')",
+        LADDER_HIGHWAYS.map(|typ| format!("'{typ}'")).join(", ")
+    );
+
+    [
+        format!("{trail} AND COALESCE(tags->'rungs', 'no') <> 'no' AND NOT {ladder}"),
+        format!("{trail} AND COALESCE(tags->'safety_rope', 'no') <> 'no'"),
+        ladder,
+    ]
+}
+
+/// SQL for the `osm_roads` ways near the tile that carry a trail detail, a row per way and
+/// detail: `osm_id`, `type`, `geometry`, the detail as `key`, the `run` of touching ways
+/// carrying it, and whether that run is `short` of [`TRAIL_DETAIL_MIN_PX`]. Ways are fetched
+/// that length beyond `buffer`, the caller's reach past the tile, so a run reaching into it is
+/// fetched whole or already long, and short on every tile or on none.
+pub fn trail_detail_runs_sql(ctx: &Ctx, buffer: &str) -> String {
+    let min_length = ctx.meters_per_pixel() * TRAIL_DETAIL_MIN_PX;
+
+    let details = TRAIL_DETAILS
+        .iter()
+        .zip(trail_detail_conds())
+        .map(|(key, cond)| format!("('{key}', {cond})"))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    // The first condition is the partial index's, in `sql/additional.sql`.
+    let parts = format!(
+        "SELECT key, osm_id, type, geometry
+        FROM osm_roads CROSS JOIN LATERAL (VALUES {details}) AS details (key, carries)
+        WHERE
+            (type = 'ladder' OR tags ?| ARRAY['ladder', 'rungs', 'safety_rope']) AND
+            geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), {buffer}::float8 + {min_length}) AND
+            carries"
+    );
+
+    format!(
+        "SELECT
+            key, osm_id, type, geometry, run,
+            SUM(ST_Length(geometry)) OVER (PARTITION BY key, run) < {min_length} AS short
+        FROM (
+            SELECT *, ST_ClusterDBSCAN(geometry, 0.01, 1) OVER (PARTITION BY key) AS run
+            FROM ({parts}) AS details
+        ) AS clustered"
+    )
+}
+
 /// What [`render`] draws `row` as at `zoom`, or `None` where it draws nothing.
 pub fn style(zoom: u8, row: &Feature) -> Result<Option<RoadStyle>, FeatureError> {
     let typ = row.get_string("type")?;
@@ -161,6 +273,7 @@ pub fn style(zoom: u8, row: &Feature) -> Result<Option<RoadStyle>, FeatureError>
     let routed = zoom > 12 || zoom == 12 && row.get_bool("is_in_route")?;
 
     Ok(Some(match (zoom, class, typ) {
+        (14.., "highway", _) if row.get_bool("ladder")? => RoadStyle::Ladder,
         (14.., _, "pier") if !row.get_bool("is_pier_area")? => RoadStyle::Pier,
         (12.., "railway", "rail") if is_main_line(service) => RoadStyle::Rail,
         (13.., "railway", _)
@@ -215,7 +328,7 @@ pub fn style(zoom: u8, row: &Feature) -> Result<Option<RoadStyle>, FeatureError>
         {
             RoadStyle::Cycleway
         }
-        (12.., "highway", "path") if routed => RoadStyle::Path,
+        (12.., "highway", "path" | "ladder") if routed => RoadStyle::Path,
         (12.., "highway", "bridleway") if routed => RoadStyle::Bridleway,
         (12.., "highway", "via_ferrata") if routed => RoadStyle::ViaFerrata,
         (12.., "highway", "track") if routed || tracktype == "grade1" => RoadStyle::Track,
@@ -290,6 +403,13 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
 
         let trail_visibility = 0.666f64.powf(row.get_i32("trail_visibility")? as f64);
 
+        // Whatever the way's own type would have under it.
+        if row.get_bool("ladder")? {
+            apply_glow_defaults_a(1.0, trail_visibility);
+            draw()?;
+            continue;
+        }
+
         match (zoom, class, typ) {
             (..=11, _, _) => (),
             (14.., "highway", "footway" | "pedestrian" | "steps")
@@ -306,7 +426,9 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
                 apply_glow_defaults(1.0);
                 draw()?;
             }
-            (12.., "highway", "path") if bicycle != "designated" && (zoom > 12 || is_in_route) => {
+            (12.., "highway", "path" | "ladder")
+                if (typ == "ladder" || bicycle != "designated") && (zoom > 12 || is_in_route) =>
+            {
                 apply_glow_defaults_a(1.0, trail_visibility);
                 draw()?;
             }
@@ -457,7 +579,9 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
 
         let trail_visibility = 0.666f64.powf(row.get_i32("trail_visibility")? as f64);
 
-        match style(zoom, row)? {
+        let road_style = style(zoom, row)?;
+
+        match road_style {
             Some(RoadStyle::Pier) => {
                 apply_highway_defaults(2.0);
                 context.set_source_color(colors::PIER);
@@ -686,7 +810,48 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
                 draw_bridges_tunnels(width + 1.0)?;
             }
 
+            Some(RoadStyle::Ladder) => {
+                apply_highway_defaults(0.7);
+                context.set_source_color_a(colors::TRACK, trail_visibility);
+                draw_casing(1.5, 0.7)?;
+
+                context.set_line_width(3.7);
+                context.set_dash(&[0.8, 3.2], 0.0);
+                draw()?;
+
+                draw_bridges_tunnels(4.0)?;
+            }
             None => (),
+        }
+
+        // Staggered, so that it does not read as the rungs of a ladder.
+        if row.get_bool("rungs")? {
+            context.set_source_color_a(colors::TRACK, trail_visibility);
+            context.set_line_cap(cairo::LineCap::Butt);
+            context.set_line_width(1.5);
+
+            for (offset, phase) in [(1.25, 0.0), (-1.25, 3.0)] {
+                context.set_dash(&[1.0, 5.0], phase);
+                path_line_string_with_offset(context, geom, offset);
+                context.stroke()?;
+            }
+        }
+
+        if row.get_bool("safety_rope")? {
+            context.set_source_rgba(0.0, 0.0, 0.0, trail_visibility);
+            context.set_line_join(cairo::LineJoin::Round);
+
+            context.set_dash(&[], 0.0);
+            context.set_line_width(0.6);
+            path_line_string_with_offset(context, geom, SAFETY_ROPE_OFFSET);
+            context.stroke_preserve()?;
+
+            // Anchors.
+            context.set_line_cap(cairo::LineCap::Round);
+            context.set_dash(&[0.0, 8.0], 4.0);
+            context.set_line_width(1.6);
+            context.stroke()?;
+            context.set_line_cap(cairo::LineCap::Butt);
         }
     }
 

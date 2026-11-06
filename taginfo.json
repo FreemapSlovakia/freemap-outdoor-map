@@ -2355,6 +2355,31 @@
     },
     {
       "key": "highway",
+      "value": "ladder",
+      "object_types": ["node", "way"],
+      "description": "A node is rendered as icon from zoom 14, no label. A way is rendered as a ladder from zoom 14, as a path with an icon where the ladder is too short to show.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_ladder?mode=taginfo"
+    },
+    {
+      "key": "ladder",
+      "object_types": ["way"],
+      "description": "Any value but no renders a path, footway, steps or via ferrata as a ladder from zoom 14, as an icon where the ladder is too short to show.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_ladder?mode=taginfo"
+    },
+    {
+      "key": "rungs",
+      "object_types": ["node", "way"],
+      "description": "Any value but no adds staggered ticks to a path from zoom 14, an icon where the rungs are too short to show. A node is rendered as icon from zoom 14, no label.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_rungs?mode=taginfo"
+    },
+    {
+      "key": "safety_rope",
+      "object_types": ["node", "way"],
+      "description": "Any value but no adds a rope beside a path from zoom 14, on the side opposite to hiking route marking, an icon where the rope is too short to show. A node is rendered as icon from zoom 14, no label.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_safety_rope?mode=taginfo"
+    },
+    {
+      "key": "highway",
       "value": "track",
       "object_types": ["way"],
       "description": "Rendered from zoom 13.",

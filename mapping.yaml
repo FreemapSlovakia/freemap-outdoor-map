@@ -698,6 +698,14 @@ tables:
             __any__: obstacle_yes
           power:
             tower: power_tower
+          # `no` is kept as a type nothing draws: a reject filter would drop the whole
+          # element, with whatever else it is.
+          rungs:
+            "no": rungs_no
+            __any__: rungs
+          safety_rope:
+            "no": safety_rope_no
+            __any__: safety_rope
       - name: tags
         type: hstore_tags
         args:
@@ -752,6 +760,10 @@ tables:
         mountain_pass:
           - "yes"
         obstacle:
+          - __any__
+        rungs:
+          - __any__
+        safety_rope:
           - __any__
       any:
         mappings:
@@ -1046,6 +1058,7 @@ tables:
             mapping:
               highway:
                 - bus_stop
+                - ladder
                 - rest_area
                 - street_lamp
           historic:
@@ -1639,6 +1652,7 @@ tables:
             - corridor
             - bus_guideway
             - via_ferrata
+            - ladder
           railway:
             - platform
           public_transport:

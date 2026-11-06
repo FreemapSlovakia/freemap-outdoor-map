@@ -1,6 +1,10 @@
 use crate::render::{
     Feature, LegendValue, RenderLayer,
-    layers::{Category, ROUTE_COLORS, road_access_restrictions::forbids, roads::RoadStyle},
+    layers::{
+        Category, ROUTE_COLORS,
+        road_access_restrictions::forbids,
+        roads::{LADDER_HIGHWAYS, RoadStyle},
+    },
     legend::{BuildOpts, LegendItem, Lend, PropsBuilder, Row, TagsBuilder},
 };
 use indexmap::IndexMap;
@@ -53,11 +57,12 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
         &["bridleway"],
         &["via_ferrata"],
         &["track"],
+        &["ladder"],
     ]
     .iter()
     .enumerate()
     .map(|(i, types)| {
-        LegendItem::builder(
+        let b = LegendItem::builder(
             format!("road_{}", types[0]).leak(),
             Category::RoadsAndPaths,
             17,
@@ -70,20 +75,52 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                         .add_tags(|tags| tags.add("highway", "platform"))
                         .add_tags(|tags| tags.add("railway", "platform"))
                         .add_tags(|tags| tags.add("public_transport", "platform"));
+                } else if *typ == "ladder" {
+                    ts = ts.add_tags(|tags| tags.add("highway", "ladder"));
+
+                    for highway in LADDER_HIGHWAYS {
+                        ts = ts.add_tags(|tags| tags.add("highway", highway).add("ladder", "*"));
+                    }
                 } else {
                     ts = ts.add_tags(|tags| tags.add("highway", typ));
                 }
             }
 
             ts
-        })
-        .min_zoom(road_from_zoom("highway", types[0]))
-        .present_when("roads", &[], move |row| row.drawn_as(road_styles(types[0])))
-        .named_by("highway_names", types, Lend::NAME)
-        .add_landcover(if i < 10 { "residential" } else { "wood" })
-        .add_feature("roads", |b| b.with_road(types[0]).with("class", "highway"))
-        .build()
+        });
+
+        // Below 14 a ladder is drawn as a plain path.
+        let b = if types[0] == "ladder" {
+            b.min_zoom_unprobeable(14)
+        } else {
+            b.min_zoom(road_from_zoom("highway", types[0]))
+        };
+
+        b.present_when("roads", &[], move |row| row.drawn_as(road_styles(types[0])))
+            .named_by("highway_names", types, Lend::NAME)
+            .add_landcover(if i < 10 { "residential" } else { "wood" })
+            .add_feature("roads", |b| b.with_road(types[0]).with("class", "highway"))
+            .build()
     })
+    .chain(["rungs", "safety_rope"].into_iter().map(|key| {
+        LegendItem::builder(
+            format!("road_{key}").leak(),
+            Category::RoadsAndPaths,
+            17,
+            opts,
+        )
+        .add_tag_set(|ts| ts.add_tags(|tags| tags.add("highway", "*").add(key, "*")))
+        // At zoom 13 the path is drawn just the same, only without it.
+        .min_zoom_unprobeable(14)
+        .present_when("roads", &[], move |row| {
+            row.zoom() >= 14 && row.get_bool(key).unwrap_or(false)
+        })
+        .add_landcover("wood")
+        .add_feature("roads", move |b| {
+            b.with_road("path").with("class", "highway").with(key, true)
+        })
+        .build()
+    }))
     .chain(
         ([
             &[("oneway", "yes")] as &[(&str, &str)],
@@ -392,6 +429,7 @@ fn road_styles(typ: &str) -> &'static [RoadStyle] {
         "bridleway" => &[RoadStyle::Bridleway],
         "via_ferrata" => &[RoadStyle::ViaFerrata],
         "track" => &[RoadStyle::Track],
+        "ladder" => &[RoadStyle::Ladder],
         _ => &[],
     }
 }
@@ -621,6 +659,9 @@ impl PropsBuilder {
             .with("bicycle", "")
             .with("foot", "")
             .with("trail_visibility", 0)
+            .with("ladder", typ == "ladder")
+            .with("rungs", false)
+            .with("safety_rope", false)
             // Read by `layers::roads::render` at zoom <= 12; a legend sample is never part
             // of a route, so paths and tracks stay hidden there just like on the map.
             .with("is_in_route", false)
