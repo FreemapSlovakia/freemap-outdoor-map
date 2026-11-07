@@ -66,4 +66,6 @@ CREATE INDEX CONCURRENTLY osm_roads_via_ferrata_scale_geom_gist ON osm_roads USI
 
 -- Ways carrying a ladder, rungs or a safety rope, which `roads::trail_detail_runs_sql` gathers
 -- into runs.
-CREATE INDEX CONCURRENTLY osm_roads_trail_detail_geom_gist ON osm_roads USING GIST (geometry) WHERE type = 'ladder' OR tags ?| ARRAY['ladder', 'rungs', 'safety_rope'];
+CREATE INDEX CONCURRENTLY osm_roads_trail_detail_geom_gist
+ON osm_roads USING GIST (geometry)
+WHERE type = 'ladder' OR tags OPERATOR(public.?|) ARRAY['ladder', 'rungs', 'safety_rope'];

@@ -403,10 +403,8 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
 
         let trail_visibility = 0.666f64.powf(row.get_i32("trail_visibility")? as f64);
 
-        // Whatever the way's own type would have under it.
+        // Between the rails a glow would read as a middle line.
         if row.get_bool("ladder")? {
-            apply_glow_defaults_a(1.0, trail_visibility);
-            draw()?;
             continue;
         }
 
