@@ -210,12 +210,25 @@ def render-window [w: record, cfg: record, tr: string]: nothing -> nothing {
 
     # 4. Downsampled DEM for the contour pipeline — collar cropped, nodata-aware
     #    `average` (bilinear and cubic blend the nodata in; average does not).
+    #
+    #    NO -a_nodata HERE. It relabels the band without touching a pixel, so it
+    #    only ever told the truth while the source's nodata already equalled
+    #    cfg.nodata. With `unscale` it does not: the sentinel stays -2147483648
+    #    and a band labelled -9999 hands gdal_contour a 214-million-level range
+    #    it refuses outright. The contour run must use whatever nodata the
+    #    source declares, which is what these tiles now inherit.
+    # Existence is not enough: a file truncated by a full disk still exists, and
+    # skipping it leaves the contour run reading a tile it cannot open. Rebuild
+    # unless it opens AND reads.
     let dem2 = $"($cfg.data_root)/smooth2m/($w.id).tif"
-    if not ($dem2 | path exists) {
+    let dem2_ok = (if ($dem2 | path exists) {
+        (do { ^gdalinfo -checksum $dem2 } | complete).exit_code == 0
+    } else { false })
+    if not $dem2_ok {
         let tmp2 = $"($d)/dem2m.tif"
         (gdal_translate -q -of GTiff
           -projwin $w.dxmin $w.dymax $w.dxmax $w.dymin
-          -tr $cfg.dem_tr $cfg.dem_tr -r average -a_nodata $cfg.nodata
+          -tr $cfg.dem_tr $cfg.dem_tr -r average
           ...$CO $dem $tmp2 o> /dev/null)
         mv $tmp2 $dem2
     }

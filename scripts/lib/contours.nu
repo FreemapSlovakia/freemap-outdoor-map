@@ -12,6 +12,7 @@
 #   src_dir       the shading script's smooth2m/
 #   vrt           mosaic over src_dir
 #   dem_tif       consolidated single raster
+#   valid_range   optional {min, max} in metres; heights outside become nodata
 #   gpkg          output; its stem also names the offset partials
 #   table         layer name inside the GPKG
 #   height_col    attribute carrying the elevation
@@ -38,13 +39,36 @@ def consolidate [cfg: record]: nothing -> nothing {
     print $"==> Consolidating DEM -> ($cfg.dem_tif) — one full pass"
     let tmp = $"($cfg.dem_tif).tmp"
     rm -f $tmp
-    (gdal_translate
-      --config GDAL_CACHEMAX 16384
-      -of GTiff
-      -a_nodata $cfg.nodata
-      -co COMPRESS=ZSTD -co PREDICTOR=2 -co TILED=YES
-      -co NUM_THREADS=ALL_CPUS -co BIGTIFF=YES
-      $cfg.vrt $tmp)
+
+    # `valid_range` drops implausible heights to nodata. A source defect is not
+    # a tall pixel to be clamped: one pixel at 62085 m in 600 m ground makes
+    # gdal_contour emit a tiny ring at EVERY level between the two, so clamping
+    # its value or deleting by height afterwards cannot tell those rings from a
+    # real summit. Only removing the pixel removes the rings. Measured on
+    # Friuli: two such pixels produced 5990 spurious features across 6210
+    # levels, where the terrain itself reaches 2754 m.
+    let vr = ($cfg | get -o valid_range)
+    if $vr != null {
+        print $"    dropping heights outside ($vr.min)..($vr.max) m to nodata"
+        (gdal_calc.py
+          -A $cfg.vrt
+          --outfile $tmp
+          --calc $"where\(\(A >= ($vr.min)\) & \(A <= ($vr.max)\), A, ($cfg.nodata)\)"
+          --NoDataValue $cfg.nodata
+          --type Float32
+          --format GTiff                       # the .tmp extension tells it nothing
+          --co COMPRESS=ZSTD --co PREDICTOR=2 --co TILED=YES
+          --co NUM_THREADS=ALL_CPUS --co BIGTIFF=YES
+          --quiet)
+    } else {
+        (gdal_translate
+          --config GDAL_CACHEMAX 16384
+          -of GTiff
+          -a_nodata $cfg.nodata
+          -co COMPRESS=ZSTD -co PREDICTOR=2 -co TILED=YES
+          -co NUM_THREADS=ALL_CPUS -co BIGTIFF=YES
+          $cfg.vrt $tmp)
+    }
     mv $tmp $cfg.dem_tif
 }
 
