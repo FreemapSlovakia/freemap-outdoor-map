@@ -36,6 +36,7 @@ tags:
     - ladder
     - local_ref # bus stop number, shown instead of the name - https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/43
     - location
+    - memorial # memorial=plaque - https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/116
     - motorcar
     - motorcycle
     - mtb
@@ -753,6 +754,7 @@ tables:
             - icao
             - intermittent
             - local_ref # https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/43
+            - memorial # https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/116
             - operator
             - protected
             - ref
