@@ -673,6 +673,27 @@ tables:
           historic:
             mine: historic_mine
             bunker: historic_bunker
+            # historic vehicles get a prefix: some values, such as car, are also drawn shop types
+            aircraft: historic_aircraft
+            aircraft_wreck: historic_aircraft_wreck
+            boat: historic_boat
+            bus: historic_bus
+            cannon: historic_cannon
+            car: historic_car
+            carriage: historic_carriage
+            helicopter: historic_helicopter
+            locomotive: historic_locomotive
+            minecart: historic_minecart
+            railway_car: historic_railway_car
+            ship: historic_ship
+            submarine: historic_submarine
+            tank: historic_tank
+            tractor: historic_tractor
+            train: historic_train
+            tram: historic_tram
+            truck: historic_truck
+            vehicle: historic_vehicle
+            wagon: historic_wagon
           leisure:
             miniature_golf: leisure_miniature_golf
             horse_riding: leisure_horse_riding
@@ -1064,22 +1085,42 @@ tables:
           historic:
             mapping:
               historic:
+                - aircraft
+                - aircraft_wreck
                 - archaeological_site
+                - boat
                 - boundary_stone
                 - bunker
+                - bus
+                - cannon
+                - car
+                - carriage
                 - castle
                 - city_gate
                 - fort
+                - helicopter
+                - locomotive
                 - manor
                 - memorial
                 - mine
                 - mine_adit
                 - mine_shaft
+                - minecart
                 - monastery
                 - monument
+                - railway_car
                 - ruins
+                - ship
+                - submarine
+                - tank
                 - tomb
+                - tractor
+                - train
+                - tram
                 - tree_shrine
+                - truck
+                - vehicle
+                - wagon
                 - wayside_cross
                 - wayside_shrine
           information:
