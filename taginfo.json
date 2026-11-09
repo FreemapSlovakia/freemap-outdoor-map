@@ -579,6 +579,13 @@
     },
     {
       "key": "emergency",
+      "value": "defibrillator",
+      "object_types": ["node", "area"],
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/poi_defibrillator?mode=taginfo",
+      "description": "Rendered as icon. Icon from zoom 18. Label (name/ref) from zoom 19."
+    },
+    {
+      "key": "emergency",
       "value": "landing_site",
       "object_types": ["node", "area"],
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/poi_landing_site?mode=taginfo",

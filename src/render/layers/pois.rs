@@ -313,6 +313,7 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (17, 18, N, N, Health, "doctors", Extra::default()),
         (17, 18, N, N, Health, "clinic", Extra { icon: Some("doctors"), ..Extra::default() }),
         (18, 19, N, N, Health, "veterinary", Extra::default()),
+        (18, 19, N, N, Health, "defibrillator", Extra { needs_access: Some(false), ..Extra::default() }),
         (18, 19, N, N, Transport, "bicycle_parking", Extra::default()),
         (17, 18, N, N, Transport, "bicycle_rental", Extra::default()),
         (17, 18, N, N, Transport, "bicycle_repair_station", Extra::default()),
