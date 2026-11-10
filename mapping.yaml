@@ -26,22 +26,30 @@ tags:
     - ele
     - fee
     - foot
+    - footway
     - generator:method
     - generator:source
     - hgv
     - hiking
     - horse
     - icao
+    - informal
     - intermittent
     - ladder
+    - lanes
+    - leaf_cycle
+    - leaf_type
     - local_ref # bus stop number, shown instead of the name - https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/43
     - location
     - memorial # memorial=plaque - https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/116
+    - motor_vehicle
     - motorcar
     - motorcycle
     - mtb
     - mtb:scale
+    - mtb:scale:uphill
     - operator
+    - piste:type
     - plant:method
     - plant:source
     - protect_class
@@ -55,6 +63,7 @@ tags:
     - seasonal
     - shelter_type
     - ski
+    - summit:cross
     - telescope:type
     - tower:construction
     - tower:type
@@ -62,6 +71,7 @@ tags:
     - via_ferrata_scale
     - water_characteristic
     - wetland
+    - width
   include_regex:
     - ^(disused|abandoned|ruins|demolished|removed|destroyed|was):(leisure|natural|amenity|highway)
 generalized_tables:
@@ -242,6 +252,8 @@ tables:
           include:
             - area:aeroway # https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/36
             - area:highway # https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/36
+            - leaf_cycle
+            - leaf_type
             - protect_class
             - ref
             - wetland
@@ -762,6 +774,7 @@ tables:
             - ruins
             - seasonal
             - shelter_type
+            - summit:cross
             - telescope:type
             - tower:construction
             - tower:type
@@ -1235,6 +1248,7 @@ tables:
           railway:
             mapping:
               railway:
+                - crossing
                 - halt
                 - level_crossing # TODO
                 - station
@@ -1618,9 +1632,16 @@ tables:
         args:
           include:
             - assisted_trail
+            - footway
+            - informal
             - ladder
+            - lanes
+            - motor_vehicle
+            - mtb:scale:uphill
+            - piste:type
             - rungs
             - safety_rope
+            - width
     type: linestring
     filters:
       reject:
@@ -1704,6 +1725,21 @@ tables:
             - water_slide
           leisure:
             - track
+
+  # Own table: in roads, ferry names would be labelled by highway_names.
+  ferries:
+    columns:
+      - name: osm_id
+        type: id
+      - name: geometry
+        type: geometry
+      - name: name
+        type: string
+        key: name
+    type: linestring
+    mapping:
+      route:
+        - ferry
 
   housenumbers:
     columns:
