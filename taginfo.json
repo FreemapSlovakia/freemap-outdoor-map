@@ -1133,7 +1133,7 @@
       "value": "bus_stop",
       "object_types": ["node", "area"],
       "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/bus_stop.svg",
-      "description": "Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
+      "description": "Rendered as icon. Icon from zoom 15. Label (name/ref, followed by a local_ref of up to 3 characters in brackets) from zoom 16."
     },
     {
       "key": "historic",

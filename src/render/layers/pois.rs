@@ -1092,6 +1092,11 @@ pub async fn query(
                     AND tags ? 'ref'
                     AND NOT (tags->'ref' = ANY(regexp_split_to_array(name, '[^[:alnum:]_]+')))
                     THEN tags->'ref' || '. ' || name
+                -- The platform letter tells stops of one name apart. Bracketed, or a
+                -- number would read as part of the name. Longer values are route lists
+                -- or the name again, not platforms.
+                WHEN type = 'bus_stop' AND length(tags->'local_ref') BETWEEN 1 AND 3
+                    THEN concat_ws(' ', NULLIF(name, ''), '(' || (tags->'local_ref') || ')')
                 ELSE COALESCE(NULLIF(name, ''), tags->'ref', '') END AS name,
             hstore(ARRAY[
                 -- An unnamed saddle is labelled with its elevation and nothing else, so
