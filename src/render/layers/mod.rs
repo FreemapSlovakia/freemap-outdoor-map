@@ -10,7 +10,7 @@ pub use pipeline::render;
 pub use pois::{
     Def, INACCESSIBLE_ZOOM_DELAY, POI_ORDER, POIS, SHOP_TYPES, WAYMARKING_LEGEND_TYPES,
 };
-pub use pois::{Look, SpringLook, look as poi_look};
+pub use pois::{Look, SpringLook, drinkable_marks, look as poi_look};
 pub use routes::COLORS as ROUTE_COLORS;
 
 mod aerialway_names;

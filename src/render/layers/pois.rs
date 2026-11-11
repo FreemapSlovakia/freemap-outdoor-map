@@ -1422,8 +1422,6 @@ pub struct SpringLook {
     pub refitted: bool,
     pub hot: bool,
     pub intermittent: bool,
-    /// `drinking_water=*`, where tagged.
-    pub drinkable: Option<bool>,
 }
 
 fn spring_look(extra: &HashMap<String, Option<String>>) -> SpringLook {
@@ -1441,17 +1439,43 @@ fn spring_look(extra: &HashMap<String, Option<String>>) -> SpringLook {
         refitted: !mineral && get("refitted") == Some("yes"),
         hot: get("hot") == Some("true"),
         intermittent: get("intermittent") == Some("yes"),
-        drinkable: match get("drinkable") {
-            Some("yes" | "treated") => Some(true),
-            Some("no") => Some(false),
-            _ => None,
-        },
+    }
+}
+
+/// `drinking_water=*`, where tagged.
+fn drinkable_of(extra: &HashMap<String, Option<String>>) -> Option<bool> {
+    match extra.get("drinkable").and_then(Option::as_deref) {
+        Some("yes" | "treated") => Some(true),
+        Some("no") => Some(false),
+        _ => None,
+    }
+}
+
+/// Which `drinking_water=*` values mark a POI of `typ`, as (`yes`, `no`).
+pub fn drinkable_marks(typ: &str) -> (bool, bool) {
+    match typ {
+        "spring" | "water_well" | "water_point" => (true, true),
+        // `no` is the normal tag on an ornamental fountain or an animal trough;
+        // marking every one would say nothing.
+        "fountain" | "watering_place" => (true, false),
+        // `yes` is what the glyph already says.
+        "drinking_water" => (false, true),
+        _ => (false, false),
+    }
+}
+
+/// The stylesheet rule colouring the `drinkable_*` marker.
+fn drinkable_rule(drinkable: bool) -> &'static str {
+    if drinkable {
+        "#drinkable { fill: #00ff00 } "
+    } else {
+        "#drinkable { fill: #ff0000 } "
     }
 }
 
 /// The icon files and stylesheet for a `spring` POI, whose icon varies with several
 /// `extra` tags rather than coming from a single static definition.
-fn spring_variant(look: &SpringLook) -> (Vec<String>, Option<String>) {
+fn spring_variant(look: &SpringLook) -> (Vec<String>, String) {
     let mut stylesheet = String::new();
 
     let mut names = vec![
@@ -1477,21 +1501,9 @@ fn spring_variant(look: &SpringLook) -> (Vec<String>, Option<String>) {
         names.push("intermittent".into());
     }
 
-    let _ = write!(stylesheet, "#spring {{ fill: {fill} }}");
+    let _ = write!(stylesheet, "#spring {{ fill: {fill} }} ");
 
-    match look.drinkable {
-        Some(true) => {
-            names.push("drinkable_spring".into());
-            stylesheet.push_str(r"#drinkable { fill: #00ff00 } ");
-        }
-        Some(false) => {
-            names.push("drinkable_spring".into());
-            stylesheet.push_str(r"#drinkable { fill: #ff0000 } ");
-        }
-        None => {}
-    }
-
-    (names, Some(stylesheet))
+    (names, stylesheet)
 }
 
 /// The size of a label's elevation line, against its name's.
@@ -1523,6 +1535,8 @@ pub struct Look<'a> {
     delay: u8,
     /// How the spring glyph is varied, where the icon is one.
     pub spring: Option<SpringLook>,
+    /// The green (`true`) or red marker on a water source.
+    pub drinkable: Option<bool>,
 }
 
 impl Look<'_> {
@@ -1599,18 +1613,17 @@ pub fn look<'a>(
         .get("access")
         .is_some_and(|access| matches!(access.as_deref(), Some("private" | "no")));
 
+    let drinkable = drinkable_of(extra).filter(|&yes| {
+        let (marks_yes, marks_no) = drinkable_marks(typ);
+
+        if yes { marks_yes } else { marks_no }
+    });
+
     // A well you may not reach, or may not drink from, is not worth the walk - so it
     // is held back two zooms as well as dimmed. `drinking_water=no` only delays: the
-    // spring icon already carries a red marker saying so, and the glow would claim
+    // icon already carries a red marker saying so, and the glow would claim
     // something else, that you may not get in at all.
-    // Only where drinking is the point: `drinking_water=no` is the normal tag on an
-    // ornamental fountain or an animal trough, which are worth drawing regardless.
-    let undrinkable = matches!(
-        typ,
-        "spring" | "drinking_water" | "water_point" | "water_well"
-    ) && extra
-        .get("drinkable")
-        .is_some_and(|v| v.as_deref() == Some("no"));
+    let undrinkable = drinkable == Some(false);
 
     let (fade, delay) = if def.needs_access() && (restricted || undrinkable) {
         (if restricted { 0.66 } else { 1.0 }, INACCESSIBLE_ZOOM_DELAY)
@@ -1626,6 +1639,8 @@ pub fn look<'a>(
         fade,
         delay,
         spring: (key == "spring").then(|| spring_look(extra)),
+        // The ruins glyph has no marker of its own.
+        drinkable: if is_ruins { None } else { drinkable },
     })
 }
 
@@ -1659,6 +1674,7 @@ pub fn render_icons(
             is_ruins,
             fade,
             ref spring,
+            drinkable,
             ..
         } = look;
 
@@ -1673,21 +1689,24 @@ pub fn render_icons(
             def.color()
         };
 
-        let (names, stylesheet) = spring.as_ref().map_or_else(
+        let (mut names, mut stylesheet) = spring.as_ref().map_or_else(
             || {
                 let fill = colors::rgb_hex(color);
 
-                (
-                    vec![key.to_string()],
-                    Some(format!("path {{ fill: {fill} }}")),
-                )
+                (vec![key.to_string()], format!("path {{ fill: {fill} }} "))
             },
             spring_variant,
         );
 
+        if let Some(drinkable) = drinkable {
+            // Behind the glyph, which keeps its whole shape where the two overlap.
+            names.insert(0, format!("drinkable_{key}"));
+            stylesheet.push_str(drinkable_rule(drinkable));
+        }
+
         let surface = svg_repo.get_with(Options {
             names,
-            stylesheet,
+            stylesheet: Some(stylesheet),
             halo: def.extra.halo,
             halo_opacity: svg_repo::halo_opacity_under_fade(fade),
             halo_color,

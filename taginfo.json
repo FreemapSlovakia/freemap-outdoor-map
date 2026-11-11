@@ -3207,14 +3207,14 @@
       "key": "drinking_water",
       "value": "yes",
       "object_types": ["node", "area"],
-      "description": "Differentiates icon for springs and wells. Supports values yes/no.",
+      "description": "Green marker on springs, wells, water points, fountains and watering places; treated counts as yes.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/poi_spring_drinking_water_yes?mode=taginfo"
     },
     {
       "key": "drinking_water",
       "value": "no",
       "object_types": ["node", "area"],
-      "description": "Differentiates icon for springs and wells. Supports values yes/no.",
+      "description": "Red marker on springs, wells, water points and drinking water; delays them by two zooms.",
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/poi_spring_drinking_water_no?mode=taginfo"
     },
     {

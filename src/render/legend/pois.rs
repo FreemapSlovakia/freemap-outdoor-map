@@ -1,7 +1,7 @@
 use crate::render::{
     layers::{
         Category, Def, INACCESSIBLE_ZOOM_DELAY, Look, POI_ORDER, POIS, SHOP_TYPES, SpringLook,
-        WAYMARKING_LEGEND_TYPES,
+        WAYMARKING_LEGEND_TYPES, drinkable_marks,
     },
     legend::{
         BuildOpts, LegendItem, LegendItemBuilder, Lend, MAX_LEGEND_ZOOM, Row, build_tags_map,
@@ -202,8 +202,6 @@ pub fn pois(
         })
         .chain(
             [
-                (("drinkable", "yes"), ("drinking_water", "yes")),
-                (("drinkable", "no"), ("drinking_water", "no")),
                 (("hot", "true"), ("natural", "hot_spring")),
                 (
                     ("water_characteristic", "mineral"),
@@ -239,11 +237,7 @@ pub fn pois(
 
                     ts
                 })
-                .zoom_range_of(if (prop_name, prop_value) == ("drinkable", "no") {
-                    poi_zooms_inaccessible("spring")
-                } else {
-                    poi_zooms_of("spring")
-                })
+                .zoom_range_of(poi_zooms_of("spring"))
                 .add_poi(
                     "spring",
                     HashMap::<String, Option<String>>::from([(
@@ -258,6 +252,78 @@ pub fn pois(
                         .is_some_and(|spring| spring_shows(spring, prop_name, prop_value))
                 })
                 .build()
+            }),
+        )
+        .chain(
+            // One item per glyph and marker value, drawn as that glyph with it, listing
+            // the types `drinkable_marks` puts that marker on. Water points and
+            // `amenity=drinking_water` share a glyph. The spring ids are linked from
+            // taginfo.json.
+            [
+                ("spring", &[("natural", "spring")][..]),
+                ("water_well", &[("man_made", "water_well")]),
+                (
+                    "drinking_water",
+                    &[("amenity", "water_point"), ("amenity", "drinking_water")],
+                ),
+                ("fountain", &[("amenity", "fountain")]),
+                ("watering_place", &[("amenity", "watering_place")]),
+            ]
+            .into_iter()
+            .flat_map(|(visual_key, types)| {
+                let members = &members;
+
+                [true, false].into_iter().filter_map(move |drinkable| {
+                    let marked: Vec<_> = types
+                        .iter()
+                        .filter(|(_, typ)| {
+                            let (marks_yes, marks_no) = drinkable_marks(typ);
+
+                            if drinkable { marks_yes } else { marks_no }
+                        })
+                        .collect();
+
+                    let &&(_, repr_typ) = marked.first()?;
+
+                    let value = if drinkable { "yes" } else { "no" };
+
+                    Some(
+                        LegendItem::builder(
+                            format!("poi_{repr_typ}_drinking_water_{value}").leak(),
+                            Category::Water,
+                            PREFERRED_POI_ZOOM,
+                            opts,
+                        )
+                        .add_tag_set(|mut ts| {
+                            for &&(key, typ) in &marked {
+                                ts = ts.add_tags(|tags| {
+                                    tags.add(key, typ).add("drinking_water", value)
+                                });
+                            }
+
+                            ts
+                        })
+                        // `no` holds every one of these back, as it does on the map.
+                        .zoom_range_of(if drinkable {
+                            poi_zooms_of(repr_typ)
+                        } else {
+                            poi_zooms_inaccessible(repr_typ)
+                        })
+                        .add_poi(
+                            repr_typ,
+                            HashMap::<String, Option<String>>::from([(
+                                "drinkable".into(),
+                                Some(value.into()),
+                            )]),
+                            Category::Water,
+                        )
+                        .present_poi(members.get(visual_key), move |typ, look| {
+                            look.def.legend_key(typ) == visual_key
+                                && look.drinkable == Some(drinkable)
+                        })
+                        .build(),
+                    )
+                })
             }),
         )
         .chain([{
@@ -328,8 +394,6 @@ fn spring_shows(look: &SpringLook, prop: &str, value: &str) -> bool {
         ("refitted", _) => look.refitted,
         ("hot", _) => look.hot,
         ("intermittent", _) => look.intermittent,
-        ("drinkable", "yes") => look.drinkable == Some(true),
-        ("drinkable", _) => look.drinkable == Some(false),
         _ => false,
     }
 }

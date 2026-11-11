@@ -143,6 +143,30 @@ fn merge_halo_style(own: Option<&str>, halo: &(String, u32)) -> String {
     }
 }
 
+/// A `width`/`height` attribute in px.
+fn parse_px(v: &str) -> Option<f64> {
+    v.trim().trim_end_matches("px").trim().parse().ok()
+}
+
+/// Layers share the first one's coordinates; a later layer may reach past its canvas,
+/// as a drinkable marker does past a cropped glyph, so the canvas grows to hold it.
+/// Only for plain px canvases - with a viewBox, a larger width would rescale the icon.
+fn grow_canvas(target: &mut Element, layer: &Element) {
+    if target.attributes.contains_key("viewBox") || layer.attributes.contains_key("viewBox") {
+        return;
+    }
+
+    for dim in ["width", "height"] {
+        let get = |el: &Element| el.attributes.get(dim).and_then(|v| parse_px(v));
+
+        if let (Some(own), Some(other)) = (get(target), get(layer))
+            && other > own
+        {
+            target.attributes.insert(dim.into(), other.to_string());
+        }
+    }
+}
+
 /// Grows the document viewport by [`HALO_PAD`] on every side.
 ///
 /// librsvg clips to the viewport, so without this an icon whose outline reaches its own
@@ -154,10 +178,8 @@ fn merge_halo_style(own: Option<&str>, halo: &(String, u32)) -> String {
 /// Icons that already carry padding are unchanged. The added room stays empty, and the
 /// callers measure ink, not canvas.
 fn pad_viewport(svg: &mut Element) {
-    let parse = |v: &str| v.trim().trim_end_matches("px").trim().parse::<f64>().ok();
-
-    let width = svg.attributes.get("width").and_then(|v| parse(v));
-    let height = svg.attributes.get("height").and_then(|v| parse(v));
+    let width = svg.attributes.get("width").and_then(|v| parse_px(v));
+    let height = svg.attributes.get("height").and_then(|v| parse_px(v));
 
     let view_box = svg.attributes.get("viewBox").and_then(|vb| {
         let nums = vb
@@ -289,6 +311,7 @@ impl SvgRepo {
                 }
 
                 if let Some(target) = &mut main_svg {
+                    grow_canvas(target, &svg_element);
                     target.children.append(&mut svg_element.children);
                 } else {
                     main_svg = Some(svg_element);
