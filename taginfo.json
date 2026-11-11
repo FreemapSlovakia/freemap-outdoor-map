@@ -1185,6 +1185,41 @@
       "description": "Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
     },
     {
+      "key": "memorial",
+      "value": "plaque",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/memorial_plaque.svg",
+      "description": "Rendered as icon when historic=memorial. Icon from zoom 17. Label (name/ref) from zoom 18."
+    },
+    {
+      "key": "memorial",
+      "value": "blue_plaque",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/memorial_plaque.svg",
+      "description": "Rendered as icon when historic=memorial. Icon from zoom 17. Label (name/ref) from zoom 18."
+    },
+    {
+      "key": "memorial",
+      "value": "statue",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/memorial_statue.svg",
+      "description": "Rendered as icon when historic=memorial. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "memorial",
+      "value": "bust",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/memorial_bust.svg",
+      "description": "Rendered as icon when historic=memorial. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "memorial",
+      "value": "stone",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/memorial_stone.svg",
+      "description": "Rendered as icon when historic=memorial. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
       "key": "historic",
       "value": "mine",
       "object_types": ["node", "area"],

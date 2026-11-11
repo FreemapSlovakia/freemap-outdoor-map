@@ -158,6 +158,8 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
     let chapel_replacements =
         build_replacements(&[(r"^[Kk]aplnka\b *", ""), (r"\b([Ss]vät\w+|Sv\.)", "sv.")]);
 
+    let memorial_replacements = build_replacements(&[(r"^[Pp]amätník\b *", "")]);
+
     let school_replacements = build_replacements(&[
         (r"[Zz]ákladná [Šš]kola", "ZŠ"),
         (r"[Zz]ákladná [Uu]melecká [Šš]kola", "ZUŠ"),
@@ -369,9 +371,14 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
             ..Extra::default()
         }),
         (15, 16, N, N, Historic, "memorial", Extra {
-            replacements: build_replacements(&[(r"^[Pp]amätník\b *", "")]),
+            replacements: memorial_replacements.clone(),
             ..Extra::default()
         }),
+        (15, 16, N, N, Historic, "memorial_statue", Extra { replacements: memorial_replacements.clone(), ..Extra::default() }),
+        (15, 16, N, N, Historic, "memorial_bust", Extra { replacements: memorial_replacements.clone(), ..Extra::default() }),
+        (15, 16, N, N, Historic, "memorial_stone", Extra { replacements: memorial_replacements.clone(), ..Extra::default() }),
+        // Plaques are many and small, on walls in towns.
+        (17, 18, N, N, Historic, "memorial_plaque", Extra { replacements: memorial_replacements.clone(), ..Extra::default() }),
         (15, 16, N, N, Institution, "university", Extra { replacements: university_replacements.clone(), ..Extra::default() }),
         (15, 16, N, N, Institution, "college", Extra { replacements: college_replacements.clone(), ..Extra::default() }),
         (15, 16, N, N, Institution, "school", Extra { replacements: school_replacements.clone(), ..Extra::default() }),
@@ -1182,6 +1189,13 @@ pub async fn query(
                         WHEN 'optical' THEN 'dome'
                         ELSE 'dish'
                     END
+                WHEN
+                    type = 'memorial' AND
+                    tags->'memorial' IN ('plaque', 'blue_plaque', 'statue', 'bust', 'stone')
+                THEN 'memorial_' || CASE tags->'memorial'
+                    WHEN 'blue_plaque' THEN 'plaque'
+                    ELSE tags->'memorial'
+                END
                 WHEN
                     type = 'vending_machine' AND
                     tags->'vending' IN ('excrement_bags', 'parking_tickets', 'public_transport_tickets')

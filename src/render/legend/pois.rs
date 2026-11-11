@@ -420,6 +420,10 @@ fn build_poi_tags(
                 tags.push(("amenity", "vending_machine"));
                 tags.push(("vending", typ));
             }
+            "memorial_plaque" | "memorial_statue" | "memorial_bust" | "memorial_stone" => {
+                override_key = Some("memorial");
+                tags.push(("memorial", &typ[9..]));
+            }
             "tree_protected" => {
                 override_key = Some("tree");
                 tags.push(("protected", "yes"));
