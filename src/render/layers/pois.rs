@@ -1096,7 +1096,7 @@ pub async fn query(
                 -- number would read as part of the name. Longer values are route lists
                 -- or the name again, not platforms.
                 WHEN type = 'bus_stop' AND length(tags->'local_ref') BETWEEN 1 AND 3
-                    THEN concat_ws(' ', NULLIF(name, ''), '(' || (tags->'local_ref') || ')')
+                    THEN concat_ws(' ', COALESCE(NULLIF(name, ''), tags->'ref'), '(' || (tags->'local_ref') || ')')
                 ELSE COALESCE(NULLIF(name, ''), tags->'ref', '') END AS name,
             hstore(ARRAY[
                 -- An unnamed saddle is labelled with its elevation and nothing else, so

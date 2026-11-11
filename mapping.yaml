@@ -39,7 +39,7 @@ tags:
     - lanes
     - leaf_cycle
     - leaf_type
-    - local_ref # bus stop number, shown instead of the name - https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/43
+    - local_ref # bus stop platform, shown after the name - https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/43
     - location
     - memorial # memorial=plaque - https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/116
     - motor_vehicle
