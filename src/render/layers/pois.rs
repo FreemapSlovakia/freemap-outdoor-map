@@ -497,13 +497,13 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (18, NN, N, N, ManMade, "tower_lighting", Extra::default()),
         (18, NN, N, N, ManMade, "tower_lattice_lighting", Extra::default()),
         (18, NN, N, N, ManMade, "mast_lighting", Extra::default()),
-        (10, 10, Y, Y, NaturalPoi, "volcano", Extra { icon: Some("peak"), font_size: 13.0, halo: false, text_color: Some(colors::MILITARY), color: Some(colors::POI_VOLCANO), ..Extra::default() }),
-        (10, 10, Y, Y, NaturalPoi, "peak1", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
-        (11, 11, Y, Y, NaturalPoi, "peak2", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
-        (12, 12, Y, Y, NaturalPoi, "peak3", Extra { icon: Some("peak"), font_size: 13.0, halo: false, ..Extra::default() }),
-        (13, 13, Y, Y, NaturalPoi, "peak", Extra { font_size: 13.0, halo: false, ..Extra::default() }),
-        (15, 15, Y, Y, NaturalPoi, "saddle", Extra { font_size: 13.0, halo: false, ..Extra::default() }),
-        (15, 15, Y, Y, NaturalPoi, "mountain_pass", Extra { icon: Some("saddle"), font_size: 13.0, halo: false, ..Extra::default() }),
+        (10, 10, Y, Y, NaturalPoi, "volcano", Extra { icon: Some("peak"), font_size: 13.0, text_color: Some(colors::MILITARY), color: Some(colors::POI_VOLCANO), ..Extra::default() }),
+        (10, 10, Y, Y, NaturalPoi, "peak1", Extra { icon: Some("peak"), font_size: 13.0, ..Extra::default() }),
+        (11, 11, Y, Y, NaturalPoi, "peak2", Extra { icon: Some("peak"), font_size: 13.0, ..Extra::default() }),
+        (12, 12, Y, Y, NaturalPoi, "peak3", Extra { icon: Some("peak"), font_size: 13.0, ..Extra::default() }),
+        (13, 13, Y, Y, NaturalPoi, "peak", Extra { font_size: 13.0, ..Extra::default() }),
+        (15, 15, Y, Y, NaturalPoi, "saddle", Extra { font_size: 13.0, ..Extra::default() }),
+        (15, 15, Y, Y, NaturalPoi, "mountain_pass", Extra { icon: Some("saddle"), font_size: 13.0, ..Extra::default() }),
         (16, 17, N, N, Water, "water_works", Extra { text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
         (16, 17, N, N, Water, "reservoir_covered", Extra { icon: Some("water_works"), text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
         (16, 17, N, N, Water, "pumping_station", Extra { icon: Some("water_works"), text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
@@ -665,10 +665,10 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         // under a named summit. The elevation is the whole label here, so it lands on
         // line 0 and is never scaled - stating the product keeps a spot height from
         // reading as *louder* than the named summit it sits next to.
-        (14, 14, Y, Y, NaturalPoi, "peak_noname", Extra { ele_only_label: true, icon: Some("peak"), font_size: 10.4, halo: false, ..Extra::default() }),
-        (14, 14, Y, Y, NaturalPoi, "volcano_noname", Extra { ele_only_label: true, icon: Some("peak"), font_size: 10.4, halo: false, text_color: Some(colors::MILITARY), color: Some(colors::POI_VOLCANO), ..Extra::default() }),
-        (15, 15, Y, Y, NaturalPoi, "saddle_noname", Extra { ele_only_label: true, icon: Some("saddle"), font_size: 10.4, halo: false, ..Extra::default() }),
-        (15, 15, Y, Y, NaturalPoi, "mountain_pass_noname", Extra { ele_only_label: true, icon: Some("saddle"), font_size: 10.4, halo: false, ..Extra::default() }),
+        (14, 14, Y, Y, NaturalPoi, "peak_noname", Extra { ele_only_label: true, icon: Some("peak"), font_size: 10.4, ..Extra::default() }),
+        (14, 14, Y, Y, NaturalPoi, "volcano_noname", Extra { ele_only_label: true, icon: Some("peak"), font_size: 10.4, text_color: Some(colors::MILITARY), color: Some(colors::POI_VOLCANO), ..Extra::default() }),
+        (15, 15, Y, Y, NaturalPoi, "saddle_noname", Extra { ele_only_label: true, icon: Some("saddle"), font_size: 10.4, ..Extra::default() }),
+        (15, 15, Y, Y, NaturalPoi, "mountain_pass_noname", Extra { ele_only_label: true, icon: Some("saddle"), font_size: 10.4, ..Extra::default() }),
     ];
 
     entries
