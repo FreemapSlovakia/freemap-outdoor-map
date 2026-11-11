@@ -1,7 +1,7 @@
 use crate::render::{
     layers::{
-        Category, Def, INACCESSIBLE_ZOOM_DELAY, Look, POI_ORDER, POIS, SHOP_TYPES, SpringLook,
-        WAYMARKING_LEGEND_TYPES, drinkable_marks,
+        Category, Def, INACCESSIBLE_ZOOM_DELAY, Look, POI_ORDER, POIS, SHOP_TYPES,
+        SUMMIT_CROSS_MIN_ZOOM, SpringLook, WAYMARKING_LEGEND_TYPES, drinkable_marks,
     },
     legend::{
         BuildOpts, LegendItem, LegendItemBuilder, Lend, MAX_LEGEND_ZOOM, Row, build_tags_map,
@@ -326,6 +326,32 @@ pub fn pois(
                 })
             }),
         )
+        .chain([{
+            let zooms = poi_zooms_of("peak");
+
+            LegendItem::builder(
+                "poi_peak_summit_cross",
+                Category::NaturalPoi,
+                PREFERRED_POI_ZOOM,
+                opts,
+            )
+            .add_tag_set(|ts| {
+                ts.add_tags(|tags| tags.add("natural", "peak").add("summit:cross", "yes"))
+            })
+            .zoom_range_of(zooms)
+            // Below it the same peak is drawn, only without the cross.
+            .min_zoom_unprobeable(SUMMIT_CROSS_MIN_ZOOM)
+            .add_poi(
+                "peak",
+                HashMap::<String, Option<String>>::from([(
+                    "summit_cross".into(),
+                    Some("yes".into()),
+                )]),
+                Category::NaturalPoi,
+            )
+            .present_poi(members.get("peak"), |_, look| look.summit_cross)
+            .build()
+        }])
         .chain([{
             LegendItem::builder("private_poi", Category::Other, 19, opts)
                 .add_tag_set(|ts| {

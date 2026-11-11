@@ -8,7 +8,8 @@ pub use pipeline::Shading;
 pub use pipeline::key_enabled;
 pub use pipeline::render;
 pub use pois::{
-    Def, INACCESSIBLE_ZOOM_DELAY, POI_ORDER, POIS, SHOP_TYPES, WAYMARKING_LEGEND_TYPES,
+    Def, INACCESSIBLE_ZOOM_DELAY, POI_ORDER, POIS, SHOP_TYPES, SUMMIT_CROSS_MIN_ZOOM,
+    WAYMARKING_LEGEND_TYPES,
 };
 pub use pois::{Look, SpringLook, drinkable_marks, look as poi_look};
 pub use routes::COLORS as ROUTE_COLORS;

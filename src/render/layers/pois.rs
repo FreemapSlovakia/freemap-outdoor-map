@@ -752,6 +752,9 @@ fn drawn_at(typ: &str, zoom: u8) -> bool {
         .is_some_and(|defs| defs.iter().any(|def| def.is_active_at(zoom)))
 }
 
+/// From here a peak tagged `summit:cross=yes` is drawn with the cross.
+pub const SUMMIT_CROSS_MIN_ZOOM: u8 = 15;
+
 /// Zooms a POI is held back by when its tags say you cannot reach or use it - see
 /// `Def::needs_access`. The legend restates this, so it is public.
 pub const INACCESSIBLE_ZOOM_DELAY: u8 = 2;
@@ -949,7 +952,7 @@ pub async fn query(
     const UNNAMED_SADDLE: &str = "type IN ('saddle', 'mountain_pass') AND \
         COALESCE(NULLIF(name, ''), tags->'ref', '') = ''";
 
-    let mut selects = vec![];
+    let mut selects: Vec<&str> = vec![];
 
     // TODO add hiking-only
     let kst_cond = if kst_only {
@@ -958,12 +961,35 @@ pub async fn query(
         ""
     };
 
-    selects.push(
+    // From z16 a cross mapped as a node of its own beside the peak draws itself.
+    let summit_cross = match zoom {
+        ..SUMMIT_CROSS_MIN_ZOOM => "NULL".to_string(),
+        SUMMIT_CROSS_MIN_ZOOM => {
+            "CASE WHEN tags->'summit:cross' = 'yes' THEN 'yes' END".to_string()
+        }
+        _ => "CASE WHEN tags->'summit:cross' = 'yes' AND NOT EXISTS (
+                SELECT 1
+                FROM osm_pois c
+                WHERE c.type = 'cross' AND ST_DWithin(
+                    c.geometry,
+                    osm_pois.geometry,
+                    -- 30 m on the ground, as Web Mercator stretches it at the peak
+                    30 * cosh(ST_Y(osm_pois.geometry) / 6378137)
+                )
+            ) THEN 'yes' END"
+            .to_string(),
+    };
+
+    let named_peak_sql = format!(
         "SELECT
             osm_id,
             geometry,
             name,
-            hstore(ARRAY['ele', tags->'ele', 'isolation', tags->'isolation']) AS extra,
+            hstore(ARRAY[
+                'ele', tags->'ele',
+                'isolation', tags->'isolation',
+                'summit_cross', {summit_cross}
+            ]) AS extra,
             CASE WHEN type = 'volcano' THEN type
                 WHEN isolation > 4500 THEN 'peak1'
                 WHEN isolation BETWEEN 3000 AND 4500 THEN 'peak2'
@@ -980,6 +1006,8 @@ pub async fn query(
             name <> ''
         ",
     );
+
+    selects.push(&named_peak_sql);
 
     let noname_peak_sql;
 
@@ -1002,7 +1030,10 @@ pub async fn query(
                 name,
                 -- Nulled out unless it is a plain number: an `ele` like '1234 m' or
                 -- 'summit' would be the entire label, with nothing to make sense of it.
-                hstore('ele', CASE WHEN {NUMERIC_ELE} THEN tags->'ele' END) AS extra,
+                hstore(ARRAY[
+                    'ele', CASE WHEN {NUMERIC_ELE} THEN tags->'ele' END,
+                    'summit_cross', {summit_cross}
+                ]) AS extra,
                 type || '_noname' AS type
             FROM
                 osm_pois
@@ -1537,6 +1568,8 @@ pub struct Look<'a> {
     pub spring: Option<SpringLook>,
     /// The green (`true`) or red marker on a water source.
     pub drinkable: Option<bool>,
+    /// A peak tagged `summit:cross=yes`, drawn with the cross beside it.
+    pub summit_cross: bool,
 }
 
 impl Look<'_> {
@@ -1609,6 +1642,12 @@ pub fn look<'a>(
 
     let key = if is_ruins { "ruins" } else { def.icon_key(typ) };
 
+    let summit_cross = key == "peak"
+        && zoom >= SUMMIT_CROSS_MIN_ZOOM
+        && extra.get("summit_cross").and_then(Option::as_deref) == Some("yes");
+
+    let key = if summit_cross { "peak_cross" } else { key };
+
     let restricted = extra
         .get("access")
         .is_some_and(|access| matches!(access.as_deref(), Some("private" | "no")));
@@ -1641,6 +1680,7 @@ pub fn look<'a>(
         spring: (key == "spring").then(|| spring_look(extra)),
         // The ruins glyph has no marker of its own.
         drinkable: if is_ruins { None } else { drinkable },
+        summit_cross,
     })
 }
 

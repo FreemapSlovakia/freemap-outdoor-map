@@ -3204,6 +3204,13 @@
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/poi_spring_water_characteristic_mineral?mode=taginfo"
     },
     {
+      "key": "summit:cross",
+      "value": "yes",
+      "object_types": ["node"],
+      "description": "Small cross beside the peak icon from zoom 15; from zoom 16 left out where a man_made=cross is mapped within 30 m.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/poi_peak_summit_cross?mode=taginfo"
+    },
+    {
       "key": "drinking_water",
       "value": "yes",
       "object_types": ["node", "area"],
