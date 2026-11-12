@@ -1250,7 +1250,7 @@ tables:
               railway:
                 - crossing
                 - halt
-                - level_crossing # TODO
+                - level_crossing
                 - station
                 - subway_entrance # TODO
                 - tram_stop # TODO

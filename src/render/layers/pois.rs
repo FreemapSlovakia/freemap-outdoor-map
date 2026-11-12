@@ -375,6 +375,10 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (15, 16, Y, N, Historic, "disused_mineshaft", Extra { icon: Some("disused_mine"), ..Extra::default() }),
         (15, 16, Y, N, Historic, "abandoned_adit", Extra { icon: Some("disused_mine"), ..Extra::default() }),
         (15, 16, Y, N, Historic, "abandoned_mineshaft", Extra { icon: Some("disused_mine"), ..Extra::default() }),
+        // Labelled with the crossing number from `ref`, which is posted at the crossing
+        // and quoted when reporting an emergency there.
+        (18, 19, N, N, Railway, "level_crossing", Extra { pinned: true, ..Extra::default() }),
+        (18, 19, N, N, Railway, "crossing", Extra { icon: Some("level_crossing"), pinned: true, ..Extra::default() }),
         (14, 15, N, N, Institution, "townhall", Extra {
             replacements: chapel_replacements.clone(),
             ..Extra::default()
@@ -1144,6 +1148,8 @@ pub async fn query(
                 -- or the name again, not platforms.
                 WHEN type = 'bus_stop' AND length(tags->'local_ref') BETWEEN 1 AND 3
                     THEN concat_ws(' ', COALESCE(NULLIF(name, ''), tags->'ref'), '(' || (tags->'local_ref') || ')')
+                WHEN type IN ('level_crossing', 'crossing') AND tags ? 'ref'
+                    THEN tags->'ref'
                 ELSE COALESCE(NULLIF(name, ''), tags->'ref', '') END AS name,
             hstore(ARRAY[
                 -- An unnamed saddle is labelled with its elevation and nothing else, so

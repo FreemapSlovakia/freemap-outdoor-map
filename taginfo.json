@@ -2541,6 +2541,20 @@
     },
     {
       "key": "railway",
+      "value": "level_crossing",
+      "object_types": ["node"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/level_crossing.svg",
+      "description": "Rendered as icon. Icon from zoom 18. Label (ref) from zoom 19."
+    },
+    {
+      "key": "railway",
+      "value": "crossing",
+      "object_types": ["node"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/level_crossing.svg",
+      "description": "Rendered as icon. Icon from zoom 18. Label (ref) from zoom 19."
+    },
+    {
+      "key": "railway",
       "value": "halt",
       "object_types": ["node", "area"],
       "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/station.svg",
