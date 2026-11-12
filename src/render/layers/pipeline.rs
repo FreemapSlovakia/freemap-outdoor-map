@@ -757,6 +757,23 @@ pub fn render(
         );
     }
 
+    let ferries_slot = if zoom >= layers::FERRY_MIN_ZOOM {
+        prefetcher.shared_query("ferries", |ctx, conn| {
+            async move { layers::ferries::query(&ctx, &conn).await }.boxed()
+        })
+    } else {
+        None
+    };
+
+    if zoom >= layers::FERRY_MIN_ZOOM {
+        prefetcher.add_shared(
+            "ferries",
+            "ferries",
+            ferries_slot.as_ref(),
+            |rows, _params| layers::ferries::render(&ctx, context, rows),
+        );
+    }
+
     if zoom >= 8 {
         prefetcher.add(
             "roads",
@@ -1374,6 +1391,15 @@ pub fn render(
                     params.svg_repo,
                 )
             },
+        );
+    }
+
+    if zoom >= layers::FERRY_NAMES_MIN_ZOOM {
+        prefetcher.add_shared(
+            "ferry_names",
+            "ferries",
+            ferries_slot.as_ref(),
+            |rows, params| layers::ferries::render_names(&ctx, context, rows, params.collision),
         );
     }
 

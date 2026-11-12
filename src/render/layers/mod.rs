@@ -7,6 +7,7 @@ pub use pipeline::RenderError;
 pub use pipeline::Shading;
 pub use pipeline::key_enabled;
 pub use pipeline::render;
+pub use ferries::{MIN_ZOOM as FERRY_MIN_ZOOM, NAMES_MIN_ZOOM as FERRY_NAMES_MIN_ZOOM};
 pub use pois::{
     Def, INACCESSIBLE_ZOOM_DELAY, POI_ORDER, POIS, SHOP_TYPES, SUMMIT_CROSS_MIN_ZOOM,
     WAYMARKING_LEGEND_TYPES,
@@ -28,6 +29,7 @@ mod decorations;
 mod dry_land;
 mod embankments;
 mod feature_lines;
+mod ferries;
 mod fixmes;
 mod geonames;
 mod highway_names;

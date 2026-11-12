@@ -2,6 +2,7 @@ use super::mapping;
 use super::{BuildOpts, LegendItem, Lend, Row, mapping_path};
 use crate::render::layers::{
     Category,
+    FERRY_MIN_ZOOM,
     buildings::{self, Lifecycle},
     national_park_label_flo,
 };
@@ -131,6 +132,13 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
                     .with("tmp", false)
                     .with("tunnel", true)
             })
+            .build(),
+        LegendItem::builder("ferry", Category::Transport, 17, opts)
+            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("route", "ferry")))
+            .min_zoom(FERRY_MIN_ZOOM)
+            .present("ferries", &[])
+            .named_by("ferry_names", &[], Lend::NAME)
+            .add_feature("ferries", |b| b.with_line_string(false).with_name())
             .build(),
         LegendItem::builder("water_area", Category::Water, 17, opts)
             .add_tag_set(|ts| {

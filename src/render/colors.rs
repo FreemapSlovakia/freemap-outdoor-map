@@ -220,6 +220,7 @@ pub const CYCLEWAY: Color = parse_color("hsl(282, 100%, 50%)");
 pub const DAM: Color = parse_color("hsl(0, 0%, 70%)");
 pub const FARMLAND: Color = parse_color("hsl(60, 70%, 95%)");
 pub const FARMYARD: Color = parse_color("hsl(50, 44%, 85%)");
+pub const FERRY: Color = parse_color("hsl(240, 100%, 60%)");
 pub const FOREST: Color = parse_color("hsl(110, 60%, 83%)");
 pub const GLOW: Color = parse_color("hsl(0, 33%, 70%)");
 pub const GRASSY: Color = parse_color("hsl(100, 100%, 93%)");
