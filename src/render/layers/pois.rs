@@ -45,6 +45,10 @@ struct Extra<'a> {
     /// elevation as a second line under a name, and labelling an unnamed one would put
     /// a naked number on the map where a reader expects a summit. Implies `with_ele`.
     ele_only_label: bool,
+    /// Draw the icon only at its exact point, dropping it on collision instead of
+    /// nudging it aside: a barrier or crossing moved off its way marks a spot where
+    /// there is none. Every `Barrier` is pinned regardless.
+    pinned: bool,
 }
 
 impl Default for Extra<'_> {
@@ -60,6 +64,7 @@ impl Default for Extra<'_> {
             needs_access: None,
             halo: true,
             ele_only_label: false,
+            pinned: false,
         }
     }
 }
@@ -108,6 +113,10 @@ impl Def {
             Some(needs) => needs,
             None => self.category.needs_access(),
         }
+    }
+
+    fn pinned(&self) -> bool {
+        self.extra.pinned || self.category == Category::Barrier
     }
 
     pub(crate) fn icon_key<'a>(&'a self, typ: &'a str) -> &'a str {
@@ -345,8 +354,8 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
             ..Extra::default()
         }),
         (15, 16, N, N, Water, "dam", Extra { text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
-        (16, 17, N, N, Water, "weir", Extra { text_color: Some(colors::WATER_LABEL), ..Extra::default() }),
-        (16, NN, N, N, Water, "ford", Extra::default()),
+        (16, 17, N, N, Water, "weir", Extra { text_color: Some(colors::WATER_LABEL), pinned: true, ..Extra::default() }),
+        (16, NN, N, N, Water, "ford", Extra { pinned: true, ..Extra::default() }),
         // Passability, like the ford above: these say whether you get through at all,
         // which outranks anything merely worth looking at.
         (14, NN, N, N, Terrain, "obstacle_tree", Extra::default()),
@@ -1759,7 +1768,13 @@ pub fn render_icons(
 
         let corner_y = point.y() - he / 2.0;
 
-        'outer: for &(dx, dy) in OFFSETS.iter() {
+        let offsets = if def.pinned() {
+            &OFFSETS[..1]
+        } else {
+            &OFFSETS[..]
+        };
+
+        'outer: for &(dx, dy) in offsets {
             let corner_x = ctx.hint(corner_x + dx - 0.5) + 0.5;
             let corner_y = ctx.hint(corner_y + dy - 0.5) + 0.5;
 
