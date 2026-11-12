@@ -9,6 +9,26 @@ use crate::render::{
 use cairo::Context;
 use std::borrow::Cow;
 
+/// Below this zoom sidewalks, street crossings and traffic islands are left out: they
+/// double every street of a town and add nothing the street itself does not show.
+pub const SIDEWALK_MIN_ZOOM: u8 = 17;
+
+/// An SQL condition keeping `table`'s rows that are drawn at `zoom`, by [`SIDEWALK_MIN_ZOOM`].
+/// Every layer reading `osm_roads` applies it, or it would draw over a way that is not there.
+///
+/// Only `highway=footway`: a path or cycleway tagged `footway=crossing` is a piece of a longer
+/// way, and dropping it would cut a gap into that line.
+pub fn sidewalk_cond(zoom: u8, table: &str) -> String {
+    if zoom < SIDEWALK_MIN_ZOOM {
+        format!(
+            "AND NOT ({table}.type = 'footway' AND \
+             {table}.tags->'footway' IN ('sidewalk', 'crossing', 'traffic_island'))"
+        )
+    } else {
+        String::new()
+    }
+}
+
 pub async fn query(
     ctx: &Ctx,
     client: &tokio_postgres::Client,
@@ -88,6 +108,13 @@ pub async fn query(
         )
     };
 
+    // The generalised tables, below zoom 12, hold no footways.
+    let sidewalk_cond = if zoom >= 12 {
+        sidewalk_cond(zoom, table)
+    } else {
+        String::new()
+    };
+
     #[cfg_attr(any(), rustfmt::skip)]
     let query = format!("
         SELECT
@@ -110,6 +137,7 @@ pub async fn query(
             {join_trail_runs}
         WHERE
             {table}.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            {sidewalk_cond}
         ORDER BY
             z_order,
             CASE WHEN {table}.type = 'rail' AND service IN ('', 'main') THEN 2 ELSE 1 END,

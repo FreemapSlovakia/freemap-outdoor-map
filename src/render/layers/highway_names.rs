@@ -8,6 +8,7 @@ use crate::render::{
         text_on_line::{Align, Distribution, Repeat, TextOnLineOptions, draw_text_on_line},
     },
     layer_render_error::LayerRenderResult,
+    layers::roads,
     projectable::TileProjectable,
 };
 use cairo::Context;
@@ -16,7 +17,8 @@ pub async fn query(
     ctx: &Ctx,
     client: &tokio_postgres::Client,
 ) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
-    let sql = "
+    let sql = format!(
+        "
         WITH merged AS (
             SELECT
                 name,
@@ -30,6 +32,7 @@ pub async fn query(
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
                 name <> '' AND
                 NOT (class = 'railway' AND type = 'abandoned')
+                {}
                 GROUP BY z_order, name, type
         )
         SELECT
@@ -41,10 +44,12 @@ pub async fn query(
         ORDER BY
             z_order DESC,
             osm_id
-    ";
+        ",
+        roads::sidewalk_cond(ctx.zoom, "osm_roads")
+    );
 
     client
-        .query(sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
+        .query(&sql, &ctx.bbox_query_params(Some(1024.0)).as_params())
         .await
 }
 

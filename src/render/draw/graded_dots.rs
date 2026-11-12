@@ -4,6 +4,7 @@ use crate::render::{
     ctx::Ctx,
     draw::path_geom::path_line_string,
     layer_render_error::LayerRenderResult,
+    layers::roads,
     projectable::TileProjectable,
 };
 use cairo::Context;
@@ -125,6 +126,7 @@ pub async fn query(
 
     let grade = dots.grade_sql();
     let filter = dots.filter_sql();
+    let sidewalk_cond = roads::sidewalk_cond(ctx.zoom, "osm_roads");
 
     #[cfg_attr(any(), rustfmt::skip)]
     let sql = format!("
@@ -136,6 +138,7 @@ pub async fn query(
         WHERE
             {filter} AND
             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+            {sidewalk_cond}
         ORDER BY
             grade
     ");

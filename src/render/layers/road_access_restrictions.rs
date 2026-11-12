@@ -3,6 +3,7 @@ use crate::render::{
     ctx::Ctx,
     draw::path_geom::cumulative_lengths,
     layer_render_error::LayerRenderResult,
+    layers::roads,
     projectable::TileProjectable,
     svg_repo::{SvgRepo, SvgRepoError},
 };
@@ -46,15 +47,20 @@ pub async fn query(
     ctx: &Ctx,
     client: &tokio_postgres::Client,
 ) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
-    let sql = "
+    // A mark on a way the roads layer leaves out would float over nothing.
+    let sql = format!(
+        "
         SELECT osm_id, geometry, type, class, access, vehicle, bicycle, foot, oneway
         FROM osm_roads
         WHERE geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
-    ";
+            {}
+        ",
+        roads::sidewalk_cond(ctx.zoom, "osm_roads")
+    );
 
     client
         .query(
-            sql,
+            &sql,
             &ctx.bbox_query_params(Some(TOPOLOGY_BUFFER)).as_params(),
         )
         .await
