@@ -22,7 +22,7 @@ pub fn sidewalk_cond(zoom: u8, table: &str) -> String {
     if zoom < SIDEWALK_MIN_ZOOM {
         format!(
             "AND NOT ({table}.type = 'footway' AND \
-             {table}.tags->'footway' IN ('sidewalk', 'crossing', 'traffic_island'))"
+             COALESCE({table}.tags->'footway', '') IN ('sidewalk', 'crossing', 'traffic_island'))"
         )
     } else {
         String::new()
