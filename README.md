@@ -130,9 +130,21 @@ psql < sql/country-names.sql
 
 ## Geonames
 
-Import hand-crafted geonames (e.g., mountain range names):
+Mountain range and geomorphological unit labels come from OSM `boundary=geomorphological-unit`
+and `natural=mountain_range` features. [scripts/geonames.py](./scripts/geonames.py) derives a
+label line from each area's skeleton, keeps ranges mapped as lines as drawn, and gives every
+label a `minzoom`/`maxzoom`: a unit hands over to the units nested in it once its line grows
+longer than 600 px, so a unit and its parent never show together. It needs Python with
+shapely ≥ 2.1, networkx and numpy (`python3-shapely python3-networkx` on Debian).
 
 ```sh
+osmium tags-filter -o geonames.osm.pbf europe-latest.osm.pbf r/boundary=geomorphological-unit nwr/natural=mountain_range
+osmium export -f geojsonseq --geometry-types=linestring,polygon -a type,id geonames.osm.pbf -o geonames.geojsonseq
+python3 scripts/geonames.py geonames.geojsonseq geonames.geojson limit-europe.geojson
+
+psql -c 'DROP TABLE IF EXISTS geonames CASCADE'
+ogr2ogr -f PostgreSQL PG: geonames.geojson -nln geonames -nlt LINESTRING -t_srs EPSG:3857 \
+  -lco GEOMETRY_NAME=geometry -lco FID=ogc_fid
 psql < sql/geonames.sql
 ```
 

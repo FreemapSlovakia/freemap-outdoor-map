@@ -1119,15 +1119,6 @@ pub fn render(
         });
     }
 
-    if (9..=11).contains(&zoom) {
-        prefetcher.add(
-            "geonames",
-            None,
-            |ctx, conn| async move { layers::geonames::query(&ctx, &conn).await }.boxed(),
-            |rows, _params| layers::geonames::render(&ctx, context, rows),
-        );
-    }
-
     if zoom >= 14 {
         prefetcher.add(
             "fixmes_points",
@@ -1457,6 +1448,18 @@ pub fn render(
             None,
             |ctx, conn| async move { layers::country_names::query(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::country_names::render(&ctx, context, rows),
+        );
+    }
+
+    // Above the other labels, country names included: the names are translucent and widely
+    // spaced, so labels under them stay readable, while below them they would be hidden by
+    // those labels' halos.
+    if (5..=11).contains(&zoom) {
+        prefetcher.add(
+            "geonames",
+            None,
+            |ctx, conn| async move { layers::geonames::query(&ctx, &conn).await }.boxed(),
+            |rows, _params| layers::geonames::render(&ctx, context, rows),
         );
     }
 
