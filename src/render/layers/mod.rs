@@ -1,7 +1,10 @@
 pub use crate::render::categories::Category;
 pub use hillshading_datasets::HillshadingDatasets;
 pub use hillshading_datasets::load_hillshading_datasets;
-pub use landcover::PAINT_DEFS;
+pub use landcover::{
+    OVERLAY_TYPES as LANDCOVER_OVERLAY_TYPES, PAINT_DEFS, PAINTS as LANDCOVER_PAINTS,
+    TYPE_SQL as LANDCOVER_TYPE_SQL,
+};
 pub use national_park_names::label_flo as national_park_label_flo;
 pub use pipeline::RenderError;
 pub use pipeline::Shading;

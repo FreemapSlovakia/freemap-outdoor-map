@@ -387,6 +387,28 @@ A client that has taken its file deletes the job. A finished job that nobody del
 dropped along with its temporary file `--export-retention-secs`
 (`MAPRENDER_EXPORT_RETENTION_SECS`, 900 by default) after it finished.
 
+### Landcover polygons
+
+```http
+GET /landcover?bbox=19.9,49.1,20.3,49.3&tolerance=10&minArea=2000
+```
+
+The sea, landcover and water area polygons in a box as a GeoJSON `FeatureCollection`, for
+colouring a terrain model by landcover. Gzipped when the client accepts it.
+
+- `bbox`: `minLon,minLat,maxLon,maxLat` in WGS84, at most 100 km a side.
+- `tolerance`: the grid, in ground metres (at least 1), every vertex is snapped to; the box
+  may be at most 10 000 of them across. One grid for all polygons keeps a shared edge shared, so neighbours
+  stay glued. The results may be invalid (self-touching, overlapping rings): fill them even-odd.
+- `minArea` (optional): polygon parts and holes smaller than this, in ground square metres,
+  are dropped.
+
+Polygons are clipped to the box and come in the order the map paints them, so later ones go
+on top: the sea, the landcovers, then the water areas. Each feature carries `layer` (`sea`,
+`landcover` or `water`), `type` (the landcover type the map's paints are keyed by, a
+wetland's own kind included, or the water area's tag value) and `intermittent: true` on an
+intermittent or seasonal water area. Only landcover types the map fills are included.
+
 ### WMTS
 
 Endpoint: `/service`

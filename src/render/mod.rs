@@ -6,7 +6,7 @@ pub use image_format::{DEFAULT_JPEG_QUALITY, ImageFormat};
 // directly. Gated so a dead re-export above is still reported.
 #[cfg(test)]
 pub use image_format::{DEFAULT_WEBP_QUALITY, WebpQuality};
-pub use layers::key_enabled;
+pub use layers::{LANDCOVER_OVERLAY_TYPES, LANDCOVER_PAINTS, LANDCOVER_TYPE_SQL, key_enabled};
 pub use legend::{LegendMode, legend_metadata, legend_render_request};
 pub use render_config::{
     ContourCountries, FeatureLineMaskCountries, HillshadingHierarchy, PlaceTypeOverride,

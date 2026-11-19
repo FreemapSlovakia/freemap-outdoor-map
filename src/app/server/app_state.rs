@@ -23,6 +23,7 @@ pub struct TileVariantState {
 #[derive(Clone)]
 pub struct AppState {
     pub(crate) render_worker_pool: Arc<RenderWorkerPool>,
+    pub(crate) db_pool: deadpool_postgres::Pool,
     pub(crate) export_state: Arc<ExportState>,
     pub(crate) licenses: Arc<LicenseCatalog>,
     pub(crate) tile_variants: Arc<Vec<TileVariantState>>,

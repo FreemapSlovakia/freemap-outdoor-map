@@ -235,6 +235,18 @@ server {
                 proxy_pass http://localhost:4000/export;
         }
 
+        location = /landcover {
+                add_header Access-Control-Allow-Origin $cors_origin always;
+                add_header Vary Origin always;
+                add_header Alt-Svc 'h3=":$server_port"; ma=86400';
+
+                # Covers the backend's 30 s wait for a query slot plus its 30 s
+                # statement timeout.
+                proxy_read_timeout 90s;
+
+                proxy_pass http://localhost:4000/landcover;
+        }
+
         location ~ ^/legend-image/([0-9]+)$ {
                 default_type image/png;
 

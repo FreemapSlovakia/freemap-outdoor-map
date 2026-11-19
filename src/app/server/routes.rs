@@ -3,7 +3,7 @@ use crate::{
         server::{
             app_state::{AppState, TileRouteState, TileVariantState},
             export_route::{self, ExportState},
-            legend_route,
+            landcover_route, legend_route,
             licenses_route::{self, LicenseCatalog},
             tile_route, wmts_route,
         },
@@ -25,7 +25,10 @@ use std::{
 };
 use tokio::sync::broadcast::Receiver;
 use tower::limit::ConcurrencyLimitLayer;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::{
+    compression::CompressionLayer,
+    cors::{Any, CorsLayer},
+};
 
 pub struct ServerOptions {
     pub serve_cached: bool,
@@ -55,6 +58,7 @@ pub struct TileVariantOptions {
 
 pub async fn start_server(
     render_worker_pool: Arc<RenderWorkerPool>,
+    db_pool: deadpool_postgres::Pool,
     tile_worker: Option<TileProcessingWorker>,
     mut shutdown_rx: Receiver<()>,
     options: ServerOptions,
@@ -87,6 +91,7 @@ pub async fn start_server(
 
     let app_state = AppState {
         render_worker_pool,
+        db_pool,
         export_state: Arc::new(ExportState::new(&options)),
         licenses: Arc::new(options.licenses),
         tile_variants: Arc::new(tile_variants),
@@ -109,7 +114,11 @@ pub async fn start_server(
         )
         .route("/legend", get(legend_route::get_metadata))
         .route("/legend/{id}", get(legend_route::get))
-        .route("/licenses", get(licenses_route::get));
+        .route("/licenses", get(licenses_route::get))
+        .route(
+            "/landcover",
+            get(landcover_route::get).layer(CompressionLayer::new()),
+        );
 
     for (variant_index, variant) in options.tile_variants.iter().enumerate() {
         let prefix = if variant.url_path == "/" {

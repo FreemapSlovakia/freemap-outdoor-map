@@ -85,7 +85,18 @@ pub static PAINTS: LazyLock<HashMap<&'static str, &'static [Paint]>> = LazyLock:
 /// Drawn above all other landcovers: they are mapped on top of the ground they
 /// lie in, and the pattern-only ones would vanish under a smaller fill.
 /// Everything else nests by area: smaller on top, as OSM Carto does.
-const OVERLAY_TYPES: &str = "'wetland', 'bare_rock', 'clearcut'";
+pub const OVERLAY_TYPES: &str = "'wetland', 'bare_rock', 'clearcut'";
+
+/// The `type` the paints are keyed by: a wetland's own kind where it has a look of its own.
+pub const TYPE_SQL: &str = "
+    CASE
+        WHEN
+            type = 'wetland' AND
+            tags->'wetland' IN ('bog', 'reedbed', 'marsh', 'swamp', 'wet_meadow', 'mangrove', 'fen')
+        THEN tags->'wetland'
+        ELSE type
+    END
+";
 
 pub async fn query(
     ctx: &Ctx,
@@ -105,15 +116,10 @@ pub async fn query(
         12.. => "",
     };
 
-    let query = &format!("
+    let query = &format!(
+        "
         SELECT
-            CASE
-                WHEN
-                    type = 'wetland' AND
-                    tags->'wetland' IN ('bog', 'reedbed', 'marsh', 'swamp', 'wet_meadow', 'mangrove', 'fen')
-                THEN tags->'wetland'
-                ELSE type
-            END AS type,
+            {TYPE_SQL} AS type,
             geometry,
             osm_id
         FROM
@@ -127,7 +133,8 @@ pub async fn query(
             osm_id,
             -- a way tagged with several landcovers comes once per type, with equal area
             type
-    ");
+    "
+    );
 
     client
         .query(query, &ctx.bbox_query_params(Some(4.0)).as_params())
