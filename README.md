@@ -130,15 +130,16 @@ psql < sql/country-names.sql
 
 ## Geonames
 
-Mountain range and geomorphological unit labels come from OSM `boundary=geomorphological-unit`
-and `natural=mountain_range` features. [scripts/geonames.py](./scripts/geonames.py) derives a
+Mountain range and geomorphological unit labels come from OSM `boundary=geomorphological-unit`,
+`region:type=mountain_area` and `natural=mountain_range|plateau|plain|massif|hills` features. [scripts/geonames.py](./scripts/geonames.py) derives a
 label line from each area's skeleton, keeps ranges mapped as lines as drawn, and gives every
 label a `minzoom`/`maxzoom`: a unit hands over to the units nested in it once its line grows
 longer than 600 px, so a unit and its parent never show together. It needs Python with
 shapely ≥ 2.1, networkx and numpy (`python3-shapely python3-networkx` on Debian).
 
 ```sh
-osmium tags-filter -o geonames.osm.pbf europe-latest.osm.pbf r/boundary=geomorphological-unit nwr/natural=mountain_range
+osmium tags-filter -o geonames.osm.pbf europe-latest.osm.pbf r/boundary=geomorphological-unit \
+  wr/natural=mountain_range,plateau,plain,massif,hills wr/region:type=mountain_area
 osmium export -f geojsonseq --geometry-types=linestring,polygon -a type,id geonames.osm.pbf -o geonames.geojsonseq
 python3 scripts/geonames.py geonames.geojsonseq geonames.geojson limit-europe.geojson
 

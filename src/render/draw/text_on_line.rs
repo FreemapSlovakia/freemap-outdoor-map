@@ -1043,6 +1043,53 @@ pub fn draw_parts_on_line(
     collision: Option<&mut Collision>,
     options: &TextOnLineOptions,
 ) -> cairo::Result<bool> {
+    lay_parts_on_line(context, line_string, variants, collision, options).map(|o| o.rendered)
+}
+
+/// Like [`draw_text_on_line`], but returns whether the label was placed, drawn or not: one
+/// laid out wholly outside the tile still counts, so a caller trying fallbacks decides the
+/// same in every tile the label touches.
+pub fn place_text_on_line(
+    context: &Context,
+    line_string: &LineString,
+    text: &str,
+    collision: Option<&mut Collision>,
+    options: &TextOnLineOptions,
+) -> cairo::Result<bool> {
+    lay_parts_on_line(
+        context,
+        line_string,
+        &[&[LabelPart::Text(Cow::Borrowed(text))]],
+        collision,
+        options,
+    )
+    .map(|o| o.placed)
+}
+
+struct Outcome {
+    placed: bool,
+    rendered: bool,
+}
+
+impl Outcome {
+    const NOTHING_TO_DO: Self = Self {
+        placed: true,
+        rendered: true,
+    };
+
+    const NOT_PLACED: Self = Self {
+        placed: false,
+        rendered: false,
+    };
+}
+
+fn lay_parts_on_line(
+    context: &Context,
+    line_string: &LineString,
+    variants: &[&[LabelPart]],
+    collision: Option<&mut Collision>,
+    options: &TextOnLineOptions,
+) -> cairo::Result<Outcome> {
     let _span = tracy_client::span!("text_on_line::draw_text_on_line");
 
     let mut pts: Vec<Coord> = line_string.into_iter().copied().collect();
@@ -1050,14 +1097,14 @@ pub fn draw_parts_on_line(
     pts.dedup();
 
     if pts.len() < 2 {
-        return Ok(true);
+        return Ok(Outcome::NOTHING_TO_DO);
     }
 
     let cum = cumulative_lengths(&pts);
     let total_length = *cum.last().unwrap_or(&0.0);
 
     if total_length == 0.0 {
-        return Ok(true);
+        return Ok(Outcome::NOTHING_TO_DO);
     }
 
     let (align, spacing, justify_min_spacing) = match options.distribution {
@@ -1094,7 +1141,7 @@ pub fn draw_parts_on_line(
         .collect();
 
     if shaped.is_empty() {
-        return Ok(true);
+        return Ok(Outcome::NOTHING_TO_DO);
     }
 
     let line = Line {
@@ -1156,7 +1203,7 @@ pub fn draw_parts_on_line(
 
         (!offsets.is_empty()).then_some((i, offsets))
     }) else {
-        return Ok(false);
+        return Ok(Outcome::NOT_PLACED);
     };
 
     let slot_span = placers[first].repeat_span;
@@ -1166,6 +1213,7 @@ pub fn draw_parts_on_line(
     let collision = collision.unwrap_or(&mut local_collision);
 
     let mut placements = Vec::new();
+    let mut placed = false;
 
     // Retries shift a repeat along the line; start the next one a full spacing after it.
     let mut min_label_start = 0.0;
@@ -1201,6 +1249,8 @@ pub fn draw_parts_on_line(
             continue;
         };
 
+        placed = true;
+
         min_label_start = end + spacing.unwrap_or(0.0);
 
         // Added right away: a retry can slide a repeat onto the next one, and a line folding
@@ -1220,5 +1270,5 @@ pub fn draw_parts_on_line(
         draw_label(context, laid_out, options)?;
     }
 
-    Ok(rendered)
+    Ok(Outcome { placed, rendered })
 }

@@ -21,6 +21,13 @@ MAX_PX = 600
 # Shortest label line worth showing; a unit far smaller than its parent waits for it.
 MIN_PX = 80
 
+# Smallest part of a multipolygon unit that gets its own name, as a share of the largest.
+PART_MIN_SHARE = 0.2
+
+# Landforms labelled like mountain ranges; natural=depression is left out, as in OSM it is
+# mostly small craters.
+NATURAL = {"mountain_range", "plateau", "plain", "massif", "hills"}
+
 
 def to_merc(g):
     def f(c):
@@ -162,7 +169,9 @@ def read(src, limit):
             f = json.loads(raw.strip("\x1e"))
             p = f["properties"]
             if not p.get("name") or (
-                p.get("boundary") != "geomorphological-unit" and p.get("natural") != "mountain_range"
+                p.get("boundary") != "geomorphological-unit"
+                and p.get("natural") not in NATURAL
+                and p.get("region:type") != "mountain_area"
             ):
                 continue
             geom = to_merc(shape(f["geometry"]))
@@ -195,18 +204,25 @@ def main(src, dst, limit=None):
 
     labels = []  # (properties, line, method, parent area index)
     line_of = {}  # area index -> index into labels
+    part_of = {}  # label index of a further part -> label index of the unit's main part
     for i, (p, geom) in enumerate(areas):
-        poly = largest(geom)
-        if poly is None:
-            continue
-        try:
-            line, method = label_line(poly)
-        except Exception as e:  # noqa: BLE001
-            print(f"{p['name']}: {e}", file=sys.stderr)
-            continue
-        if line.length > 0:
-            line_of[i] = len(labels)
-            labels.append((p, line, method, area_parent[i]))
+        parts = sorted(
+            (q for q in shapely.get_parts(geom) if q.geom_type == "Polygon" and not q.is_empty),
+            key=lambda q: -q.area,
+        )
+        # A unit split into comparable parts gets a name on each; slivers get none.
+        for poly in (q for q in parts if q.area >= parts[0].area * PART_MIN_SHARE):
+            try:
+                line, method = label_line(poly)
+            except Exception as e:  # noqa: BLE001
+                print(f"{p['name']}: {e}", file=sys.stderr)
+                continue
+            if line.length > 0:
+                if i in line_of:
+                    part_of[len(labels)] = line_of[i]
+                else:
+                    line_of[i] = len(labels)
+                labels.append((p, line, method, area_parent[i]))
 
     for p, line in mapped:
         # The same range is often mapped both as an area and as a line; the area wins.
@@ -236,6 +252,8 @@ def main(src, dst, limit=None):
     # its first child is big enough, so the area never goes unlabelled. Children start no
     # earlier than the parent stops, so ancestors never share a zoom. Leaves never hand over.
     def zoom_range(k):
+        if k in part_of:
+            return zoom_range(part_of[k])
         if k not in zooms:
             pk = parents[k]
             minzoom = max(zoom_range(pk)[1] if pk is not None else 0, first_zoom(k, MIN_PX))

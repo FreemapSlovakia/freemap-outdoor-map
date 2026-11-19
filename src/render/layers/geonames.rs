@@ -1,10 +1,11 @@
 use crate::render::{
     Feature,
+    collision::Collision,
     colors::{self},
     ctx::Ctx,
     draw::{
         font_options::FontAndLayoutOptions,
-        text_on_line::{Distribution, TextOnLineOptions, draw_text_on_line},
+        text_on_line::{Distribution, TextOnLineOptions, place_text_on_line},
     },
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
@@ -28,13 +29,17 @@ pub async fn query(
             minzoom <= $6 AND
             (maxzoom IS NULL OR maxzoom > $6)
         ORDER BY
+            minzoom DESC,
+            ST_Length(geometry) DESC,
             ogc_fid
     ";
 
+    // Names avoid each other, so each tile must see every name that could block one drawn
+    // in it, or neighbouring tiles would decide differently and cut names at their edges.
     client
         .query(
             sql,
-            &ctx.bbox_query_params(Some(20.0))
+            &ctx.bbox_query_params(Some(1024.0))
                 .push(ctx.zoom as i32)
                 .as_params(),
         )
@@ -94,6 +99,40 @@ fn substring(line: &LineString, from: f64, to: f64) -> LineString {
     LineString::new(coords)
 }
 
+/// Places the name on the stretch, or where another name blocks it on the middle, first or
+/// last half of it, each at up to three sizes.
+fn place(
+    context: &Context,
+    stretch: &LineString,
+    name: &str,
+    collision: &mut Collision,
+    options: TextOnLineOptions,
+) -> cairo::Result<()> {
+    let total = Euclidean.length(stretch);
+
+    let pieces = [
+        stretch.clone(),
+        substring(stretch, total / 4.0, total * 3.0 / 4.0),
+        substring(stretch, 0.0, total / 2.0),
+        substring(stretch, total / 2.0, total),
+    ];
+
+    for piece in &pieces {
+        let mut options = options;
+
+        for _ in 0..3 {
+            if place_text_on_line(context, piece, name, Some(collision), &options)? {
+                return Ok(());
+            }
+
+            options.flo.size *= 0.9;
+            options.halo_width *= 0.9;
+        }
+    }
+
+    Ok(())
+}
+
 pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
     let _span = tracy_client::span!("geonames::render");
 
@@ -113,6 +152,10 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
 
     context.push_group();
 
+    // Names avoid only each other, not the labels beneath them. Rows come most specific
+    // first, so a name carried over from lower zooms gives way to the units shown inside it.
+    let mut collision = Collision::new(Some(context));
+
     for row in rows {
         let name = row.get_string("name")?;
 
@@ -122,17 +165,8 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
         // thousands of pixels; justified over all of it, the letters would drift apart.
         let len = name.chars().count() as f64 * options.flo.size * MAX_EM_PER_CHAR;
 
-        for geom in stretches(&geom, len) {
-            let mut options = options;
-
-            for _ in 0..3 {
-                if draw_text_on_line(context, &geom, name, None, &options)? {
-                    break;
-                }
-
-                options.flo.size *= 0.9;
-                options.halo_width *= 0.9;
-            }
+        for stretch in stretches(&geom, len) {
+            place(context, &stretch, name, &mut collision, options)?;
         }
     }
 
