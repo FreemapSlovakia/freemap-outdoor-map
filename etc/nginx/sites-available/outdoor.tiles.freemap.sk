@@ -134,6 +134,12 @@ map $http_origin $cors_tile_origin {
         "~^https://(?:mapa|nahlad)\.muranskaplanina\.org$"           $http_origin;
 }
 
+# Origins allowed /legend too, not /export.
+map $http_origin $cors_legend_origin {
+        default $cors_origin;
+        "~^https://(?:mapa|nahlad)\.muranskaplanina\.org$"           $http_origin;
+}
+
 map $url_scale $scale {
         default $url_scale;
         "" 1;
@@ -245,7 +251,7 @@ server {
         #location ~ /(legend-image/.*|legend) {
         location /legend {
                 if ($request_method = OPTIONS) {
-                        add_header Access-Control-Allow-Origin $cors_origin;
+                        add_header Access-Control-Allow-Origin $cors_legend_origin;
                         add_header Vary Origin always;
                         add_header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS";
                         add_header Access-Control-Allow-Headers "Authorization, Content-Type, Accept, Origin";
@@ -253,7 +259,7 @@ server {
                         return 204;
                 }
 
-                add_header Access-Control-Allow-Origin $cors_origin always;
+                add_header Access-Control-Allow-Origin $cors_legend_origin always;
                 add_header Vary Origin always;
                 add_header Alt-Svc 'h3=":$server_port"; ma=86400';
 
