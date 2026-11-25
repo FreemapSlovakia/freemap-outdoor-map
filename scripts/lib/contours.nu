@@ -133,6 +133,11 @@ def contour-passes [cfg: record]: nothing -> nothing {
         }
     }
     mv $tmp $cfg.gpkg
+
+    # Insurance for the passes above only. Left in place they are a trap: the
+    # passes skip on existence alone, so a re-run would republish these vectors
+    # instead of re-contouring.
+    for off in $offsets { rm -f $"($cfg.data_dir)/($stem)_off($off).gpkg" }
 }
 
 export def run [cfg: record]: nothing -> nothing {
@@ -161,6 +166,6 @@ export def run [cfg: record]: nothing -> nothing {
 
     contour-passes $cfg
 
-    print $"==> Done -> ($cfg.gpkg). Partials left in ($cfg.data_dir) — delete once verified."
+    print $"==> Done -> ($cfg.gpkg)."
     print $"    Next: splitter-rs \(--source-epsg ($cfg.epsg | str replace 'EPSG:' '')\); it creates the table and index itself."
 }
