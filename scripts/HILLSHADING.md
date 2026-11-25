@@ -217,11 +217,9 @@ every tile.
 Everything in the pipeline skips on *existence*, not on freshness. If the inputs
 change under a re-run, you must delete the downstream artefacts by hand:
 
-- `contours-*.nu` prints `skip offset N — already done` and republishes the
-  previous run's vectors from a stale `*_off*.gpkg` partial. This wasted a full
-  Netherlands cycle; the only giveaway was an output byte-identical in size to
-  the old one. Delete `<cc>_dem_2m.vrt`, `<cc>_dem_2m.tif` **and**
-  `<cc>_contours_off*.gpkg` together.
+- `contours-*.nu` reuses an existing `<cc>_dem_2m.vrt` and `<cc>_dem_2m.tif`,
+  so delete both together. The offset partials need no attention: they are
+  removed once the merge that consumes them succeeds.
 - `shading run` skips the merge entirely once `out_tif` exists (deliberately —
   it refuses to merge a partial state), so re-merging needs the file renamed
   out of the way.

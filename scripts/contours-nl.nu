@@ -64,15 +64,13 @@ const EPSG     = "EPSG:28992"
 # has been re-rendered, point this back at smooth2m/ — otherwise this silently
 # contours the stale repaired set and ignores the new render.
 #
-# SWITCHING ALSO MEANS MOVING FOUR OUTPUTS ASIDE, because every stage is skipped
-# when its output exists and all four were built from the old directory:
+# SWITCHING ALSO MEANS MOVING THREE OUTPUTS ASIDE, because every stage is
+# skipped when its output exists and all three were built from the old
+# directory:
 #   /mnt/osm/nl/nl_dem_2m.vrt
-#   /mnt/osm/nl/nl_contours_off0.gpkg
 #   <18TB>/nl/nl_dem_2m.tif
 #   <18TB>/nl/nl_contours.gpkg
-# Miss the GPKG and the run prints "exists — skipping" and changes nothing. Move
-# ONLY the GPKG and it is worse: the pass finds the old off0 partial, skips it,
-# and the merge copies that partial into a "new" GPKG identical to the old one.
+# Miss the GPKG and the run prints "exists — skipping" and changes nothing.
 # Rename rather than delete, as with the .unfilled copies from the last switch.
 const SRC_DIR  = "/mnt/osm/nl/smooth2m-filled"
 

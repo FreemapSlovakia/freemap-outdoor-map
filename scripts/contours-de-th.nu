@@ -78,12 +78,8 @@
 
 # Resumable: the VRT, consolidated raster and GPKG are each skipped if present.
 #
-# THE OFFSET PARTIALS ARE SKIPPED ON EXISTENCE ALONE. If the source tiles change
-# under a re-run, delete thueringen_dem_2m.vrt, thueringen_dem_2m.tif AND
-# thueringen_contours_off*.gpkg — otherwise the contour stage prints "skip
-# offset N — already done" and republishes the previous run's vectors from a
-# stale partial. This cost a full wasted cycle on the Netherlands; the giveaway
-# was an output byte-identical in size to the old one.
+# If the source tiles change under a re-run, delete the VRT and the
+# consolidated raster too — both are skipped on existence.
 #
 # Run via:
 #   nice ~/miniforge3/bin/conda run --no-capture-output -n geo nu ~/fm/freemap-outdoor-map/scripts/contours-de-th.nu
