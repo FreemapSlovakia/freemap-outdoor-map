@@ -5,16 +5,31 @@ areas:
     - building
     - landuse
     - leisure
-    - waterway
-    # - natural
     - aeroway
-    # areas when closed, unlike other highways
+    # areas when closed, unlike the rest of their key
     - highway=platform
     - highway=rest_area
     - highway=services
+    - man_made=pier
+    - natural=bay
+    - natural=strait
+    - public_transport=platform
+    - waterway=boatyard
+    - waterway=dam
+    - waterway=dock
+    - waterway=riverbank
+    - waterway=weir
   linear_tags:
     - highway
     - barrier
+    - waterway
+    # lines when closed, unlike the rest of their key
+    - aeroway=parking_position
+    - aeroway=runway
+    - aeroway=taxilane
+    - aeroway=taxiway
+    - leisure=track
+    - railway=platform
 tags:
   include:
     - abandoned
@@ -369,6 +384,10 @@ tables:
             - clearcut
             - pier
             - wastewater_plant
+      platform:
+        mapping:
+          public_transport: [platform]
+          railway: [platform]
       natural:
         mapping:
           natural:
