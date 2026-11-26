@@ -27,32 +27,22 @@ pub async fn query(
         .await
 }
 
-pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>, mask: bool) -> LayerRenderResult {
+pub fn render(ctx: &Ctx, context: &Context, rows: &[Feature]) -> LayerRenderResult {
     let _span = tracy_client::span!("bridge_areas::render");
 
     context.save()?;
 
-    if mask {
-        context.set_fill_rule(cairo::FillRule::EvenOdd);
-    }
-
     for row in rows {
         let geometry = row.get_geometry()?.project_to_tile(&ctx.tile_projector);
 
-        if mask {
-            context.rectangle(0.0, 0.0, ctx.size.width as f64, ctx.size.height as f64);
-            path_geometry(context, &geometry);
-            context.clip();
-        } else {
-            path_geometry(context, &geometry);
-            context.set_source_color(colors::INDUSTRIAL);
-            context.fill_preserve()?;
+        path_geometry(context, &geometry);
+        context.set_source_color(colors::INDUSTRIAL);
+        context.fill_preserve()?;
 
-            context.set_line_width(1.0);
-            context.set_dash(&[], 0.0);
-            context.set_source_color(colors::BUILDING);
-            context.stroke()?;
-        }
+        context.set_line_width(1.0);
+        context.set_dash(&[], 0.0);
+        context.set_source_color(colors::BUILDING);
+        context.stroke()?;
     }
 
     context.restore()?;

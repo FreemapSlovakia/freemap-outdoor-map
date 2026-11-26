@@ -25,6 +25,7 @@ use cairo::{Context, Surface};
 use deadpool_postgres::Pool;
 use futures_util::FutureExt;
 use futures_util::future::BoxFuture;
+use geo::Geometry;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -154,8 +155,8 @@ fn key_layers(key: &str) -> Option<&'static [RenderLayer]> {
         "trees" => &[L::Trees],
         // Names, not the fill they are filed under for the legend.
         "landcover_names" | "water_area_names" | "winter_sports_boundaries" => &[],
-        // Cuts bridges out of the shading and the contours alike.
-        "bridge_for_shading" => &[L::Shading, L::Contours],
+        // Cut bridges and buildings out of the shading and the contours alike.
+        "bridges_for_shading" | "buildings_for_shading" => &[L::Shading, L::Contours],
         "contours" => &[L::Contours],
         "geonames" => &[L::Geonames],
         "country_borders" => &[L::CountryBorders],
@@ -707,12 +708,20 @@ pub fn render(
         );
     }
 
+    let bridge_areas_slot = if zoom >= 15 {
+        prefetcher.shared_query("bridge_areas", |ctx, conn| {
+            async move { layers::bridge_areas::query(&ctx, &conn).await }.boxed()
+        })
+    } else {
+        None
+    };
+
     if zoom >= 15 {
-        prefetcher.add(
+        prefetcher.add_shared(
             "bridge_areas",
-            None,
-            |ctx, conn| async move { layers::bridge_areas::query(&ctx, &conn).await }.boxed(),
-            |rows, _params| layers::bridge_areas::render(&ctx, context, rows, false),
+            "bridge_areas",
+            bridge_areas_slot.as_ref(),
+            |rows, _params| layers::bridge_areas::render(&ctx, context, rows),
         );
     }
 
@@ -722,6 +731,23 @@ pub fn render(
             None,
             |ctx, conn| async move { layers::trees::query(&ctx, &conn).await }.boxed(),
             |rows, params| layers::trees::render(&ctx, context, rows, params.svg_repo),
+        );
+    }
+
+    let buildings_slot = if zoom >= 13 {
+        prefetcher.shared_query("buildings", |ctx, conn| {
+            async move { layers::buildings::query(&ctx, &conn).await }.boxed()
+        })
+    } else {
+        None
+    };
+
+    if zoom >= 13 {
+        prefetcher.add_shared(
+            "buildings",
+            "buildings",
+            buildings_slot.as_ref(),
+            |rows, _params| layers::buildings::render(&ctx, context, rows),
         );
     }
 
@@ -813,20 +839,37 @@ pub fn render(
         let results: Arc<Mutex<HashMap<Option<&'static str>, Vec<Feature>>>> =
             Arc::new(Mutex::new(HashMap::new()));
 
-        if zoom >= 15 {
-            let acc = results.clone();
+        let cutouts: Rc<RefCell<Vec<Geometry>>> = Rc::default();
 
-            prefetcher.add(
-                "bridge_for_shading",
-                None,
-                |ctx, conn| async move { layers::bridge_areas::query(&ctx, &conn).await }.boxed(),
-                move |features, _params| {
-                    acc.lock()
-                        .expect("mutex not poisoned")
-                        .insert(Some("__bridge__"), features);
-                    Ok(())
-                },
-            );
+        // Only what the map draws: a hole where nothing is drawn would show as one.
+        for (name, slot, draws) in [
+            (
+                "bridges_for_shading",
+                &bridge_areas_slot,
+                zoom >= 15 && to_render.draws(RenderLayer::BridgeAreas),
+            ),
+            (
+                "buildings_for_shading",
+                &buildings_slot,
+                zoom >= 13 && to_render.draws(RenderLayer::Buildings),
+            ),
+        ] {
+            if !draws {
+                continue;
+            }
+
+            let cutouts = cutouts.clone();
+            let ctx = ctx.clone();
+
+            prefetcher.add_shared(name, name, slot.as_ref(), move |rows, _params| {
+                let mut cutouts = cutouts.borrow_mut();
+
+                for row in rows {
+                    cutouts.push(row.get_geometry()?.project_to_tile(&ctx.tile_projector));
+                }
+
+                Ok(())
+            });
         }
 
         if do_contours
@@ -907,7 +950,7 @@ pub fn render(
                 .into_inner()
                 .expect("mutex not poisoned");
 
-            let bridge_rows = results.remove(&Some("__bridge__")).unwrap_or_default();
+            let cutouts = cutouts.take();
 
             let contour_rows: HashMap<Option<&'static str>, Vec<Feature>> =
                 contour_countries_for_render
@@ -937,7 +980,7 @@ pub fn render(
                 layers::shading_and_contours::render(
                     ctx,
                     context,
-                    bridge_rows,
+                    cutouts,
                     contour_rows,
                     layers::shading_and_contours::ShadingParams {
                         datasets: hsd,
@@ -966,15 +1009,6 @@ pub fn render(
             None,
             |ctx, conn| async move { layers::solar_power_plants::query(&ctx, &conn).await }.boxed(),
             |rows, _params| layers::solar_power_plants::render(&ctx, context, rows),
-        );
-    }
-
-    if zoom >= 13 {
-        prefetcher.add(
-            "buildings",
-            None,
-            |ctx, conn| async move { layers::buildings::query(&ctx, &conn).await }.boxed(),
-            |rows, _params| layers::buildings::render(&ctx, context, rows),
         );
     }
 

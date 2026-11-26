@@ -51,7 +51,7 @@ pub fn lifecycle(typ: &str) -> Option<Lifecycle> {
     .map(|(_, lifecycle)| lifecycle)
 }
 
-pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderResult {
+pub fn render(ctx: &Ctx, context: &Context, rows: &[Feature]) -> LayerRenderResult {
     let _span = tracy_client::span!("buildings::render");
 
     context.save()?;

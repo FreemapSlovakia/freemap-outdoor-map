@@ -2,14 +2,15 @@ use crate::render::{
     ContourCountries, Feature, HillshadingHierarchy,
     attribution::{Attribution, FALLBACK_KEY},
     ctx::Ctx,
-    draw::mask,
+    draw::{mask, path_geom::path_geometry},
     layer_render_error::{LayerRenderError, LayerRenderResult},
     layers::{
-        bridge_areas, contours, dry_land::DryLand, hillshading, hillshading::MaskBits,
+        contours, dry_land::DryLand, hillshading, hillshading::MaskBits,
         hillshading_datasets::HillshadingDatasets,
     },
 };
 use cairo::{Context, ImageSurface};
+use geo::Geometry;
 use std::collections::{HashMap, HashSet};
 
 /// Hillshading / contour data sources and toggles for [`render`].
@@ -23,15 +24,47 @@ pub struct ShadingParams<'a> {
     pub attribution: &'a mut Attribution,
 }
 
+/// Draws shading and contours everywhere except on `cutouts`, tile-projected
+/// areas drawn below them that must stay unshaded.
 pub fn render(
     ctx: &Ctx,
     context: &Context,
-    bridge_rows: Vec<Feature>,
-    mut contour_rows: HashMap<Option<&'static str>, Vec<Feature>>,
+    cutouts: Vec<Geometry>,
+    contour_rows: HashMap<Option<&'static str>, Vec<Feature>>,
     params: ShadingParams,
 ) -> LayerRenderResult {
     let _span = tracy_client::span!("shading_and_contours::render");
 
+    if cutouts.is_empty() {
+        return render_uncut(ctx, context, contour_rows, params);
+    }
+
+    let mask = mask::compose(ctx, |cc| {
+        cc.paint()?;
+        cc.set_operator(cairo::Operator::Clear);
+        cc.scale(ctx.scale, ctx.scale);
+
+        for geometry in &cutouts {
+            path_geometry(cc, geometry);
+            cc.fill()?;
+        }
+
+        Ok(())
+    })?;
+
+    context.push_group();
+    render_uncut(ctx, context, contour_rows, params)?;
+    context.pop_group_to_source()?;
+
+    mask::mask_with(ctx, context, &mask)
+}
+
+fn render_uncut(
+    ctx: &Ctx,
+    context: &Context,
+    mut contour_rows: HashMap<Option<&'static str>, Vec<Feature>>,
+    params: ShadingParams,
+) -> LayerRenderResult {
     let ShadingParams {
         datasets: hillshading_datasets,
         hierarchy,
@@ -73,10 +106,6 @@ pub fn render(
         .collect::<Result<_, LayerRenderError>>()?;
 
     let tile_covered = MaskBits::union(mask_bits.values()).is_some_and(|union| union.is_full());
-
-    if ctx.zoom >= 15 {
-        bridge_areas::render(ctx, context, bridge_rows, true)?; // mask
-    }
 
     // CC = (mask, (contours-$cc, final-$cc):src-in, mask-$cut1:dst-out, mask-$cut2:dst-out, ...):src-over
 
