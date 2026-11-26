@@ -395,10 +395,12 @@ tables:
             - dog_park
             - garden
             - golf_course
+            - miniature_golf
             - nature_reserve
             - park
             - pitch
             - playground
+            - resort
             - sports_centre
             - stadium
             - track
