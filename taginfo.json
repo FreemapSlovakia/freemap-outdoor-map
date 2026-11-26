@@ -2445,11 +2445,95 @@
       "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_path?mode=taginfo"
     },
     {
-      "key": "highway",
-      "value": "piste",
-      "object_types": ["way"],
-      "description": "Rendered from zoom 14.",
-      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_piste?mode=taginfo"
+      "key": "piste:type",
+      "value": "downhill",
+      "object_types": ["way", "relation"],
+      "description": "Rendered from zoom 14: a way of its own as a piste, a road with a band under it. On a route=piste or route=ski relation, the type of its member ways that have none of their own.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_piste_downhill?mode=taginfo"
+    },
+    {
+      "key": "piste:type",
+      "value": "nordic",
+      "object_types": ["way", "relation"],
+      "description": "Rendered from zoom 14: a way of its own as a piste, a road with a band under it. On a route=piste or route=ski relation, the type of its member ways that have none of their own.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_piste_nordic?mode=taginfo"
+    },
+    {
+      "key": "piste:type",
+      "value": "skitour",
+      "object_types": ["way", "relation"],
+      "description": "Rendered from zoom 14: a way of its own as a piste, a road with a band under it. On a route=piste or route=ski relation, the type of its member ways that have none of their own.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_piste_other?mode=taginfo"
+    },
+    {
+      "key": "piste:type",
+      "value": "hike",
+      "object_types": ["way", "relation"],
+      "description": "Rendered from zoom 14: a way of its own as a piste, a road with a band under it. On a route=piste or route=ski relation, the type of its member ways that have none of their own.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_piste_other?mode=taginfo"
+    },
+    {
+      "key": "piste:type",
+      "value": "sled",
+      "object_types": ["way", "relation"],
+      "description": "Rendered from zoom 14: a way of its own as a piste, a road with a band under it. On a route=piste or route=ski relation, the type of its member ways that have none of their own.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_piste_other?mode=taginfo"
+    },
+    {
+      "key": "piste:type",
+      "value": "sleigh",
+      "object_types": ["way", "relation"],
+      "description": "Rendered from zoom 14: a way of its own as a piste, a road with a band under it. On a route=piste or route=ski relation, the type of its member ways that have none of their own.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_piste_other?mode=taginfo"
+    },
+    {
+      "key": "piste:type",
+      "value": "fatbike",
+      "object_types": ["way", "relation"],
+      "description": "Rendered from zoom 14: a way of its own as a piste, a road with a band under it. On a route=piste or route=ski relation, the type of its member ways that have none of their own.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_piste_other?mode=taginfo"
+    },
+    {
+      "key": "piste:type",
+      "value": "ice_skate",
+      "object_types": ["way", "relation"],
+      "description": "Rendered from zoom 14: a way of its own as a piste, a road with a band under it. On a route=piste or route=ski relation, the type of its member ways that have none of their own.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_piste_other?mode=taginfo"
+    },
+    {
+      "key": "piste:type",
+      "value": "snow_park",
+      "object_types": ["way", "relation"],
+      "description": "Rendered from zoom 14: a way of its own as a piste, a road with a band under it. On a route=piste or route=ski relation, the type of its member ways that have none of their own.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_piste_other?mode=taginfo"
+    },
+    {
+      "key": "piste:type",
+      "value": "playground",
+      "object_types": ["way", "relation"],
+      "description": "Rendered from zoom 14: a way of its own as a piste, a road with a band under it. On a route=piste or route=ski relation, the type of its member ways that have none of their own.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_piste_other?mode=taginfo"
+    },
+    {
+      "key": "piste:type",
+      "value": "connection",
+      "object_types": ["way", "relation"],
+      "description": "Rendered from zoom 14: a way of its own as a piste, a road with a band under it. On a route=piste or route=ski relation, the type of its member ways that have none of their own.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_piste_other?mode=taginfo"
+    },
+    {
+      "key": "piste:type",
+      "value": "ski_jump",
+      "object_types": ["way", "relation"],
+      "description": "Rendered from zoom 14: a way of its own as a piste, a road with a band under it. On a route=piste or route=ski relation, the type of its member ways that have none of their own.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_piste_other?mode=taginfo"
+    },
+    {
+      "key": "piste:type",
+      "value": "yes",
+      "object_types": ["way", "relation"],
+      "description": "Rendered from zoom 14 as a piste of unknown type on a way of its own; a road gets no band. On a route=piste or route=ski relation, the type of its member ways that have none of their own.",
+      "icon_url": "https://outdoor.tiles.freemap.sk/legend/road_piste_unknown?mode=taginfo"
     },
     {
       "key": "highway",

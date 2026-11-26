@@ -288,7 +288,7 @@ pub fn render_winter_sports_boundaries(
 
         context.push_group();
 
-        context.set_source_color(colors::WATER);
+        context.set_source_color(colors::WINTER_SPORTS);
         context.set_dash(&[], 0.0);
         context.set_line_width(wb * 0.75);
         context.set_line_cap(cairo::LineCap::Square);
@@ -297,7 +297,7 @@ pub fn render_winter_sports_boundaries(
         context.stroke()?;
 
         context.set_line_width(wb);
-        context.set_source_color_a(colors::WATER, 0.5);
+        context.set_source_color_a(colors::WINTER_SPORTS, 0.5);
         walk_geometry_line_strings(&geom, &mut |iter| {
             path_line_string_with_offset(context, iter, wb * 0.75);
 

@@ -2,11 +2,14 @@ use crate::render::{
     Feature, FeatureError,
     colors::{self, Color, ContextExt},
     ctx::Ctx,
-    draw::path_geom::{path_line_string, path_line_string_with_offset},
+    draw::{
+        line_pattern::draw_line_pattern,
+        path_geom::{path_line_string, path_line_string_with_offset},
+    },
     layer_render_error::LayerRenderResult,
     projectable::TileProjectable,
 };
-use cairo::Context;
+use cairo::{Context, LinearGradient, RecordingSurface};
 use std::borrow::Cow;
 
 /// Below this zoom sidewalks, street crossings and traffic islands are left out: they
@@ -50,6 +53,32 @@ pub async fn query(
         ",osm_route_members.member IS NOT NULL AS is_in_route"
     } else {
         ""
+    };
+
+    // A road without its own `piste:type` takes one from a piste or ski route it is part of.
+    // Ordered, so a way in routes of different types gets the same one on every tile.
+    // TODO: a railway or route=piste row in such a route stays undrawn as a piste.
+    #[cfg_attr(any(), rustfmt::skip)]
+    let select_piste_type: Cow<_> = if zoom >= 14 {
+        format!("
+            CASE
+                WHEN {table}.tags->'piste:type' NOT IN ('', 'yes') THEN {table}.tags->'piste:type'
+                WHEN class = 'highway' THEN COALESCE((
+                    SELECT osm_routes.piste_type
+                    FROM osm_route_members JOIN osm_routes USING (osm_id)
+                    WHERE
+                        osm_route_members.type = 1 AND
+                        osm_route_members.member = -{table}.osm_id AND
+                        osm_routes.type IN ('piste', 'ski') AND
+                        osm_routes.piste_type <> ''
+                    ORDER BY osm_routes.piste_type
+                    LIMIT 1
+                ), {table}.tags->'piste:type', '')
+                ELSE ''
+            END AS piste_type,
+        ").into()
+    } else {
+        "'' AS piste_type,".into()
     };
 
     #[cfg_attr(any(), rustfmt::skip)]
@@ -108,6 +137,45 @@ pub async fn query(
         )
     };
 
+    // A piste or ski route's member that is not a road of its own is imported only as a
+    // member, so it comes from there, as a standalone piste of the route's type.
+    // TODO: a closed piste area among the members is drawn as its outline.
+    #[cfg_attr(any(), rustfmt::skip)]
+    let union_piste_members = if zoom >= 14 {
+        let trail_details = TRAIL_DETAILS.map(|key| format!("false AS {key}")).join(", ");
+
+        format!("
+            UNION ALL
+            (SELECT DISTINCT ON (osm_route_members.member)
+                osm_route_members.geometry,
+                osm_routes.piste_type AS type,
+                '' AS tracktype,
+                'piste:type' AS class,
+                '' AS service,
+                0::smallint AS bridge,
+                0::smallint AS tunnel,
+                '' AS bicycle,
+                '' AS foot,
+                0 AS trail_visibility,
+                osm_routes.piste_type AS piste_type,
+                {trail_details},
+                false AS is_pier_area,
+                0 AS z_order,
+                -osm_route_members.member AS osm_id
+            FROM
+                osm_route_members JOIN osm_routes USING (osm_id)
+            WHERE
+                osm_route_members.type = 1 AND
+                osm_routes.type IN ('piste', 'ski') AND
+                osm_routes.piste_type <> '' AND
+                osm_route_members.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5) AND
+                NOT EXISTS (SELECT 1 FROM osm_roads WHERE osm_roads.osm_id = -osm_route_members.member)
+            ORDER BY osm_route_members.member, osm_routes.piste_type)
+        ")
+    } else {
+        String::new()
+    };
+
     // The generalised tables, below zoom 12, hold no footways.
     let sidewalk_cond = if zoom >= 12 {
         sidewalk_cond(zoom, table)
@@ -117,6 +185,7 @@ pub async fn query(
 
     #[cfg_attr(any(), rustfmt::skip)]
     let query = format!("
+        SELECT * FROM (
         SELECT
             {table}.geometry,
             {table}.type,
@@ -128,9 +197,12 @@ pub async fn query(
             bicycle,
             foot,
             trail_visibility,
+            {select_piste_type}
             {select_trail_details}
             {select_member}
-            {select_pier_area}
+            {select_pier_area},
+            z_order,
+            {table}.osm_id
         FROM
             {table}
             {join_members}
@@ -138,10 +210,12 @@ pub async fn query(
         WHERE
             {table}.geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
             {sidewalk_cond}
+        {union_piste_members}
+        ) AS roads
         ORDER BY
             z_order,
-            CASE WHEN {table}.type = 'rail' AND service IN ('', 'main') THEN 2 ELSE 1 END,
-            {table}.osm_id
+            CASE WHEN type = 'rail' AND service IN ('', 'main') THEN 2 ELSE 1 END,
+            osm_id
     ");
 
     client
@@ -152,6 +226,39 @@ pub async fn query(
 /// On the side the bicycle and ski route marking takes, as a path with a rope only ever
 /// carries hiking marking, which keeps the other side.
 const SAFETY_ROPE_OFFSET: f64 = -3.5;
+
+/// The casing a way of this `piste:type` is drawn with: its colour and the period its fading
+/// repeats at, shorter for the ungroomed types. A road carrying an unknown type gets none.
+fn piste_casing(piste_type: &str, standalone: bool) -> Option<(Color, f64)> {
+    const GROOMED: f64 = 8.0;
+    const UNGROOMED: f64 = 5.5;
+
+    match piste_type {
+        "" | "yes" if standalone => Some((colors::PISTE_UNKNOWN, UNGROOMED)),
+        "" | "yes" => None,
+        "downhill" => Some((colors::PISTE_DOWNHILL, GROOMED)),
+        "nordic" => Some((colors::PISTE_OTHER, GROOMED)),
+        _ => Some((colors::PISTE_OTHER, UNGROOMED)),
+    }
+}
+
+/// One period of a dash fading from `color` to faint and back, `width` across.
+fn gradient_dash_sample(color: Color, period: f64, width: f64) -> cairo::Result<RecordingSurface> {
+    let sample = RecordingSurface::create(
+        cairo::Content::ColorAlpha,
+        Some(cairo::Rectangle::new(0.0, 0.0, period, width)),
+    )?;
+
+    let context = Context::new(&sample)?;
+    let gradient = LinearGradient::new(0.0, 0.0, period, 0.0);
+    gradient.add_color_stop_rgba(0.0, color.0, color.1, color.2, 1.0);
+    gradient.add_color_stop_rgba(0.5, color.0, color.1, color.2, 0.4);
+    gradient.add_color_stop_rgba(1.0, color.0, color.1, color.2, 1.0);
+    context.set_source(&gradient)?;
+    context.paint()?;
+
+    Ok(sample)
+}
 
 /// A `rail` of this `service` is drawn as a main line; any other as light rail.
 fn is_main_line(service: &str) -> bool {
@@ -336,7 +443,7 @@ pub fn style(zoom: u8, row: &Feature) -> Result<Option<RoadStyle>, FeatureError>
         (14.., "attraction", "water_slide") => RoadStyle::WaterSlide,
         (14.., "highway", "service") if service == "parking_aisle" => RoadStyle::ParkingAisle,
         (14.., _, "raceway") | (14.., "leisure", "track") => RoadStyle::Raceway,
-        (14.., "highway", "piste") => RoadStyle::Piste,
+        (14.., "piste:type", _) => RoadStyle::Piste,
         (14.., "highway", "footway" | "pedestrian") => RoadStyle::Footway,
         (14.., "highway" | "railway" | "public_transport", "platform") => RoadStyle::Platform,
         (14.., "highway", "steps") => RoadStyle::Steps,
@@ -431,9 +538,24 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
 
         let trail_visibility = 0.666f64.powf(row.get_i32("trail_visibility")? as f64);
 
+        let piste_type = row.get_string("piste_type")?;
+
+        let draw_piste_casing = |width: f64, standalone: bool| -> cairo::Result<()> {
+            if let Some((color, period)) = piste_casing(piste_type, standalone) {
+                let sample = gradient_dash_sample(color, period, width)?;
+                draw_line_pattern(context, ctx.size, geom, 0.8, &sample)?;
+            }
+
+            Ok(())
+        };
+
         // Between the rails a glow would read as a middle line.
         if row.get_bool("ladder")? {
             continue;
+        }
+
+        if zoom >= 14 && class == "highway" {
+            draw_piste_casing(3.6, false)?;
         }
 
         match (zoom, class, typ) {
@@ -496,11 +618,8 @@ pub fn render(ctx: &Ctx, context: &Context, rows: Vec<Feature>) -> LayerRenderRe
                 apply_highway_defaults(2.5);
                 draw()?;
             }
-            (14.., "highway", "piste") => {
-                apply_highway_defaults(2.2);
-                context.set_dash(&[6.0, 2.0], 0.0);
-                context.set_source_color(colors::PISTE2);
-                draw()?;
+            (14.., "piste:type", _) => {
+                draw_piste_casing(3.2, true)?;
             }
             _ => (),
         }

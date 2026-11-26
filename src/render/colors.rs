@@ -238,7 +238,10 @@ pub const PARKING: Color = parse_color("hsl(0, 20%, 88%)");
 pub const PIER: Color = parse_color("hsl(0, 0%, 0%)");
 pub const PIPELINE: Color = parse_color("hsl(0, 0%, 50%)");
 pub const PISTE: Color = parse_color("hsl(0, 100%, 100%)");
-pub const PISTE2: Color = parse_color("hsl(0, 0%, 62%)");
+pub const PISTE_UNKNOWN: Color = parse_color("hsl(0, 0%, 62%)");
+pub const PISTE_DOWNHILL: Color = WINTER_SPORTS;
+/// Every piste type but downhill.
+pub const PISTE_OTHER: Color = parse_color("hsl(280, 40%, 50%)");
 pub const PITCH_STROKE: Color = parse_color("hsl(110, 35%, 50%)");
 pub const PITCH: Color = parse_color("hsl(110, 35%, 75%)");
 pub const POWER_LINE: Color = parse_color("hsl(0, 0%, 0%)");
@@ -309,6 +312,9 @@ pub const WATER_LABEL_HALO: Color = parse_color("hsl(216, 30%, 100%)");
 pub const WATER_LABEL: Color = parse_color("hsl(216, 100%, 50%)");
 pub const WATER_SLIDE: Color = parse_color("hsl(180, 50%, 50%)");
 pub const WATER: Color = parse_color("hsl(216, 65%, 70%)");
+/// Ski resort boundary and its downhill pistes, so a resort and its slopes read as one.
+/// [`WATER`]'s hue, darker so a piste does not pass for a stream.
+pub const WINTER_SPORTS: Color = parse_color("hsl(216, 70%, 58%)");
 pub const RAIL_GLOW: Color = parse_color("hsl(0, 100%, 100%)");
 pub const TRAM: Color = parse_color("hsl(0, 0%, 20%)");
 pub const RAILWAY_DISUSED: Color = parse_color("hsl(0, 0%, 66%)");
