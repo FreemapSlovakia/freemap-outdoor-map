@@ -207,6 +207,8 @@ pub fn rgb_hex(color: Color) -> String {
 pub const ADMIN_BORDER: Color = parse_color("hsl(278, 100%, 50%)");
 pub const AEROWAY: Color = parse_color("hsl(260, 10%, 50%)");
 pub const ALLOTMENTS: Color = parse_color("hsl(50, 45%, 88%)");
+/// `ROAD`, paled for the surface under the road lines.
+pub const AREA_HIGHWAY: Color = parse_color("hsl(40, 25%, 87%)");
 pub const AREA_LABEL: Color = parse_color("hsl(0, 0%, 33%)");
 pub const BEACH: Color = parse_color("hsl(60, 90%, 85%)");
 pub const BROWNFIELD: Color = parse_color("hsl(30, 30%, 68%)");
@@ -230,7 +232,6 @@ pub const HOSPITAL: Color = parse_color("hsl(50, 85%, 92%)");
 pub const INDUSTRIAL: Color = parse_color("hsl(0, 0%, 85%)");
 pub const LANDFILL: Color = parse_color("hsl(0, 30%, 75%)");
 pub const MILITARY: Color = parse_color("hsl(0, 96%, 39%)");
-pub const NONE: Color = parse_color("hsl(0, 100%, 100%)");
 pub const ORCHARD: Color = parse_color("hsl(90, 75%, 85%)");
 pub const PARKING_STROKE: Color = parse_color("hsl(0, 30%, 75%)");
 pub const PARKING: Color = parse_color("hsl(0, 20%, 88%)");

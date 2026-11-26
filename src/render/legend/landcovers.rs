@@ -82,8 +82,15 @@ fn build_landcover_tags(
 ) -> IndexMap<&'static str, &'static str> {
     let mut tags = vec![];
 
-    if let Some(value) = landcover_tags.get(typ) {
-        tags.push((*value, typ));
+    match typ {
+        // mapped as `__any__`, so absent from `landcover_tags`
+        "area_highway" => tags.push(("area:highway", "*")),
+        "area_aeroway" => tags.push(("area:aeroway", "*")),
+        _ => {
+            if let Some(value) = landcover_tags.get(typ) {
+                tags.push((*value, typ));
+            }
+        }
     }
 
     if matches!(

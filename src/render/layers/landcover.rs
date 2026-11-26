@@ -1,10 +1,10 @@
 use crate::render::{
     Feature,
     colors::{
-        self, ALLOTMENTS, BEACH, BLACK, BROWNFIELD, COLLEGE, COMMERCIAL, Color, ContextExt, DAM,
-        FARMLAND, FARMYARD, FOREST, GLACIER, GRASSY, HEATH, HOSPITAL, INDUSTRIAL, LANDFILL, NONE,
-        ORCHARD, PARKING, PARKING_STROKE, PITCH, PITCH_STROKE, QUARRY, RECREATION_GROUND,
-        RESIDENTIAL, SCREE, SCRUB, SILO, SILO_STROKE, TREE,
+        self, AEROWAY, ALLOTMENTS, AREA_HIGHWAY, BEACH, BLACK, BROWNFIELD, COLLEGE, COMMERCIAL,
+        Color, ContextExt, DAM, FARMLAND, FARMYARD, FOREST, GLACIER, GRASSY, HEATH, HOSPITAL,
+        INDUSTRIAL, LANDFILL, ORCHARD, PARKING, PARKING_STROKE, PITCH, PITCH_STROKE, QUARRY,
+        RECREATION_GROUND, RESIDENTIAL, SCREE, SCRUB, SILO, SILO_STROKE, TREE,
     },
     ctx::Ctx,
     draw::path_geom::{path_geometry, path_line_string_with_offset, walk_geometry_line_strings},
@@ -50,7 +50,7 @@ pub const PAINT_DEFS: &[(&[&str], &[Paint])] = &[
 
     (&["residential"], &[Paint::Fill(RESIDENTIAL)]),
     (&["commercial", "retail"], &[Paint::Fill(COMMERCIAL)]),
-    (&["industrial", "wastewater_plant"], &[Paint::Fill(INDUSTRIAL)]),
+    (&["industrial", "railway", "wastewater_plant"], &[Paint::Fill(INDUSTRIAL)]),
     (&["brownfield"], &[Paint::Fill(BROWNFIELD)]),
     (&["landfill"], &[Paint::Fill(LANDFILL)]),
     (&["dam", "weir"], &[Paint::Fill(DAM)]),
@@ -62,7 +62,8 @@ pub const PAINT_DEFS: &[(&[&str], &[Paint])] = &[
     (&["dog_park"], &[Paint::Fill(GRASSY), Paint::Pattern("dog_park"), Paint::Stroke(2.0, BLACK)]),
     (&["cemetery", "grave_yard"], &[Paint::Fill(GRASSY), Paint::Stroke(2.0, BLACK), Paint::Pattern("grave")]),
     (&["college", "school", "university"], &[Paint::Fill(COLLEGE)]),
-    (&["footway", "garages", "pedestrian", "railway"], &[Paint::Fill(NONE)]),
+    (&["area_highway", "footway", "garages", "pedestrian", "platform", "rest_area", "service", "services"], &[Paint::Fill(AREA_HIGHWAY)]),
+    (&["area_aeroway"], &[Paint::Fill(AEROWAY)]),
 
     (&["parking"], &[Paint::Fill(PARKING), Paint::Stroke(2.0, PARKING_STROKE)]),
     (&["recreation_ground"], &[Paint::Fill(RECREATION_GROUND)]),
@@ -88,8 +89,11 @@ pub static PAINTS: LazyLock<HashMap<&'static str, &'static [Paint]>> = LazyLock:
 pub const OVERLAY_TYPES: &str = "'wetland', 'bare_rock', 'clearcut'";
 
 /// The `type` the paints are keyed by: a wetland's own kind where it has a look of its own.
+/// A traffic island is no road surface; its type has no paints.
 pub const TYPE_SQL: &str = "
     CASE
+        WHEN type = 'area_highway' AND tags->'area:highway' = 'traffic_island'
+        THEN 'traffic_island'
         WHEN
             type = 'wetland' AND
             tags->'wetland' IN ('bog', 'reedbed', 'marsh', 'swamp', 'wet_meadow', 'mangrove', 'fen')

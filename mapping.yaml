@@ -8,6 +8,10 @@ areas:
     - waterway
     # - natural
     - aeroway
+    # areas when closed, unlike other highways
+    - highway=platform
+    - highway=rest_area
+    - highway=services
   linear_tags:
     - highway
     - barrier
@@ -283,11 +287,15 @@ tables:
             - hazard
             - national_park
             - protected_area
-      highway:
+      highway: # closed pedestrian, footway and service ways need area=yes
         mapping:
           highway:
             - pedestrian
             - footway
+            - platform
+            - rest_area
+            - service
+            - services
       landuse:
         mapping:
           landuse:
