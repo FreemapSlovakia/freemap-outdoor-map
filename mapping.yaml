@@ -3,6 +3,7 @@ use_single_id_space: true
 areas:
   area_tags:
     - building
+    - golf
     - landuse
     - leisure
     - aeroway
@@ -28,6 +29,9 @@ areas:
     - aeroway=runway
     - aeroway=taxilane
     - aeroway=taxiway
+    - golf=cartpath
+    - golf=hole
+    - golf=path
     - leisure=track
     - railway=platform
 tags:
@@ -266,6 +270,16 @@ tables:
             __any__: area_highway
           area:aeroway:
             __any__: area_aeroway
+          golf:
+            bunker: golf_bunker
+            driving_range: golf_driving_range
+            fairway: golf_fairway
+            green: golf_green
+            lateral_water_hazard: golf_water_hazard
+            penalty_area: golf_water_hazard
+            rough: golf_rough
+            tee: golf_tee
+            water_hazard: golf_water_hazard
       - name: area
         type: webmerc_area
       - name: tags
@@ -305,6 +319,18 @@ tables:
             - hazard
             - national_park
             - protected_area
+      golf:
+        mapping:
+          golf:
+            - bunker
+            - driving_range
+            - fairway
+            - green
+            - lateral_water_hazard
+            - penalty_area
+            - rough
+            - tee
+            - water_hazard
       highway: # closed pedestrian, footway and service ways need area=yes
         mapping:
           highway:
@@ -598,6 +624,8 @@ tables:
         aliases:
           ford:
             __any__: ford
+          golf:
+            hole: golf_hole
           obstacle:
             vegetation: obstacle_vegetation
             dense_vegetation: obstacle_vegetation
@@ -659,6 +687,8 @@ tables:
             - wall
           ford:
             - __any__
+          golf:
+            - hole
           man_made:
             - cutline
             - dyke
@@ -711,6 +741,9 @@ tables:
             mineshaft: disused_mineshaft
           ford:
             __any__: ford
+          golf:
+            clubhouse: golf_clubhouse
+            pin: golf_pin
           information:
             terminal: information_terminal
           historic:
@@ -1120,6 +1153,11 @@ tables:
                 - suction_point
                 - water_rescue
                 - water_tank
+          golf:
+            mapping:
+              golf:
+                - clubhouse
+                - pin
           highway:
             mapping:
               highway:
@@ -1536,6 +1574,10 @@ tables:
             rail: abandoned
             subway: abandoned
             tram: abandoned
+          # own types: renderer checks that match the type alone would take a golf path for a highway one
+          golf:
+            cartpath: golf_cartpath
+            path: golf_path
       - name: name
         type: string
         key: name
@@ -1745,6 +1787,10 @@ tables:
             - bus_guideway
             - via_ferrata
             - ladder
+          # golf paths without a highway tag; a way with both is a highway row
+          golf:
+            - cartpath
+            - path
           # After highway: on a track or path the piste is a band under that way's own row.
           # Before route, so a route=piste way with a piste:type is drawn as a piste.
           piste:type: [__any__]
