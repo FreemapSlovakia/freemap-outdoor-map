@@ -29,6 +29,7 @@ pub async fn query(
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Lifecycle {
+    Construction,
     Disused,
     Abandoned,
     Ruins,
@@ -37,6 +38,7 @@ pub enum Lifecycle {
 /// The lifecycle a building of `typ` is drawn in, or `None` for one in use.
 pub fn lifecycle(typ: &str) -> Option<Lifecycle> {
     [
+        ("construction", Lifecycle::Construction),
         ("disused", Lifecycle::Disused),
         ("abandoned", Lifecycle::Abandoned),
         ("ruins", Lifecycle::Ruins),
@@ -62,6 +64,7 @@ pub fn render(ctx: &Ctx, context: &Context, rows: &[Feature]) -> LayerRenderResu
         path_geometry(context, &geom);
 
         match lifecycle(row.get_string("type")?) {
+            Some(Lifecycle::Construction) => draw_dashed(context, Some(0.5))?,
             Some(Lifecycle::Disused) => draw_dashed(context, Some(0.66))?,
             Some(Lifecycle::Abandoned) => draw_dashed(context, Some(0.33))?,
             Some(Lifecycle::Ruins) => draw_dashed(context, None)?,

@@ -269,6 +269,14 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
             .present_when("buildings", &[], building_in(None))
             .add_feature("buildings", |b| b.with("type", "yes").with_polygon(false))
             .build(),
+        LegendItem::builder("building_construction", Category::Other, 17, opts)
+            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("building", "construction")))
+            .min_zoom(BUILDING_FROM_ZOOM)
+            .present_when("buildings", &[], building_in(Some(Lifecycle::Construction)))
+            .add_feature("buildings", |b| {
+                b.with("type", "construction").with_polygon(false)
+            })
+            .build(),
         LegendItem::builder("building_disused", Category::Other, 17, opts)
             .add_tag_set(|ts| {
                 ts.add_tags(|tags| tags.add("building", "disused"))

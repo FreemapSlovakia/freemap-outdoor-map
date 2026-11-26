@@ -51,7 +51,7 @@ pub const PAINT_DEFS: &[(&[&str], &[Paint])] = &[
     (&["residential"], &[Paint::Fill(RESIDENTIAL)]),
     (&["commercial", "retail"], &[Paint::Fill(COMMERCIAL)]),
     (&["industrial", "railway", "wastewater_plant"], &[Paint::Fill(INDUSTRIAL)]),
-    (&["brownfield"], &[Paint::Fill(BROWNFIELD)]),
+    (&["brownfield", "construction"], &[Paint::Fill(BROWNFIELD)]),
     (&["landfill"], &[Paint::Fill(LANDFILL)]),
     (&["dam", "weir"], &[Paint::Fill(DAM)]),
 
