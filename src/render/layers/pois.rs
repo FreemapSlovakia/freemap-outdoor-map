@@ -479,6 +479,9 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         // https://github.com/FreemapSlovakia/freemap-outdoor-map/issues/107
         (15, 16, N, N, Health, "landing_site", Extra { icon: Some("helipad"), needs_access: Some(false), ..Extra::default() }),
         (15, 16, N, N, Transport, "charging_station", Extra::default()),
+        (15, 16, N, N, Transport, "charging_station_bicycle", Extra::default()),
+        (15, 16, N, N, Transport, "charging_station_scooter", Extra::default()),
+        (15, 16, N, N, Transport, "charging_station_other", Extra::default()),
         (15, 16, N, N, Historic, "tower_defensive", Extra::default()),
         (15, 16, N, N, ManMade, "tower_cooling", Extra::default()),
         (15, 16, N, N, ManMade, "cooling_tower", Extra { icon: Some("tower_cooling"), ..Extra::default() }),
@@ -1246,6 +1249,20 @@ pub async fn query(
                     type = 'vending_machine' AND
                     tags->'vending' IN ('excrement_bags', 'parking_tickets', 'public_transport_tickets')
                 THEN tags->'vending'
+                -- A station implies motorcar=yes, so the plain icon means a car can
+                -- charge there and only a station that names another vehicle and not a
+                -- car gets a variant. Mappers adding bicycle=yes rarely add motorcar=no.
+                -- Any value but `no` admits the vehicle; `private`, `customers` and the
+                -- like restrict who, not what, charges.
+                WHEN type = 'charging_station'
+                THEN 'charging_station' || CASE
+                    WHEN tags->'motorcar' <> 'no' THEN ''
+                    WHEN tags->'bicycle' <> 'no' THEN '_bicycle'
+                    WHEN tags->'scooter' <> 'no' OR tags->'motorcycle' <> 'no'
+                    THEN '_scooter'
+                    WHEN tags->'motorcar' = 'no' THEN '_other'
+                    ELSE ''
+                END
                 WHEN type IN ('obstacle_tree', 'obstacle_vegetation')
                 THEN type
                 WHEN type LIKE 'obstacle_%'

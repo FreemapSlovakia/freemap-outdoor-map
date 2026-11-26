@@ -1185,6 +1185,7 @@ tables:
                 - adit
                 - apiary
                 - beehive
+                - charge_point
                 - chimney
                 - communications_tower
                 - cooling_tower

@@ -298,6 +298,69 @@
       "description": "Rendered as icon. Icon from zoom 15. Label (name/ref) from zoom 16."
     },
     {
+      "key": "motorcar",
+      "value": "yes",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/charging_station.svg",
+      "description": "Rendered as charging station icon when amenity=charging_station, which implies motorcar=yes. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "motorcar",
+      "value": "designated",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/charging_station.svg",
+      "description": "Rendered as charging station icon when amenity=charging_station, which implies motorcar=yes. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "bicycle",
+      "value": "yes",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/charging_station_bicycle.svg",
+      "description": "Rendered as bicycle charging station icon when amenity=charging_station, unless motorcar is set to anything but no. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "bicycle",
+      "value": "designated",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/charging_station_bicycle.svg",
+      "description": "Rendered as bicycle charging station icon when amenity=charging_station, unless motorcar is set to anything but no. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "scooter",
+      "value": "yes",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/charging_station_scooter.svg",
+      "description": "Rendered as scooter charging station icon when amenity=charging_station, unless motorcar or bicycle is set to anything but no. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "scooter",
+      "value": "designated",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/charging_station_scooter.svg",
+      "description": "Rendered as scooter charging station icon when amenity=charging_station, unless motorcar or bicycle is set to anything but no. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "motorcycle",
+      "value": "yes",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/charging_station_scooter.svg",
+      "description": "Rendered as scooter charging station icon when amenity=charging_station, unless motorcar or bicycle is set to anything but no. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "motorcycle",
+      "value": "designated",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/charging_station_scooter.svg",
+      "description": "Rendered as scooter charging station icon when amenity=charging_station, unless motorcar or bicycle is set to anything but no. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
+      "key": "motorcar",
+      "value": "no",
+      "object_types": ["node", "area"],
+      "icon_url": "https://raw.githubusercontent.com/FreemapSlovakia/freemap-outdoor-map/refs/heads/main/images/charging_station_other.svg",
+      "description": "Rendered as non-car charging station icon when amenity=charging_station, unless bicycle, scooter or motorcycle is set to anything but no. Icon from zoom 15. Label (name/ref) from zoom 16."
+    },
+    {
       "key": "amenity",
       "value": "cinema",
       "object_types": ["node", "area"],

@@ -123,7 +123,7 @@ pub fn pois(
             zooms: zooms.clone(),
         });
 
-        entry.tags.push(build_poi_tags(typ, &poi_tags));
+        entry.tags.extend(build_poi_tags(typ, &poi_tags));
 
         // The group's zoom range is the union over its members, so the member standing for
         // it has to be one the renderer actually draws at the start of that range - not
@@ -181,12 +181,6 @@ pub fn pois(
                         }
                         tb
                     });
-                }
-
-                if visual_key == "spring" {
-                    ts = ts
-                        .add_tags(|t| t.add("natural", "geyser"))
-                        .add_tags(|t| t.add("man_made", "spring_box"));
                 }
 
                 ts
@@ -452,11 +446,14 @@ fn poi_zooms_of(typ: &str) -> RangeInclusive<u8> {
         .map_or(0..=MAX_LEGEND_ZOOM, |defs| poi_zooms(defs))
 }
 
+/// One tag set per way of tagging the type; most have one.
 fn build_poi_tags(
     typ: &'static str,
     poi_tags: &HashMap<&'static str, Vec<(&'static str, &'static str)>>,
-) -> IndexMap<&'static str, &'static str> {
+) -> Vec<IndexMap<&'static str, &'static str>> {
     let mut tags = vec![];
+    // Other tags drawn as the same type, each a complete tag set of its own.
+    let mut alternatives: Vec<&[(&'static str, &'static str)]> = vec![];
 
     // `mapping.yaml` maps `shop: __any__`, so these types carry no tag of their own for
     // `mapping_entries` to find and the legend would show a nameless row.
@@ -509,6 +506,28 @@ fn build_poi_tags(
             "excrement_bags" | "parking_tickets" | "public_transport_tickets" => {
                 tags.push(("amenity", "vending_machine"));
                 tags.push(("vending", typ));
+            }
+            // Implied, but the tag an EV driver looks for.
+            "charging_station" => {
+                alternatives.push(&[("motorcar", "yes"), ("amenity", "charging_station")]);
+            }
+            "charging_station_bicycle" => {
+                override_key = Some("charging_station");
+                tags.push(("bicycle", "yes"));
+            }
+            "charging_station_scooter" => {
+                override_key = Some("charging_station");
+                tags.push(("scooter", "yes"));
+                alternatives.push(&[("motorcycle", "yes"), ("amenity", "charging_station")]);
+            }
+            "charging_station_other" => {
+                override_key = Some("charging_station");
+                tags.push(("motorcar", "no"));
+            }
+            // The query draws both as springs.
+            "spring" => {
+                alternatives.push(&[("natural", "geyser")]);
+                alternatives.push(&[("man_made", "spring_box")]);
             }
             "memorial_plaque" | "memorial_statue" | "memorial_bust" | "memorial_stone" => {
                 override_key = Some("memorial");
@@ -563,7 +582,11 @@ fn build_poi_tags(
         }
     }
 
-    build_tags_map(tags)
+    let mut sets = vec![build_tags_map(tags)];
+
+    sets.extend(alternatives.into_iter().map(|alt| build_tags_map(alt.to_vec())));
+
+    sets
 }
 
 impl LegendItemBuilder<'_> {
