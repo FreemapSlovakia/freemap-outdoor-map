@@ -1,4 +1,5 @@
 pub use crate::render::categories::Category;
+pub use ferries::{MIN_ZOOM as FERRY_MIN_ZOOM, NAMES_MIN_ZOOM as FERRY_NAMES_MIN_ZOOM};
 pub use hillshading_datasets::HillshadingDatasets;
 pub use hillshading_datasets::load_hillshading_datasets;
 pub use landcover::{
@@ -10,7 +11,6 @@ pub use pipeline::RenderError;
 pub use pipeline::Shading;
 pub use pipeline::key_enabled;
 pub use pipeline::render;
-pub use ferries::{MIN_ZOOM as FERRY_MIN_ZOOM, NAMES_MIN_ZOOM as FERRY_NAMES_MIN_ZOOM};
 pub use pois::{
     Def, INACCESSIBLE_ZOOM_DELAY, POI_ORDER, POIS, SHOP_TYPES, SUMMIT_CROSS_MIN_ZOOM,
     WAYMARKING_LEGEND_TYPES,

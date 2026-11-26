@@ -584,7 +584,11 @@ fn build_poi_tags(
 
     let mut sets = vec![build_tags_map(tags)];
 
-    sets.extend(alternatives.into_iter().map(|alt| build_tags_map(alt.to_vec())));
+    sets.extend(
+        alternatives
+            .into_iter()
+            .map(|alt| build_tags_map(alt.to_vec())),
+    );
 
     sets
 }

@@ -1,8 +1,7 @@
 use super::mapping;
 use super::{BuildOpts, LegendItem, Lend, Row, mapping_path};
 use crate::render::layers::{
-    Category,
-    FERRY_MIN_ZOOM,
+    Category, FERRY_MIN_ZOOM,
     buildings::{self, Lifecycle},
     national_park_label_flo,
 };
