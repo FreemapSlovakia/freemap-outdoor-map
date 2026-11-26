@@ -37,7 +37,7 @@ fn road_from_zoom(class: &str, typ: &str) -> u8 {
             | "bridge" | "tunnel",
         ) => 12,
         (_, "cycleway" | "path" | "bridleway" | "via_ferrata" | "track") => 13,
-        _ => 14, // footway, pedestrian, platform, steps, piste, water_slide
+        _ => 14, // footway, pedestrian, platform, steps, water_slide
     }
 }
 
@@ -53,7 +53,6 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
         &["steps"],
         &["cycleway"],
         &["path"],
-        &["piste"],
         &["bridleway"],
         &["via_ferrata"],
         &["track"],
@@ -121,6 +120,54 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
         })
         .build()
     }))
+    .chain(PISTES.into_iter().map(|(id, types)| {
+        LegendItem::builder(
+            format!("road_piste_{id}").leak(),
+            Category::RoadsAndPaths,
+            17,
+            opts,
+        )
+        .add_tag_set(|mut ts| {
+            for typ in types {
+                ts = ts.add_tags(|tags| tags.add("piste:type", typ));
+            }
+
+            ts
+        })
+        .min_zoom(14)
+        .present_when("roads", &[], move |row| {
+            row.drawn_as(&[RoadStyle::Piste])
+                && row.get_string("type").is_ok_and(|typ| types.contains(&typ))
+        })
+        .named_by("highway_names", types, Lend::NAME)
+        .add_landcover("wood")
+        .add_feature("roads", move |b| {
+            b.with_road(types[0])
+                .with("class", "piste:type")
+                .with("piste_type", types[0])
+        })
+        .build()
+    }))
+    .chain([
+        LegendItem::builder("road_piste_on_road", Category::RoadsAndPaths, 17, opts)
+            .add_tag_set(|ts| ts.add_tags(|tags| tags.add("highway", "*").add("piste:type", "*")))
+            // At zoom 13 the track is drawn just the same, only without it.
+            .min_zoom_unprobeable(14)
+            .present_when("roads", &[], |row| {
+                row.zoom() >= 14
+                    && is_class(row, "highway")
+                    && row
+                        .get_string("piste_type")
+                        .is_ok_and(|typ| !matches!(typ, "" | "yes"))
+            })
+            .add_landcover("wood")
+            .add_feature("roads", |b| {
+                b.with_road("track")
+                    .with("class", "highway")
+                    .with("piste_type", "nordic")
+            })
+            .build(),
+    ])
     .chain(
         ([
             &[("oneway", "yes")] as &[(&str, &str)],
@@ -407,6 +454,28 @@ pub fn roads(opts: BuildOpts) -> Vec<LegendItem<'static>> {
     .collect()
 }
 
+/// Piste items by `piste:type`, as `layers::roads` colours and paces them.
+const PISTES: [(&str, &[&str]); 4] = [
+    ("downhill", &["downhill"]),
+    ("nordic", &["nordic"]),
+    (
+        "other",
+        &[
+            "skitour",
+            "hike",
+            "sled",
+            "sleigh",
+            "fatbike",
+            "ice_skate",
+            "snow_park",
+            "playground",
+            "connection",
+            "ski_jump",
+        ],
+    ),
+    ("unknown", &["yes"]),
+];
+
 /// The styles the road item named after `typ` stands for.
 fn road_styles(typ: &str) -> &'static [RoadStyle] {
     match typ {
@@ -425,7 +494,6 @@ fn road_styles(typ: &str) -> &'static [RoadStyle] {
         "steps" => &[RoadStyle::Steps],
         "cycleway" => &[RoadStyle::Cycleway],
         "path" => &[RoadStyle::Path],
-        "piste" => &[RoadStyle::Piste],
         "bridleway" => &[RoadStyle::Bridleway],
         "via_ferrata" => &[RoadStyle::ViaFerrata],
         "track" => &[RoadStyle::Track],
@@ -665,6 +733,7 @@ impl PropsBuilder {
             // Read by `layers::roads::render` at zoom <= 12; a legend sample is never part
             // of a route, so paths and tracks stay hidden there just like on the map.
             .with("is_in_route", false)
+            .with("piste_type", "")
             .with_line_string(false)
     }
 

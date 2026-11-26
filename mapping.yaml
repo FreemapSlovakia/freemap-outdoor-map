@@ -195,6 +195,9 @@ tables:
       - name: network
         type: string
         key: network
+      - name: piste_type
+        type: string
+        key: piste:type
       - name: type
         type: mapping_value
 
@@ -1684,8 +1687,6 @@ tables:
           man_made:
             - pier
             - groyne
-          route:
-            - piste
           highway:
             - motorway
             - motorway_link
@@ -1712,12 +1713,16 @@ tables:
             - raceway
             - platform
             - construction
-            - piste
             - escape
             - corridor
             - bus_guideway
             - via_ferrata
             - ladder
+          # After highway: on a track or path the piste is a band under that way's own row.
+          # Before route, so a route=piste way with a piste:type is drawn as a piste.
+          piste:type: [__any__]
+          route:
+            - piste
           railway:
             - platform
           public_transport:

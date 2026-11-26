@@ -121,7 +121,7 @@ pub fn render_borders(
     for row in borders {
         text_options.color = match row.get_string("type")? {
             "national_park" | "protected_area" => colors::PROTECTED,
-            "winter_sports" => colors::WATER,
+            "winter_sports" => colors::WINTER_SPORTS,
             _ => continue,
         };
 
