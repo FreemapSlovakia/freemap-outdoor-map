@@ -509,7 +509,7 @@ fn build_poi_tags(
             }
             // Implied, but the tag an EV driver looks for.
             "charging_station" => {
-                alternatives.push(&[("motorcar", "yes"), ("amenity", "charging_station")]);
+                tags.push(("motorcar", "yes"));
             }
             "charging_station_bicycle" => {
                 override_key = Some("charging_station");
