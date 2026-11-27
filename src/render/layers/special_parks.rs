@@ -18,7 +18,7 @@ pub async fn query(
         FROM
             osm_landcovers
         WHERE
-            type IN ('zoo', 'theme_park') AND
+            type IN ('zoo', 'theme_park', 'resort') AND
             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
     ";
 

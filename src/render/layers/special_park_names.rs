@@ -25,7 +25,7 @@ pub async fn query(
             osm_pois
         WHERE
             name <> '' AND
-            (type = 'zoo' OR type = 'theme_park') AND
+            type IN ('zoo', 'theme_park', 'resort') AND
             geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
         ORDER BY
             osm_id

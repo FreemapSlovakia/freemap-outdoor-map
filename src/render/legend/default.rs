@@ -186,6 +186,7 @@ pub(super) fn build_legend_items(opts: BuildOpts) -> Vec<LegendItem<'static>> {
             .add_tag_set(|ts| {
                 ts.add_tags(|tags| tags.add("tourism", "zoo"))
                     .add_tags(|tags| tags.add("tourism", "theme_park"))
+                    .add_tags(|tags| tags.add("leisure", "resort"))
             })
             .min_zoom(13)
             .present("special_parks", &[])
