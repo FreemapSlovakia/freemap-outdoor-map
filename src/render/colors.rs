@@ -244,6 +244,11 @@ pub const PISTE_DOWNHILL: Color = WINTER_SPORTS;
 pub const PISTE_OTHER: Color = parse_color("hsl(280, 40%, 50%)");
 pub const PITCH_STROKE: Color = parse_color("hsl(110, 35%, 50%)");
 pub const PITCH: Color = parse_color("hsl(110, 35%, 75%)");
+/// Golf course parts, against the `PITCH` green of the course: rough darker,
+/// fairway lighter, greens and tees lightest.
+pub const GOLF_ROUGH: Color = parse_color("hsl(110, 30%, 69%)");
+pub const GOLF_FAIRWAY: Color = parse_color("hsl(110, 45%, 81%)");
+pub const GOLF_GREEN: Color = parse_color("hsl(110, 55%, 87%)");
 /// `PITCH`, paled: the pitches inside draw on top of it.
 pub const SPORTS_CENTRE: Color = parse_color("hsl(110, 30%, 87%)");
 pub const POWER_LINE: Color = parse_color("hsl(0, 0%, 0%)");

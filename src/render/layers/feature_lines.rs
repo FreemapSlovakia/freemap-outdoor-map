@@ -65,6 +65,7 @@ pub async fn query(
 
     if ctx.zoom >= 16 {
         types.extend([
+            "golf_hole",
             "city_wall",
             "hedge",
             "ditch",
@@ -189,6 +190,14 @@ pub fn render(
                         context.set_line_width(3.0);
                         context.stroke()?;
                     }
+                }
+                (2, 16.., "golf_hole", false) => {
+                    path_line_string(context, &geom);
+
+                    context.set_source_color(colors::PITCH_STROKE);
+                    context.set_dash(&[4.0, 3.0], 0.0);
+                    context.set_line_width(1.0);
+                    context.stroke()?;
                 }
                 (2, 13.., "tree_row", false) => {
                     draw_line_pattern_scaled(

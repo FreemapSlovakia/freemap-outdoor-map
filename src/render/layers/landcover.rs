@@ -2,9 +2,10 @@ use crate::render::{
     Feature,
     colors::{
         self, AEROWAY, ALLOTMENTS, AREA_HIGHWAY, BEACH, BLACK, BROWNFIELD, COLLEGE, COMMERCIAL,
-        Color, ContextExt, DAM, FARMLAND, FARMYARD, FOREST, GLACIER, GRASSY, HEATH, HOSPITAL,
-        INDUSTRIAL, LANDFILL, ORCHARD, PARKING, PARKING_STROKE, PITCH, PITCH_STROKE, QUARRY,
-        RECREATION_GROUND, RESIDENTIAL, SCREE, SCRUB, SILO, SILO_STROKE, SPORTS_CENTRE, TREE,
+        Color, ContextExt, DAM, FARMLAND, FARMYARD, FOREST, GLACIER, GOLF_FAIRWAY, GOLF_GREEN,
+        GOLF_ROUGH, GRASSY, HEATH, HOSPITAL, INDUSTRIAL, LANDFILL, ORCHARD, PARKING,
+        PARKING_STROKE, PITCH, PITCH_STROKE, QUARRY, RECREATION_GROUND, RESIDENTIAL, SCREE, SCRUB,
+        SILO, SILO_STROKE, SPORTS_CENTRE, TREE,
     },
     ctx::Ctx,
     draw::path_geom::{path_geometry, path_line_string_with_offset, walk_geometry_line_strings},
@@ -58,7 +59,11 @@ pub const PAINT_DEFS: &[(&[&str], &[Paint])] = &[
     (&["hospital"], &[Paint::Fill(HOSPITAL)]),
     (&["allotments"], &[Paint::Fill(ALLOTMENTS)]),
     (&["garden", "park"], &[Paint::Fill(ORCHARD), Paint::Stroke(2.0, BLACK)]),
-    (&["pitch", "playground", "golf_course", "track"], &[Paint::Fill(PITCH), Paint::Stroke(2.0, PITCH_STROKE)]),
+    (&["pitch", "playground", "golf_course", "miniature_golf", "track"], &[Paint::Fill(PITCH), Paint::Stroke(2.0, PITCH_STROKE)]),
+    (&["golf_rough"], &[Paint::Fill(GOLF_ROUGH)]),
+    (&["golf_fairway", "golf_driving_range"], &[Paint::Fill(GOLF_FAIRWAY)]),
+    (&["golf_green", "golf_tee"], &[Paint::Fill(GOLF_GREEN), Paint::Stroke(1.0, PITCH_STROKE)]),
+    (&["golf_bunker"], &[Paint::Fill(BEACH), Paint::Pattern("sand")]),
     (&["dog_park"], &[Paint::Fill(GRASSY), Paint::Pattern("dog_park"), Paint::Stroke(2.0, BLACK)]),
     (&["cemetery", "grave_yard"], &[Paint::Fill(GRASSY), Paint::Stroke(2.0, BLACK), Paint::Pattern("grave")]),
     (&["college", "school", "university"], &[Paint::Fill(COLLEGE)]),
@@ -89,6 +94,22 @@ pub static PAINTS: LazyLock<HashMap<&'static str, &'static [Paint]>> = LazyLock:
 /// Everything else nests by area: smaller on top, as OSM Carto does.
 pub const OVERLAY_TYPES: &str = "'wetland', 'bare_rock', 'clearcut'";
 
+/// The parts of a golf course, drawn in it from zoom 14. Many are also tagged
+/// `landuse=grass` or `leisure=pitch`; drawn after those, they stay on top.
+pub const GOLF_PARTS: [&str; 6] = [
+    "golf_bunker",
+    "golf_driving_range",
+    "golf_fairway",
+    "golf_green",
+    "golf_rough",
+    "golf_tee",
+];
+
+/// `GOLF_PARTS` as an SQL list.
+pub fn golf_parts_sql() -> String {
+    GOLF_PARTS.map(|typ| format!("'{typ}'")).join(", ")
+}
+
 /// The `type` the paints are keyed by: a wetland's own kind where it has a look of its own.
 /// A traffic island is no road surface; its type has no paints.
 pub const TYPE_SQL: &str = "
@@ -107,11 +128,14 @@ pub async fn query(
     ctx: &Ctx,
     client: &tokio_postgres::Client,
 ) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
-    let a = "'pitch', 'playground', 'golf_course', 'track'";
+    let a = "'pitch', 'playground', 'golf_course', 'miniature_golf', 'track'";
+
+    let golf = golf_parts_sql();
 
     let excl_types = match ctx.zoom {
-        ..12 => &format!("type NOT IN ({a}, 'parking', 'bunker_silo') AND"),
-        12..13 => &format!("type NOT IN ({a}) AND"),
+        ..12 => &format!("type NOT IN ({a}, {golf}, 'parking', 'bunker_silo') AND"),
+        12..13 => &format!("type NOT IN ({a}, {golf}) AND"),
+        13..14 => &format!("type NOT IN ({golf}) AND"),
         _ => "",
     };
 
@@ -137,6 +161,7 @@ pub async fn query(
             area DESC,
             osm_id,
             -- a way tagged with several landcovers comes once per type, with equal area
+            type IN ({golf}),
             type
     "
     );

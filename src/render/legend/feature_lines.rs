@@ -17,6 +17,7 @@ pub fn feature_lines(
         (&["pipeline"], Category::ManMade),
         (&["pipeline_under"], Category::ManMade),
         (&["tree_row"], Category::NaturalPoi),
+        (&["golf_hole"], Category::Sport),
         (&["weir"], Category::Water),
         (&["dam"], Category::Water),
         (&["earth_bank"], Category::Terrain),
@@ -85,8 +86,16 @@ pub fn feature_lines(
 
                             let mut tags = IndexMap::new();
 
+                            // `golf_hole` is aliased from `golf=hole`
+                            let (key, value) = typ
+                                .strip_prefix("golf_")
+                                .map_or((None, typ), |value| (Some("golf"), value));
+
                             for entry in mapping_entries {
-                                if entry.table == "feature_lines" && entry.value == typ {
+                                if entry.table == "feature_lines"
+                                    && entry.value == value
+                                    && key.is_none_or(|key| entry.key == key)
+                                {
                                     let value = leak_str(&entry.value);
                                     let key = leak_str(&entry.key);
 

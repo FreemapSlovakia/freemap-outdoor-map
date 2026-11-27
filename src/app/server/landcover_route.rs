@@ -1,6 +1,6 @@
 use crate::{
     app::server::app_state::AppState,
-    render::{LANDCOVER_OVERLAY_TYPES, LANDCOVER_PAINTS, LANDCOVER_TYPE_SQL},
+    render::{LANDCOVER_OVERLAY_TYPES, LANDCOVER_PAINTS, LANDCOVER_TYPE_SQL, golf_parts_sql},
 };
 use axum::{
     body::Body,
@@ -67,6 +67,8 @@ fn land_table(tolerance: f64) -> &'static str {
 // TODO the whole FeatureCollection is built as one text value; stream it if a box near the
 // limits ever gets dense enough to matter.
 fn sql(land_table: &str) -> String {
+    let golf = golf_parts_sql();
+
     format!(
         "
         WITH
@@ -126,7 +128,9 @@ fn sql(land_table: &str) -> String {
             ),
             ordered AS (
                 SELECT
-                    row_number() OVER (ORDER BY layer, overlay, area DESC, osm_id, type) AS ord,
+                    row_number() OVER (
+                        ORDER BY layer, overlay, area DESC, osm_id, type IN ({golf}), type
+                    ) AS ord,
                     layer,
                     type,
                     tmp,

@@ -53,6 +53,14 @@ pub async fn query(
             WHERE
                 type NOT IN ('zoo', 'theme_park', 'resort', 'winter_sports', 'national_park',
                     'protected_area', 'nature_reserve', 'aquaculture', 'pier') AND
+                -- golf course parts are named by their hole number; a part also tagged
+                -- landuse=grass comes as a grass row too
+                osm_id NOT IN (
+                    SELECT osm_id FROM osm_landcovers
+                    WHERE
+                        type IN ('golf_bunker', 'golf_fairway', 'golf_green', 'golf_rough', 'golf_tee') AND
+                        geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)
+                ) AND
                 area >= $6 AND
                 (name <> '' OR tags ? 'ref') AND
                 geometry && ST_Expand(ST_MakeEnvelope($1, $2, $3, $4, 3857), $5)

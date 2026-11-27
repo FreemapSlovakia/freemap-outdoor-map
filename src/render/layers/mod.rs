@@ -3,8 +3,8 @@ pub use ferries::{MIN_ZOOM as FERRY_MIN_ZOOM, NAMES_MIN_ZOOM as FERRY_NAMES_MIN_
 pub use hillshading_datasets::HillshadingDatasets;
 pub use hillshading_datasets::load_hillshading_datasets;
 pub use landcover::{
-    OVERLAY_TYPES as LANDCOVER_OVERLAY_TYPES, PAINT_DEFS, PAINTS as LANDCOVER_PAINTS,
-    TYPE_SQL as LANDCOVER_TYPE_SQL,
+    GOLF_PARTS, OVERLAY_TYPES as LANDCOVER_OVERLAY_TYPES, PAINT_DEFS, PAINTS as LANDCOVER_PAINTS,
+    TYPE_SQL as LANDCOVER_TYPE_SQL, golf_parts_sql,
 };
 pub use national_park_names::label_flo as national_park_label_flo;
 pub use pipeline::RenderError;

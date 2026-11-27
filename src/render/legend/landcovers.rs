@@ -1,5 +1,5 @@
 use crate::render::{
-    layers::{Category, PAINT_DEFS},
+    layers::{Category, GOLF_PARTS, PAINT_DEFS},
     legend::{
         BuildOpts, LegendItem, Lend, build_tags_map, leak_str,
         mapping::{MappingEntry, MappingKind},
@@ -59,6 +59,7 @@ pub fn landcovers(mapping_entries: &[MappingEntry], opts: BuildOpts) -> Vec<Lege
                 // golf courses and tracks) are excluded up to and including zoom 12; parking
                 // only below it.
                 "pitch" => builder.min_zoom_unprobeable(13),
+                typ if GOLF_PARTS.contains(&typ) => builder.min_zoom_unprobeable(14),
                 "parking" => builder.min_zoom_unprobeable(12),
                 // Ski resort boundaries are drawn by a stage of their own.
                 "winter_sports" => builder.min_zoom(11),
@@ -86,6 +87,8 @@ fn build_landcover_tags(
         // mapped as `__any__`, so absent from `landcover_tags`
         "area_highway" => tags.push(("area:highway", "*")),
         "area_aeroway" => tags.push(("area:aeroway", "*")),
+        // aliased from `golf=<value>`
+        typ if GOLF_PARTS.contains(&typ) => tags.push(("golf", &typ["golf_".len()..])),
         _ => {
             if let Some(value) = landcover_tags.get(typ) {
                 tags.push((*value, typ));
