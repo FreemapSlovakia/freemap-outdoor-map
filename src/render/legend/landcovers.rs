@@ -35,23 +35,26 @@ pub fn landcovers(mapping_entries: &[MappingEntry], opts: BuildOpts) -> Vec<Lege
 
             let skew = !matches!(id_typ, "parking");
 
-            let builder = LegendItem::builder(
-                format!("landcover_{id_typ}").leak(),
-                Category::Landcover,
-                19,
-                opts,
-            )
-            .add_tag_set(|mut ts| {
-                for tag_set in &tags {
-                    ts = ts.add_tags(|mut tb| {
-                        for (k, v) in tag_set {
-                            tb = tb.add(k, v);
+            // with the hole line and the pin rather than among the ground covers
+            let category = if GOLF_PARTS.contains(&id_typ) {
+                Category::Sport
+            } else {
+                Category::Landcover
+            };
+
+            let builder =
+                LegendItem::builder(format!("landcover_{id_typ}").leak(), category, 19, opts)
+                    .add_tag_set(|mut ts| {
+                        for tag_set in &tags {
+                            ts = ts.add_tags(|mut tb| {
+                                for (k, v) in tag_set {
+                                    tb = tb.add(k, v);
+                                }
+                                tb
+                            });
                         }
-                        tb
+                        ts
                     });
-                }
-                ts
-            });
 
             let builder = match id_typ {
                 // Dropped by the `excl_types` filter in `layers::landcover::query` — a filter
