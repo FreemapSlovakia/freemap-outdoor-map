@@ -4,7 +4,7 @@ use crate::render::{
         self, AEROWAY, ALLOTMENTS, AREA_HIGHWAY, BEACH, BLACK, BROWNFIELD, COLLEGE, COMMERCIAL,
         Color, ContextExt, DAM, FARMLAND, FARMYARD, FOREST, GLACIER, GRASSY, HEATH, HOSPITAL,
         INDUSTRIAL, LANDFILL, ORCHARD, PARKING, PARKING_STROKE, PITCH, PITCH_STROKE, QUARRY,
-        RECREATION_GROUND, RESIDENTIAL, SCREE, SCRUB, SILO, SILO_STROKE, TREE,
+        RECREATION_GROUND, RESIDENTIAL, SCREE, SCRUB, SILO, SILO_STROKE, SPORTS_CENTRE, TREE,
     },
     ctx::Ctx,
     draw::path_geom::{path_geometry, path_line_string_with_offset, walk_geometry_line_strings},
@@ -67,6 +67,7 @@ pub const PAINT_DEFS: &[(&[&str], &[Paint])] = &[
 
     (&["parking"], &[Paint::Fill(PARKING), Paint::Stroke(2.0, PARKING_STROKE)]),
     (&["recreation_ground"], &[Paint::Fill(RECREATION_GROUND)]),
+    (&["sports_centre", "stadium"], &[Paint::Fill(SPORTS_CENTRE)]),
     (&["winter_sports"], &[]), // NOTE handled separately
     (&["bunker_silo"], &[Paint::Fill(SILO), Paint::Stroke(2.0, SILO_STROKE)]),
 ];

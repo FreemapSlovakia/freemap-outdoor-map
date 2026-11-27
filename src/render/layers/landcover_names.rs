@@ -51,7 +51,7 @@ pub async fn query(
             FROM
                 osm_landcovers
             WHERE
-                type NOT IN ('zoo', 'theme_park', 'winter_sports', 'national_park',
+                type NOT IN ('zoo', 'theme_park', 'resort', 'winter_sports', 'national_park',
                     'protected_area', 'nature_reserve', 'aquaculture', 'pier') AND
                 area >= $6 AND
                 (name <> '' OR tags ? 'ref') AND

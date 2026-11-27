@@ -244,6 +244,8 @@ pub const PISTE_DOWNHILL: Color = WINTER_SPORTS;
 pub const PISTE_OTHER: Color = parse_color("hsl(280, 40%, 50%)");
 pub const PITCH_STROKE: Color = parse_color("hsl(110, 35%, 50%)");
 pub const PITCH: Color = parse_color("hsl(110, 35%, 75%)");
+/// `PITCH`, paled: the pitches inside draw on top of it.
+pub const SPORTS_CENTRE: Color = parse_color("hsl(110, 30%, 87%)");
 pub const POWER_LINE: Color = parse_color("hsl(0, 0%, 0%)");
 pub const POWER_LINE_MINOR: Color = parse_color("hsl(0, 0%, 50%)");
 pub const PROTECTED: Color = parse_color("hsl(120, 75%, 25%)");
