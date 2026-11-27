@@ -137,6 +137,7 @@ pub fn feature_lines(
                     .add_landcover("meadow")
                     .add_feature("feature_lines", |b| {
                         b.with("name", if types[0] == "cable_car" { "Abc" } else { "" }) // NOTE only aerialways have name
+                            .with("ref", if types[0] == "golf_hole" { "7" } else { "" })
                             .with(
                                 "type",
                                 if types[0] == "pipeline_under" {

@@ -1437,6 +1437,15 @@ pub fn render(
         );
     }
 
+    if zoom >= 16 {
+        prefetcher.add(
+            "golf_hole_refs",
+            Some("feature_lines"),
+            |ctx, conn| async move { layers::golf_hole_refs::query(&ctx, &conn).await }.boxed(),
+            |rows, params| layers::golf_hole_refs::render(&ctx, context, rows, params.collision),
+        );
+    }
+
     if zoom >= 12 {
         prefetcher.add(
             "water_line_names",

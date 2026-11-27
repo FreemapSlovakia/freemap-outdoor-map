@@ -53,8 +53,8 @@ pub async fn query(
             WHERE
                 type NOT IN ('zoo', 'theme_park', 'resort', 'winter_sports', 'national_park',
                     'protected_area', 'nature_reserve', 'aquaculture', 'pier') AND
-                -- golf course parts are named by their hole number; a part also tagged
-                -- landuse=grass comes as a grass row too
+                -- golf course parts are named by their hole number, which the hole line
+                -- shows; a part also tagged landuse=grass comes as a grass row too
                 osm_id NOT IN (
                     SELECT osm_id FROM osm_landcovers
                     WHERE

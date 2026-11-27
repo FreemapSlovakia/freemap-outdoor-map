@@ -333,7 +333,7 @@ static POI_ENTRIES: LazyLock<Vec<PoiEntry>> = LazyLock::new(|| {
         (16, 17, N, N, Historic, "city_gate", Extra::default()),
         (16, 17, N, N, Sport, "miniature_golf", Extra::default()),
         (16, 17, N, N, Sport, "leisure_miniature_golf", Extra { icon: Some("miniature_golf"), ..Extra::default() }),
-        // unlabelled: a pin's name is only its hole number
+        // unlabelled: a pin's name is only its hole number, which the hole line shows
         (18, NN, N, N, Sport, "golf_pin", Extra::default()),
         (16, 17, N, N, Sport, "cycling", Extra::default()),
         (16, 17, N, N, Sport, "soccer", Extra::default()),

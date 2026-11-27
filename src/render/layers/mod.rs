@@ -35,6 +35,7 @@ mod feature_lines;
 mod ferries;
 mod fixmes;
 mod geonames;
+mod golf_hole_refs;
 mod highway_names;
 mod hillshading;
 mod hillshading_datasets;

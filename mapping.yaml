@@ -650,6 +650,9 @@ tables:
         type: expression
         args:
           expression: 'hasPrefix(get(tags, "location") ?? "", "under") ? "1" : ""'
+      - name: ref # golf hole number
+        type: string
+        key: ref
     filters:
       reject:
         ford:
